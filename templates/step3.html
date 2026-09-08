@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% set current_step = 3 %}
+{% block title %}FORMA — Requirements{% endblock %}
+{% block content %}
+
+<div class="step-wrap">
+  <div class="step-header">
+    <div class="step-header__tag">Step 03</div>
+    <h2 class="step-header__title">Room Requirements</h2>
+    <p class="step-header__desc">Specify what each room needs. This helps your designer understand must-haves vs nice-to-haves.</p>
+  </div>
+
+  <form method="POST" action="{{ url_for('step3') }}" class="form-card">
+
+    <!-- Room accordion -->
+    <div class="accordion" id="room-accordion">
+      {% for room in rooms %}
+      <div class="accordion-item {% if loop.first %}accordion-item--open{% endif %}" data-room="{{ room.key }}">
+        <button type="button" class="accordion-header">
+          <span class="accordion-header__label">{{ room.label }}</span>
+          <span class="accordion-header__chevron">↓</span>
+        </button>
+        <div class="accordion-body">
+
+          <!-- Fixtures / Items checklist -->
+          <div class="form-section">
+            <label class="form-label">Items & Fixtures Needed</label>
+            <div class="check-grid">
+              {% for item in room.items %}
+              <label class="check-tile" for="{{ room.key }}_{{ loop.index }}">
+                <input type="checkbox" name="{{ room.key }}_items" id="{{ room.key }}_{{ loop.index }}" value="{{ item }}">
+                <span class="check-tile__label">{{ item }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Priority -->
+          <div class="form-section form-section--row">
+            <div class="form-group">
+              <label class="form-label" for="{{ room.key }}_budget">Budget Range</label>
+              <select name="{{ room.key }}_budget" id="{{ room.key }}_budget" class="form-input form-select">
+                <option value="">Select range</option>
+                <option value="economy">Economy (under $5k)</option>
+                <option value="mid">Mid-range ($5k–$20k)</option>
+                <option value="premium">Premium ($20k–$50k)</option>
+                <option value="luxury">Luxury ($50k+)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="{{ room.key }}_priority">Priority</label>
+              <select name="{{ room.key }}_priority" id="{{ room.key }}_priority" class="form-input form-select">
+                <option value="high">High — do this first</option>
+                <option value="medium" selected>Medium</option>
+                <option value="low">Low — can defer</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Open prompt -->
+          <div class="form-section">
+            <label class="form-label" for="{{ room.key }}_prompt">
+              Describe what this room needs
+              <span class="form-label__req">*</span>
+            </label>
+            <textarea name="{{ room.key }}_prompt" id="{{ room.key }}_prompt"
+                      class="form-input form-textarea prompt-field" rows="3"
+                      placeholder="e.g. I need a double oven, large island with seating for 4, integrated fridge…"
+                      required></textarea>
+            <div class="prompt-counter"><span class="prompt-counter__num">0</span> / 500</div>
+          </div>
+
+          <!-- Special constraints -->
+          <div class="form-section">
+            <label class="form-label form-label--sm" for="{{ room.key }}_constraints">Special constraints or must-avoids</label>
+            <input type="text" name="{{ room.key }}_constraints" id="{{ room.key }}_constraints"
+                   class="form-input"
+                   placeholder="e.g. no carpets, must accommodate wheelchair, avoid dark colours…">
+          </div>
+
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Overall project notes -->
+    <div class="form-card form-card--inset" style="margin-top:1.5rem;">
+      <div class="form-section">
+        <label class="form-label" for="project_notes">Overall Project Notes</label>
+        <textarea name="project_notes" id="project_notes" class="form-input form-textarea" rows="3"
+                  placeholder="Timeline, budget cap, things you definitely don't want, sustainability preferences…"></textarea>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('step2') }}" class="btn btn--ghost">← Back</a>
+      <button type="submit" class="btn btn--primary btn--loading" id="generate-btn">
+        <span class="btn__text">Generate My Vision →</span>
+        <span class="btn__spinner" style="display:none;">◈</span>
+      </button>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // Accordion
+  document.querySelectorAll('.accordion-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const item = header.closest('.accordion-item');
+      const isOpen = item.classList.contains('accordion-item--open');
+      document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('accordion-item--open'));
+      if (!isOpen) item.classList.add('accordion-item--open');
+    });
+  });
+
+  // Prompt character counters
+  document.querySelectorAll('.prompt-field').forEach(ta => {
+    const counter = ta.nextElementSibling?.querySelector('.prompt-counter__num');
+    if (!counter) return;
+    ta.addEventListener('input', () => counter.textContent = ta.value.length);
+  });
+
+  // Checkbox tile selection styling
+  document.querySelectorAll('.check-tile input').forEach(cb => {
+    cb.addEventListener('change', () => cb.closest('.check-tile').classList.toggle('check-tile--checked', cb.checked));
+  });
+
+  // Loading state on submit
+  document.getElementById('generate-btn').closest('form').addEventListener('submit', () => {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    btn.querySelector('.btn__text').textContent = 'Generating…';
+    btn.querySelector('.btn__spinner').style.display = 'inline-block';
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% set current_step = 4 %}
+{% block title %}FORMA — Your Vision{% endblock %}
+{% block content %}
+
+<div class="step-wrap step-wrap--wide">
+  <div class="step-header">
+    <div class="step-header__tag">Step 04</div>
+    <h2 class="step-header__title">Your Design Vision</h2>
+    <p class="step-header__desc">AI-generated suggestions based on your inputs. Share this brief with your interior designer.</p>
+  </div>
+
+  <!-- Project Summary Card -->
+  <div class="summary-bar">
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Housing</span>
+      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Style</span>
+      <span class="summary-bar__val">{{ project.design_style }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Palette</span>
+      <span class="summary-bar__val">
+        {% if project.colour_hex %}
+        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
+        {% endif %}
+        {{ project.colour_name }}
+      </span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Rooms</span>
+      <span class="summary-bar__val">{{ project.rooms | length }}</span>
+    </div>
+  </div>
+
+  <!-- AI Design Brief -->
+  <div class="result-section">
+    <h3 class="result-section__title">◈ AI Design Brief</h3>
+    <div class="brief-card">
+      <div class="brief-card__body">{{ ai_brief | safe }}</div>
+    </div>
+  </div>
+
+  <!-- Room Suggestions -->
+  <div class="result-section">
+    <h3 class="result-section__title">◉ Room-by-Room Suggestions</h3>
+
+    <div class="room-results">
+      {% for room in room_results %}
+      <div class="room-result-card">
+        <div class="room-result-card__header">
+          <div class="room-result-card__name">{{ room.label }}</div>
+          {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
+        </div>
+
+        <!-- Placeholder render area (future: real image gen) -->
+        <div class="render-placeholder">
+          <div class="render-placeholder__inner">
+            <div class="render-placeholder__icon">◫</div>
+            <div class="render-placeholder__text">AI Render — {{ room.label }}</div>
+            <div class="render-placeholder__sub">Visual generation coming with Bedrock Image API</div>
+          </div>
+        </div>
+
+        <div class="room-result-card__desc">
+          <div class="room-result-card__prompt-label">AI Concept</div>
+          <p class="room-result-card__concept">{{ room.concept }}</p>
+
+          {% if room.items %}
+          <div class="room-result-card__items">
+            <span class="room-result-card__items-label">Key items:</span>
+            {% for item in room.items %}
+            <span class="tag">{{ item }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 2D Floor Plan -->
+  <div class="result-section">
+    <h3 class="result-section__title">◰ 2D Floor Plan</h3>
+    <div class="floorplan-card">
+      <div class="floorplan-render" id="floorplan-svg">
+        {{ floor_plan_svg | safe }}
+      </div>
+      <div class="floorplan-legend">
+        {% for room in room_results %}
+        <div class="legend-item">
+          <span class="legend-dot" style="background:{{ room.colour }};"></span>
+          <span class="legend-label">{{ room.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Designer Brief Export -->
+  <div class="result-section">
+    <h3 class="result-section__title">📋 Designer Brief</h3>
+    <div class="brief-export">
+      <p class="brief-export__desc">A complete brief ready to share with your interior designer, including all preferences, requirements, and AI suggestions.</p>
+      <div class="brief-export__actions">
+        <button class="btn btn--outline" onclick="window.print()">Print / Save PDF</button>
+        <a href="{{ url_for('export_brief') }}" class="btn btn--outline">Download Brief (.txt)</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Iterate -->
+  <div class="iterate-bar">
+    <div class="iterate-bar__text">
+      <strong>Want to refine?</strong> Adjust your inputs and regenerate at any time.
+    </div>
+    <div class="iterate-bar__actions">
+      <a href="{{ url_for('step1') }}" class="btn btn--ghost btn--sm">Start Over</a>
+      <a href="{{ url_for('step3') }}" class="btn btn--ghost btn--sm">← Edit Requirements</a>
+      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
+        <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // Animate cards in
+  const cards = document.querySelectorAll('.room-result-card');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        setTimeout(() => e.target.classList.add('room-result-card--visible'), i * 80);
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  cards.forEach(c => observer.observe(c));
+</script>
+{% endblock %}

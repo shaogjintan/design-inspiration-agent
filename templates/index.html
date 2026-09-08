@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}FORMA — Welcome{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <div class="hero__eyebrow">Design Intelligence Studio</div>
+  <h1 class="hero__headline">
+    Translate your vision<br/>
+    <em>into a space</em>
+  </h1>
+  <p class="hero__sub">
+    Tell us about your home. Upload inspiration. Let AI bridge the gap between
+    what you imagine and what your designer builds.
+  </p>
+  <a href="{{ url_for('step1') }}" class="btn btn--primary btn--lg">Begin Your Project</a>
+
+  <div class="hero__features">
+    <div class="hero__feature">
+      <div class="hero__feature-icon">◈</div>
+      <div class="hero__feature-label">Smart Room Mapping</div>
+    </div>
+    <div class="hero__feature">
+      <div class="hero__feature-icon">◉</div>
+      <div class="hero__feature-label">Inspiration Curation</div>
+    </div>
+    <div class="hero__feature">
+      <div class="hero__feature-icon">◫</div>
+      <div class="hero__feature-label">AI Visual Generation</div>
+    </div>
+    <div class="hero__feature">
+      <div class="hero__feature-icon">◰</div>
+      <div class="hero__feature-label">2D Floor Planning</div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

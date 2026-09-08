@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set current_step = 1 %}
+{% block title %}FORMA — Your Space{% endblock %}
+{% block content %}
+
+<div class="step-wrap">
+  <div class="step-header">
+    <div class="step-header__tag">Step 01</div>
+    <h2 class="step-header__title">Define Your Space</h2>
+    <p class="step-header__desc">Tell us about your home so we can map out each room and personalise your journey.</p>
+  </div>
+
+  <form method="POST" action="{{ url_for('step1') }}" enctype="multipart/form-data" class="form-card">
+
+    <!-- Housing Type -->
+    <div class="form-section">
+      <label class="form-label">Housing Type</label>
+      <div class="tile-grid">
+        {% set types = [
+          ('hdb_2room', '2-Room HDB', '≈ 2 rooms'),
+          ('hdb_3room', '3-Room HDB', '≈ 3 rooms'),
+          ('hdb_4room', '4-Room HDB', '≈ 4 rooms'),
+          ('hdb_5room', '5-Room HDB', '≈ 5 rooms'),
+          ('condo',     'Condominium', 'Varies'),
+          ('landed',    'Landed Property', 'Multiple floors'),
+          ('studio',    'Studio Apartment', '1 open room'),
+          ('shophouse', 'Shophouse',  '2–3 floors')
+        ] %}
+        {% for val, label, meta in types %}
+        <label class="tile" for="ht_{{ val }}">
+          <input type="radio" name="housing_type" id="ht_{{ val }}" value="{{ val }}" required
+                 {% if form_data and form_data.housing_type == val %}checked{% endif %}>
+          <span class="tile__label">{{ label }}</span>
+          <span class="tile__meta">{{ meta }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Floor Plan Upload -->
+    <div class="form-section">
+      <label class="form-label">Floor Plan <span class="form-label__opt">(optional but recommended)</span></label>
+      <div class="upload-zone" id="floorplan-zone">
+        <input type="file" name="floor_plan" id="floor_plan_input" accept="image/*,.pdf" class="upload-zone__input">
+        <div class="upload-zone__body">
+          <div class="upload-zone__icon">⬆</div>
+          <div class="upload-zone__text">Drop your floor plan here or <span class="upload-zone__link">browse</span></div>
+          <div class="upload-zone__hint">PNG, JPG, PDF — max 10 MB</div>
+        </div>
+        <div class="upload-zone__preview" id="fp-preview" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Floor Size -->
+    <div class="form-section form-section--row">
+      <div class="form-group">
+        <label class="form-label" for="floor_size">Approximate Floor Size</label>
+        <div class="input-addon">
+          <input type="number" name="floor_size" id="floor_size" class="form-input" placeholder="e.g. 95"
+                 value="{{ form_data.floor_size if form_data else '' }}">
+          <span class="input-addon__suffix">sqm</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="num_floors">Number of Floors</label>
+        <select name="num_floors" id="num_floors" class="form-input form-select">
+          {% for n in range(1, 5) %}
+          <option value="{{ n }}" {% if form_data and form_data.num_floors|int == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- Additional Notes -->
+    <div class="form-section">
+      <label class="form-label" for="space_notes">Anything else about your space?</label>
+      <textarea name="space_notes" id="space_notes" class="form-input form-textarea" rows="3"
+                placeholder="e.g. open-concept living/dining, no structural walls to be changed…">{{ form_data.space_notes if form_data else '' }}</textarea>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Continue to Inspiration →</button>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // File drop zone
+  const zone = document.getElementById('floorplan-zone');
+  const input = document.getElementById('floor_plan_input');
+  const preview = document.getElementById('fp-preview');
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('upload-zone--drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('upload-zone--drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('upload-zone--drag');
+    if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; handleFile(e.dataTransfer.files[0]); }
+  });
+  input.addEventListener('change', () => { if (input.files.length) handleFile(input.files[0]); });
+
+  function handleFile(file) {
+    zone.querySelector('.upload-zone__body').style.display = 'none';
+    preview.style.display = 'flex';
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = e => { preview.innerHTML = `<img src="${e.target.result}" alt="Floor plan preview"><span class="upload-zone__fname">${file.name}</span>`; };
+      reader.readAsDataURL(file);
+    } else {
+      preview.innerHTML = `<div class="upload-zone__file-icon">📄</div><span class="upload-zone__fname">${file.name}</span>`;
+    }
+  }
+
+  // Tile selection visual
+  document.querySelectorAll('.tile input[type=radio]').forEach(r => {
+    if (r.checked) r.closest('.tile').classList.add('tile--selected');
+    r.addEventListener('change', () => {
+      document.querySelectorAll('.tile').forEach(t => t.classList.remove('tile--selected'));
+      r.closest('.tile').classList.add('tile--selected');
+    });
+  });
+</script>
+{% endblock %}
