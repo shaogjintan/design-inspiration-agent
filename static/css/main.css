@@ -1198,3 +1198,13 @@ em { font-style: italic; color: var(--gold); }
 
   .iterate-bar { flex-direction: column; align-items: flex-start; }
 }
+
+
+/* ── Start / resume page ─────────────────────────────────────────────────── */
+.step-wrap--narrow { max-width: 620px; }
+.form-hint { font-size: .82rem; color: var(--ink-muted); margin-top: .5rem; }
+.hero__resume { font-size: .9rem; color: var(--ink-muted); margin-top: 1rem; }
+.hero__resume a { color: var(--ink); }
+.resume-summary { padding: .25rem 0 1rem; }
+.resume-summary p { margin: 0 0 .4rem; }
+.resume-summary__stamp { font-size: .8rem; color: var(--ink-muted); }

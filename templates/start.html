@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set current_step = 0 %}
+{% block title %}FORMA — Start{% endblock %}
+{% block content %}
+
+<div class="step-wrap step-wrap--narrow">
+
+  {% if returning %}
+  <div class="step-header">
+    <div class="step-header__tag">Welcome back</div>
+    <h2 class="step-header__title">We saved your brief</h2>
+    <p class="step-header__desc">
+      Signed in as <strong>{{ email }}</strong>. Pick up where you left off, or start again.
+    </p>
+  </div>
+
+  <div class="form-card">
+    <div class="resume-summary">
+      {% if progress.room_count %}
+      <p><strong>{{ progress.room_count }}</strong> rooms mapped.</p>
+      {% endif %}
+      {% if progress.done %}
+      <p>Completed so far: {{ progress.done | join(', ') }}.</p>
+      {% else %}
+      <p>Nothing filled in yet.</p>
+      {% endif %}
+      {% if progress.updated_at %}
+      <p class="resume-summary__stamp">Last saved {{ progress.updated_at[:16] | replace('T', ' ') }} UTC</p>
+      {% endif %}
+    </div>
+
+    <div class="form-actions">
+      <form method="POST" action="{{ url_for('start') }}">
+        <input type="hidden" name="action" value="new_project">
+        <button type="submit" class="btn btn--ghost">Start a new project</button>
+      </form>
+      <a href="{{ url_for('step1') }}" class="btn btn--primary">Continue my brief →</a>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="step-header">
+    <div class="step-header__tag">Step 00</div>
+    <h2 class="step-header__title">Let's save your progress</h2>
+    <p class="step-header__desc">
+      Your email is all we need. Renovation conversations happen over weeks —
+      this lets you close the tab, come back, and pick up exactly where you were.
+      No password, no account to manage.
+    </p>
+  </div>
+
+  <form method="POST" action="{{ url_for('start') }}" class="form-card">
+    <div class="form-section">
+      <label class="form-label" for="email">Email address</label>
+      <input type="email" name="email" id="email" class="form-input"
+             placeholder="you@example.com" value="{{ email or '' }}"
+             autocomplete="email" required autofocus>
+      <p class="form-hint">
+        Used only to find your brief again. We don't send marketing.
+      </p>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('index') }}" class="btn btn--ghost">← Back</a>
+      <button type="submit" class="btn btn--primary">Continue →</button>
+    </div>
+  </form>
+  {% endif %}
+
+</div>
+
+{% endblock %}

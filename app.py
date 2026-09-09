@@ -15,6 +15,8 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
+import clients
+
 # ── Optional: real Bedrock client (comment out if SDK not installed) ──────────
 try:
     import boto3
@@ -521,12 +523,77 @@ def generate_floor_plan_svg(rooms: list[dict]) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Session <-> saved brief
+#
+# The cookie holds only client_id/email. Everything else lives in the JSON
+# store, so it survives a closed browser and the cookie stays small.
+# ─────────────────────────────────────────────────────────────────────────────
+BRIEF_KEYS = ("step1", "ai_rooms", "ai_room_summary", "requirements", "inspiration")
+
+
+def persist_brief():
+    """Copy the working session into the client's saved brief. No-op if the
+    visitor never identified themselves, so the app still works without login."""
+    cid = session.get("client_id")
+    if not cid:
+        return
+    clients.save_brief(cid, {k: session[k] for k in BRIEF_KEYS if k in session})
+
+
+def hydrate_session(client):
+    """Load a client's saved brief back into the session."""
+    brief = clients.load_brief(client["client_id"])
+    for k in BRIEF_KEYS:
+        session.pop(k, None)
+        if k in brief:
+            session[k] = brief[k]
+    session["client_id"] = client["client_id"]
+    session["email"] = client["email"]
+    session.modified = True
+    return brief
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    session.clear()
-    return render_template("index.html", current_step=0)
+    # Deliberately does NOT clear the session - landing on the logo used to
+    # destroy a half-finished brief. Use /start to switch client or reset.
+    return render_template("index.html", current_step=0,
+                           signed_in_as=session.get("email"))
+
+
+# ── Step 0: Who is this? ──────────────────────────────────────────────────────
+@app.route("/start", methods=["GET", "POST"])
+def start():
+    """Email-only sign in. No password: an email is enough to reattach someone
+    to their saved brief, and the code/magic-link step slots in here later."""
+    if request.method == "POST":
+        if request.form.get("action") == "new_project":
+            for k in BRIEF_KEYS:
+                session.pop(k, None)
+            if session.get("client_id"):
+                clients.save_brief(session["client_id"], {})
+            session.modified = True
+            return redirect(url_for("step1"))
+
+        email = clients.normalise_email(request.form.get("email"))
+        if not clients.is_valid_email(email):
+            flash("That doesn't look like an email address.", "error")
+            return render_template("start.html", current_step=0, email=email)
+
+        client, is_new = clients.find_or_create_client(email)
+        brief = hydrate_session(client)
+
+        if is_new or not brief:
+            return redirect(url_for("step1"))
+        return render_template("start.html", current_step=0, email=email,
+                               returning=True,
+                               progress=clients.brief_progress(brief))
+
+    return render_template("start.html", current_step=0,
+                           email=session.get("email", ""))
 
 
 # ── Step 1: Housing & Floor Plan ─────────────────────────────────────────────
@@ -563,6 +630,7 @@ def step1():
         session["ai_room_summary"] = room_data.get("summary", "")
         session.modified = True
 
+        persist_brief()
         return redirect(url_for("step2"))
 
     return render_template("step1.html", current_step=1,
@@ -607,10 +675,12 @@ def step2():
         req_data["project_notes"] = request.form.get("project_notes", "")
         session["requirements"] = req_data
         session.modified = True
+        persist_brief()
         return redirect(url_for("step3"))
 
     return render_template("step2.html", current_step=2, rooms=rooms,
-                           ai_room_summary=session.get("ai_room_summary", ""))
+                           ai_room_summary=session.get("ai_room_summary", ""),
+                           saved=session.get("requirements", {}))
 
 
 # ── Step 3: Inspiration ───────────────────────────────────────────────────────
@@ -650,10 +720,12 @@ def step3():
             "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "") for r in rooms},
         }
         session.modified = True
+        persist_brief()
         return redirect(url_for("step4"))
 
     return render_template("step3.html", current_step=3, rooms=rooms,
-                           ai_room_summary=session.get("ai_room_summary", ""))
+                           ai_room_summary=session.get("ai_room_summary", ""),
+                           saved=session.get("inspiration", {}))
 
 
 # ── Step 4: Results ────────────────────────────────────────────────────────────

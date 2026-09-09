@@ -12,3 +12,5 @@ uploads/
 
 # OS
 .DS_Store
+data.json
+data.json.tmp

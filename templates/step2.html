@@ -50,7 +50,8 @@
             <div class="check-grid">
               {% for item in room["items"] %}
               <label class="check-tile" for="{{ room.key }}_{{ loop.index }}">
-                <input type="checkbox" name="{{ room.key }}_items" id="{{ room.key }}_{{ loop.index }}" value="{{ item }}">
+                <input type="checkbox" name="{{ room.key }}_items" id="{{ room.key }}_{{ loop.index }}" value="{{ item }}"
+                       {% if item in saved.get(room.key + "_items", []) %}checked{% endif %}>
                 <span class="check-tile__label">{{ item }}</span>
               </label>
               {% endfor %}
@@ -63,18 +64,18 @@
               <label class="form-label" for="{{ room.key }}_budget">Budget Range</label>
               <select name="{{ room.key }}_budget" id="{{ room.key }}_budget" class="form-input form-select">
                 <option value="">Select range</option>
-                <option value="economy">Economy (under $5k)</option>
-                <option value="mid">Mid-range ($5k–$20k)</option>
-                <option value="premium">Premium ($20k–$50k)</option>
-                <option value="luxury">Luxury ($50k+)</option>
+                <option value="economy" {% if saved.get(room.key + "_budget") == "economy" %}selected{% endif %}>Economy (under $5k)</option>
+                <option value="mid" {% if saved.get(room.key + "_budget") == "mid" %}selected{% endif %}>Mid-range ($5k–$20k)</option>
+                <option value="premium" {% if saved.get(room.key + "_budget") == "premium" %}selected{% endif %}>Premium ($20k–$50k)</option>
+                <option value="luxury" {% if saved.get(room.key + "_budget") == "luxury" %}selected{% endif %}>Luxury ($50k+)</option>
               </select>
             </div>
             <div class="form-group">
               <label class="form-label" for="{{ room.key }}_priority">Priority</label>
               <select name="{{ room.key }}_priority" id="{{ room.key }}_priority" class="form-input form-select">
-                <option value="high">High — do this first</option>
-                <option value="medium" selected>Medium</option>
-                <option value="low">Low — can defer</option>
+                <option value="high" {% if saved.get(room.key + "_priority") == "high" %}selected{% endif %}>High — do this first</option>
+                <option value="medium" {% if saved.get(room.key + "_priority") == "medium" %}selected{% endif %}>Medium</option>
+                <option value="low" {% if saved.get(room.key + "_priority") == "low" %}selected{% endif %}>Low — can defer</option>
               </select>
             </div>
           </div>
@@ -87,14 +88,14 @@
             <textarea name="{{ room.key }}_prompt" id="{{ room.key }}_prompt"
                       class="form-input form-textarea prompt-field" rows="3"
                       placeholder="e.g. I need a double oven, large island with seating for 4, integrated fridge…"
-                      required></textarea>
+                      required>{{ saved.get(room.key + "_prompt", "") }}</textarea>
             <div class="prompt-counter"><span class="prompt-counter__num">0</span> / 500</div>
           </div>
 
           <div class="form-section">
             <label class="form-label form-label--sm" for="{{ room.key }}_constraints">Special constraints or must-avoids</label>
             <input type="text" name="{{ room.key }}_constraints" id="{{ room.key }}_constraints"
-                   class="form-input"
+                   class="form-input" value="{{ saved.get(room.key + "_constraints", "") }}"
                    placeholder="e.g. no carpets, must accommodate wheelchair, avoid dark colours…">
           </div>
 
@@ -108,7 +109,7 @@
       <div class="form-section">
         <label class="form-label" for="project_notes">Overall Project Notes</label>
         <textarea name="project_notes" id="project_notes" class="form-input form-textarea" rows="3"
-                  placeholder="Timeline, budget cap, things you definitely don't want, sustainability preferences…"></textarea>
+                  placeholder="Timeline, budget cap, things you definitely don't want, sustainability preferences…">{{ saved.get("project_notes", "") }}</textarea>
       </div>
     </div>
 
