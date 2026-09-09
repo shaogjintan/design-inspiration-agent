@@ -17,7 +17,7 @@
     <a href="{{ url_for('index') }}" class="nav__logo">FORMA</a>
     <div class="nav__tagline">Design Intelligence Studio</div>
     <div class="nav__steps">
-      {% set steps = [('Step 1', 'Space'), ('Step 2', 'Inspiration'), ('Step 3', 'Requirements'), ('Step 4', 'Vision')] %}
+      {% set steps = [('Step 1', 'Space'), ('Step 2', 'Requirements'), ('Step 3', 'Inspiration'), ('Step 4', 'Vision')] %}
       {% for label, name in steps %}
         {% set i = loop.index %}
         <div class="nav__step {% if current_step == i %}nav__step--active{% elif current_step > i %}nav__step--done{% endif %}">

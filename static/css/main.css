@@ -638,6 +638,61 @@ em { font-style: italic; color: var(--gold); }
 
 .accordion-item--open { border-color: var(--stone-dark); box-shadow: var(--shadow-sm); }
 
+.accordion-head-row {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  transition: var(--transition);
+}
+.accordion-head-row .accordion-header { flex: 1; min-width: 0; }
+
+/* Icon buttons in the accordion header. Transparent so the beige shows
+   through; the glyph is a stroke in currentColor, so it sits on the header
+   background rather than punching a box out of it. */
+.room-icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+.room-icon-btn svg { width: 16px; height: 16px; display: block; }
+.room-icon-btn:hover  { color: var(--ink); }
+.room-icon-btn:last-child { margin-right: .6rem; }
+.room-icon-btn.room-remove:hover { color: #B4550E; }
+.room-icon-btn:focus-visible { outline: 2px solid var(--stone-dark); outline-offset: 2px; color: var(--ink); }
+
+/* Inline rename field, sized to sit inside the header without shifting it */
+.room-rename-input {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  max-width: 22rem;
+  padding: .15rem .4rem;
+  border: 1.5px solid var(--stone-dark);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--white, #fff);
+}
+
+.rooms-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+.rooms-hint { font-size: .85rem; color: var(--stone, #8a8175); margin: 0; }
+.rooms-hint--warn { color: #b4550e; }
+.btn--sm { padding: .4rem .8rem; font-size: .85rem; }
+
 .accordion-header {
   width: 100%;
   display: flex;
@@ -648,8 +703,10 @@ em { font-style: italic; color: var(--gold); }
   transition: var(--transition);
 }
 
-.accordion-header:hover { background: var(--cream); }
-.accordion-item--open .accordion-header { background: var(--cream); }
+/* The beige lives on the whole row, not just the label button, so it runs
+   unbroken underneath the rename/delete icons. */
+.accordion-head-row:hover { background: var(--cream); }
+.accordion-item--open .accordion-head-row { background: var(--cream); }
 
 .accordion-header__label {
   font-size: .875rem;

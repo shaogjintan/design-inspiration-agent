@@ -68,10 +68,10 @@
           <div class="room-result-card__prompt-label">AI Concept</div>
           <p class="room-result-card__concept">{{ room.concept }}</p>
 
-          {% if room.items %}
+          {% if room["items"] %}
           <div class="room-result-card__items">
             <span class="room-result-card__items-label">Key items:</span>
-            {% for item in room.items %}
+            {% for item in room["items"] %}
             <span class="tag">{{ item }}</span>
             {% endfor %}
           </div>
