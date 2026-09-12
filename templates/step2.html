@@ -1,197 +1,328 @@
 {% extends "base.html" %}
 {% set current_step = 2 %}
-{% block title %}FORMA — Inspiration{% endblock %}
+{% block title %}FORMA — Requirements{% endblock %}
 {% block content %}
 
 <div class="step-wrap">
   <div class="step-header">
     <div class="step-header__tag">Step 02</div>
-    <h2 class="step-header__title">Your Inspiration</h2>
-    <p class="step-header__desc">Upload reference images for each room. The more you share, the closer we get to your vision.</p>
+    <h2 class="step-header__title">Room Requirements</h2>
+    <p class="step-header__desc">Confirm your rooms, then tell us what each one needs. This helps your designer understand must-haves vs nice-to-haves.</p>
   </div>
 
-  <!-- AI Room Summary Banner -->
-  <div class="ai-banner">
-    <div class="ai-banner__icon">◈</div>
-    <div class="ai-banner__body">
-      <div class="ai-banner__label">AI Room Analysis</div>
-      <div class="ai-banner__text">{{ ai_room_summary }}</div>
-    </div>
-  </div>
+  <form method="POST" action="{{ url_for('step2') }}" class="form-card">
 
-  <form method="POST" action="{{ url_for('step2') }}" enctype="multipart/form-data" class="form-card">
-
-    <!-- Overall Theme -->
-    <div class="form-section">
-      <label class="form-label">Overall Design Style</label>
-      <div class="tile-grid tile-grid--style">
-        {% set styles = [
-          ('minimalist',   'Minimalist',   'Clean lines, neutral palette'),
-          ('scandinavian', 'Scandinavian', 'Warm whites, natural wood'),
-          ('japandi',      'Japandi',      'Wabi-sabi meets Nordic calm'),
-          ('industrial',   'Industrial',   'Raw materials, metal accents'),
-          ('bohemian',     'Bohemian',     'Eclectic, layered textures'),
-          ('contemporary', 'Contemporary', 'Current, refined, versatile'),
-          ('classical',    'Classical',    'Ornate, symmetrical, timeless'),
-          ('tropical',     'Tropical',     'Lush greens, natural fibres'),
-        ] %}
-        {% for val, label, desc in styles %}
-        <label class="tile tile--style" for="style_{{ val }}">
-          <input type="radio" name="design_style" id="style_{{ val }}" value="{{ val }}" required>
-          <span class="tile__label">{{ label }}</span>
-          <span class="tile__meta">{{ desc }}</span>
-        </label>
-        {% endfor %}
-      </div>
+    <div class="rooms-bar">
+      <p class="rooms-hint" id="rooms-hint"></p>
+      <button type="button" class="btn btn--ghost btn--sm" id="add-room-btn">+ Add room</button>
     </div>
 
-    <!-- Colour Scheme -->
-    <div class="form-section">
-      <label class="form-label">Colour Palette Preference</label>
-      <div class="colour-row">
-        {% set palettes = [
-          ('#F5F0EB', 'Warm Neutral'),
-          ('#E8E4DC', 'Cool Greige'),
-          ('#2C2C2C', 'Dark & Moody'),
-          ('#D4C5B0', 'Earthy Tone'),
-          ('#B8D4C8', 'Sage & Green'),
-          ('#C9D4E0', 'Dusty Blue'),
-          ('#E8D5C4', 'Blush'),
-          ('#1A1A2E', 'Midnight'),
-        ] %}
-        {% for hex, name in palettes %}
-        <label class="colour-swatch" for="pal_{{ loop.index }}" title="{{ name }}">
-          <input type="radio" name="colour_palette" id="pal_{{ loop.index }}" value="{{ hex }}|{{ name }}" required>
-          <span class="colour-swatch__chip" style="background:{{ hex }};"></span>
-          <span class="colour-swatch__name">{{ name }}</span>
-        </label>
-        {% endfor %}
-      </div>
-      <div class="form-group" style="margin-top:1rem;">
-        <label class="form-label form-label--sm" for="custom_colour">Or describe your palette</label>
-        <input type="text" name="custom_colour" id="custom_colour" class="form-input"
-               placeholder="e.g. warm terracotta with off-white accents and dark walnut wood">
-      </div>
-    </div>
-
-    <!-- Per-Room Inspiration Upload -->
-    <div class="form-section">
-      <label class="form-label">Room Inspiration Images</label>
-      <p class="form-hint">Upload 1–5 images per room. These guide the AI's visual suggestions.</p>
-
-      <div class="room-tabs" id="room-tabs">
-        <div class="room-tabs__nav">
-          {% for room in rooms %}
-          <button type="button" class="room-tab {% if loop.first %}room-tab--active{% endif %}"
-                  data-room="{{ room.key }}">{{ room.label }}</button>
-          {% endfor %}
-          <button type="button" class="room-tab room-tab--overall" data-room="overall">Overall</button>
+    <!-- Room accordion -->
+    <div class="accordion" id="room-accordion">
+      {% for room in rooms %}
+      <div class="accordion-item {% if loop.first %}accordion-item--open{% endif %}" data-room="{{ room.key }}">
+        <input type="hidden" name="kept_rooms" value="{{ room.label }}">
+        <div class="accordion-head-row">
+          <button type="button" class="accordion-header">
+            <span class="accordion-header__label">{{ room.label }}</span>
+            <span class="accordion-header__chevron">↓</span>
+          </button>
+          <button type="button" class="room-icon-btn room-rename" title="Rename room" aria-label="Rename {{ room.label }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
+          <button type="button" class="room-icon-btn room-remove" title="Remove room" aria-label="Remove {{ room.label }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+            </svg>
+          </button>
         </div>
+        <div class="accordion-body">
 
-        {% for room in rooms %}
-        <div class="room-panel {% if loop.first %}room-panel--active{% endif %}" data-room="{{ room.key }}">
-          <div class="multi-upload" id="upload_{{ room.key }}">
-            <input type="file" name="inspo_{{ room.key }}" multiple accept="image/*"
-                   class="multi-upload__input" id="input_{{ room.key }}">
-            <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
-              <div class="multi-upload__text">Drop images for <strong>{{ room.label }}</strong> or <span class="upload-zone__link">browse</span></div>
-              <div class="multi-upload__hint">Up to 5 images</div>
+          {% if room["items"] %}
+          <div class="form-section">
+            <label class="form-label">Items &amp; Fixtures Needed</label>
+            <div class="check-grid">
+              {% for item in room["items"] %}
+              <label class="check-tile" for="{{ room.key }}_{{ loop.index }}">
+                <input type="checkbox" name="{{ room.key }}_items" id="{{ room.key }}_{{ loop.index }}" value="{{ item }}"
+                       {% if item in saved.get(room.key + "_items", []) %}checked{% endif %}>
+                <span class="check-tile__label">{{ item }}</span>
+              </label>
+              {% endfor %}
             </div>
-            <div class="multi-upload__previews" id="prev_{{ room.key }}"></div>
           </div>
-          <div class="form-group" style="margin-top:0.75rem;">
-            <label class="form-label form-label--sm">Describe the vibe for this room <span class="form-label__opt">(optional)</span></label>
-            <input type="text" name="vibe_{{ room.key }}" class="form-input"
-                   placeholder="e.g. calm sanctuary, moody and warm, bright and airy…">
-          </div>
-        </div>
-        {% endfor %}
+          {% endif %}
 
-        <!-- Overall panel -->
-        <div class="room-panel" data-room="overall">
-          <div class="multi-upload" id="upload_overall">
-            <input type="file" name="inspo_overall" multiple accept="image/*"
-                   class="multi-upload__input" id="input_overall">
-            <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
-              <div class="multi-upload__text">Drop overall inspiration images or <span class="upload-zone__link">browse</span></div>
-              <div class="multi-upload__hint">Mood boards, magazine cuts, etc.</div>
+          <div class="form-section form-section--row">
+            <div class="form-group">
+              <label class="form-label" for="{{ room.key }}_budget">Budget Range</label>
+              <select name="{{ room.key }}_budget" id="{{ room.key }}_budget" class="form-input form-select">
+                <option value="">Select range</option>
+                <option value="economy" {% if saved.get(room.key + "_budget") == "economy" %}selected{% endif %}>Economy (under $5k)</option>
+                <option value="mid" {% if saved.get(room.key + "_budget") == "mid" %}selected{% endif %}>Mid-range ($5k–$20k)</option>
+                <option value="premium" {% if saved.get(room.key + "_budget") == "premium" %}selected{% endif %}>Premium ($20k–$50k)</option>
+                <option value="luxury" {% if saved.get(room.key + "_budget") == "luxury" %}selected{% endif %}>Luxury ($50k+)</option>
+              </select>
             </div>
-            <div class="multi-upload__previews" id="prev_overall"></div>
+            <div class="form-group">
+              <label class="form-label" for="{{ room.key }}_priority">Priority</label>
+              <select name="{{ room.key }}_priority" id="{{ room.key }}_priority" class="form-input form-select">
+                <option value="high" {% if saved.get(room.key + "_priority") == "high" %}selected{% endif %}>High — do this first</option>
+                <option value="medium" {% if saved.get(room.key + "_priority") == "medium" %}selected{% endif %}>Medium</option>
+                <option value="low" {% if saved.get(room.key + "_priority") == "low" %}selected{% endif %}>Low — can defer</option>
+              </select>
+            </div>
           </div>
+
+          <div class="form-section">
+            <label class="form-label" for="{{ room.key }}_prompt">
+              Describe what this room needs
+              <span class="form-label__req">*</span>
+            </label>
+            <textarea name="{{ room.key }}_prompt" id="{{ room.key }}_prompt"
+                      class="form-input form-textarea prompt-field" rows="3"
+                      placeholder="e.g. I need a double oven, large island with seating for 4, integrated fridge…"
+                      required>{{ saved.get(room.key + "_prompt", "") }}</textarea>
+            <div class="prompt-counter"><span class="prompt-counter__num">0</span> / 500</div>
+          </div>
+
+          <div class="form-section">
+            <label class="form-label form-label--sm" for="{{ room.key }}_constraints">Special constraints or must-avoids</label>
+            <input type="text" name="{{ room.key }}_constraints" id="{{ room.key }}_constraints"
+                   class="form-input" value="{{ saved.get(room.key + "_constraints", "") }}"
+                   placeholder="e.g. no carpets, must accommodate wheelchair, avoid dark colours…">
+          </div>
+
         </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Overall project notes -->
+    <div class="form-card form-card--inset" style="margin-top:1.5rem;">
+      <div class="form-section">
+        <label class="form-label" for="project_notes">Overall Project Notes</label>
+        <textarea name="project_notes" id="project_notes" class="form-input form-textarea" rows="3"
+                  placeholder="Timeline, budget cap, things you definitely don't want, sustainability preferences…">{{ saved.get("project_notes", "") }}</textarea>
       </div>
     </div>
 
     <div class="form-actions">
       <a href="{{ url_for('step1') }}" class="btn btn--ghost">← Back</a>
-      <button type="submit" class="btn btn--primary">Continue to Requirements →</button>
+      <button type="submit" class="btn btn--primary" id="next-btn">Next: Inspiration →</button>
     </div>
 
   </form>
 </div>
 
+<!-- Blank card used when the client adds a room of their own -->
+<template id="room-template">
+  <div class="accordion-item accordion-item--open" data-room="__KEY__">
+    <input type="hidden" name="kept_rooms" value="__LABEL__">
+    <div class="accordion-head-row">
+      <button type="button" class="accordion-header">
+        <span class="accordion-header__label">__LABEL__</span>
+        <span class="accordion-header__chevron">↓</span>
+      </button>
+      <button type="button" class="room-icon-btn room-rename" title="Rename room" aria-label="Rename room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </button>
+      <button type="button" class="room-icon-btn room-remove" title="Remove room" aria-label="Remove room">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/>
+        </svg>
+      </button>
+    </div>
+    <div class="accordion-body">
+      <div class="form-section form-section--row">
+        <div class="form-group">
+          <label class="form-label" for="__KEY___budget">Budget Range</label>
+          <select name="__KEY___budget" id="__KEY___budget" class="form-input form-select">
+            <option value="">Select range</option>
+            <option value="economy">Economy (under $5k)</option>
+            <option value="mid">Mid-range ($5k–$20k)</option>
+            <option value="premium">Premium ($20k–$50k)</option>
+            <option value="luxury">Luxury ($50k+)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="__KEY___priority">Priority</label>
+          <select name="__KEY___priority" id="__KEY___priority" class="form-input form-select">
+            <option value="high">High — do this first</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low — can defer</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-section">
+        <label class="form-label" for="__KEY___prompt">
+          Describe what this room needs <span class="form-label__req">*</span>
+        </label>
+        <textarea name="__KEY___prompt" id="__KEY___prompt"
+                  class="form-input form-textarea prompt-field" rows="3"
+                  placeholder="e.g. shelving along the long wall, a fold-down desk…" required></textarea>
+        <div class="prompt-counter"><span class="prompt-counter__num">0</span> / 500</div>
+      </div>
+      <div class="form-section">
+        <label class="form-label form-label--sm" for="__KEY___constraints">Special constraints or must-avoids</label>
+        <input type="text" name="__KEY___constraints" id="__KEY___constraints" class="form-input"
+               placeholder="e.g. no carpets, avoid dark colours…">
+      </div>
+    </div>
+  </div>
+</template>
+
 {% endblock %}
 {% block extra_scripts %}
 <script>
-  // Tab switching
-  document.querySelectorAll('.room-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      const room = tab.dataset.room;
-      document.querySelectorAll('.room-tab').forEach(t => t.classList.remove('room-tab--active'));
-      document.querySelectorAll('.room-panel').forEach(p => p.classList.remove('room-panel--active'));
-      tab.classList.add('room-tab--active');
-      document.querySelector(`.room-panel[data-room="${room}"]`).classList.add('room-panel--active');
+(function () {
+  const acc  = document.getElementById('room-accordion');
+  const hint = document.getElementById('rooms-hint');
+  const tpl  = document.getElementById('room-template');
+
+  // Must match get_rooms_for_type() in app.py exactly.
+  const slug = s => s.toLowerCase().replace(/ /g, '_').replace(/\//g, '_');
+  const cards = () => Array.from(acc.querySelectorAll('.accordion-item'));
+  const labels = () => cards().map(c => c.querySelector('.accordion-header__label').textContent.trim());
+
+  function say(msg, warn) {
+    hint.textContent = msg;
+    hint.classList.toggle('rooms-hint--warn', !!warn);
+  }
+  function refresh() {
+    const n = cards().length;
+    say(n + (n === 1 ? ' room.' : ' rooms.') + " Rename, remove, or add any you need.");
+  }
+
+  function openOnly(card) {
+    cards().forEach(c => c.classList.remove('accordion-item--open'));
+    card.classList.add('accordion-item--open');
+  }
+
+  // Rewrite every name/id/for on a card from oldKey_* to newKey_*
+  function rekey(card, oldKey, newKey) {
+    ['name', 'id', 'for'].forEach(attr => {
+      card.querySelectorAll('[' + attr + ']').forEach(el => {
+        const v = el.getAttribute(attr);
+        if (v && v.indexOf(oldKey + '_') === 0) {
+          el.setAttribute(attr, newKey + v.slice(oldKey.length));
+        }
+      });
     });
-  });
+    card.dataset.room = newKey;
+  }
 
-  // Multi-upload previews
-  document.querySelectorAll('.multi-upload').forEach(mu => {
-    const input = mu.querySelector('.multi-upload__input');
-    const zone = mu.querySelector('.multi-upload__zone');
-    const previewBox = mu.querySelector('.multi-upload__previews');
+  function cleanName(raw) {
+    return (raw || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  }
 
-    zone.addEventListener('click', () => input.click());
-    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('upload-zone--drag'); });
-    zone.addEventListener('dragleave', () => zone.classList.remove('upload-zone--drag'));
-    zone.addEventListener('drop', e => {
-      e.preventDefault();
-      zone.classList.remove('upload-zone--drag');
-      renderPreviews(e.dataTransfer.files, previewBox);
+  function commitRename(card, newLabel) {
+    const oldLabel = card.querySelector('.accordion-header__label').textContent.trim();
+    const name = cleanName(newLabel);
+    if (!name) { say('A room needs a name.', true); return false; }
+    if (name !== oldLabel && labels().some(l => slug(l) === slug(name))) {
+      say('You already have a room called “' + name + '”.', true); return false;
+    }
+    rekey(card, card.dataset.room, slug(name));
+    card.querySelector('.accordion-header__label').textContent = name;
+    card.querySelector('input[name="kept_rooms"]').value = name;
+    card.querySelector('.room-rename').setAttribute('aria-label', 'Rename ' + name);
+    card.querySelector('.room-remove').setAttribute('aria-label', 'Remove ' + name);
+    refresh();
+    return true;
+  }
+
+  function startRename(card) {
+    const span = card.querySelector('.accordion-header__label');
+    if (span.querySelector('input')) return;
+    const current = span.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'room-rename-input';
+    input.value = current;
+    input.maxLength = 40;
+    span.textContent = '';
+    span.appendChild(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      const val = save ? input.value : current;
+      span.textContent = current;                 // restore, then commit
+      if (!commitRename(card, val)) span.textContent = current;
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
     });
-    input.addEventListener('change', () => renderPreviews(input.files, previewBox));
-  });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', e => e.stopPropagation());
+  }
 
-  function renderPreviews(files, box) {
-    box.innerHTML = '';
-    Array.from(files).slice(0, 5).forEach(f => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const div = document.createElement('div');
-        div.className = 'thumb';
-        div.innerHTML = `<img src="${e.target.result}" alt="${f.name}">`;
-        box.appendChild(div);
-      };
-      reader.readAsDataURL(f);
+  function wire(card) {
+    card.querySelector('.accordion-header').addEventListener('click', () => {
+      const isOpen = card.classList.contains('accordion-item--open');
+      cards().forEach(c => c.classList.remove('accordion-item--open'));
+      if (!isOpen) card.classList.add('accordion-item--open');
+    });
+    card.querySelector('.room-rename').addEventListener('click', e => {
+      e.stopPropagation();
+      openOnly(card);
+      startRename(card);
+    });
+    card.querySelector('.room-remove').addEventListener('click', e => {
+      e.stopPropagation();
+      if (cards().length <= 1) { say('You need at least one room.', true); return; }
+      card.remove();
+      refresh();
+    });
+    // A required field inside a collapsed accordion is display:none and so
+    // unfocusable — the browser then blocks submit with nothing on screen.
+    card.querySelectorAll('[required]').forEach(el => {
+      el.addEventListener('invalid', () => card.classList.add('accordion-item--open'));
+    });
+    card.querySelectorAll('.prompt-field').forEach(ta => {
+      const counter = ta.parentElement.querySelector('.prompt-counter__num');
+      if (counter) ta.addEventListener('input', () => counter.textContent = ta.value.length);
+    });
+    card.querySelectorAll('.check-tile input').forEach(cb => {
+      cb.addEventListener('change', () =>
+        cb.closest('.check-tile').classList.toggle('check-tile--checked', cb.checked));
     });
   }
 
-  // Style tile selection
-  document.querySelectorAll('.tile input[type=radio]').forEach(r => {
-    if (r.checked) r.closest('.tile').classList.add('tile--selected');
-    r.addEventListener('change', () => {
-      document.querySelectorAll(`[name="${r.name}"]`).forEach(rb => rb.closest('.tile').classList.remove('tile--selected'));
-      r.closest('.tile').classList.add('tile--selected');
-    });
-  });
+  cards().forEach(wire);
+  refresh();
 
-  // Colour swatch selection
-  document.querySelectorAll('.colour-swatch input').forEach(r => {
-    r.addEventListener('change', () => {
-      document.querySelectorAll('.colour-swatch').forEach(s => s.classList.remove('colour-swatch--selected'));
-      r.closest('.colour-swatch').classList.add('colour-swatch--selected');
-    });
+  document.getElementById('add-room-btn').addEventListener('click', () => {
+    let n = 1, name;
+    do { name = 'New Room ' + n++; } while (labels().some(l => slug(l) === slug(name)));
+    const html = tpl.innerHTML.split('__KEY__').join(slug(name)).split('__LABEL__').join(name);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html.trim();
+    const card = wrap.firstElementChild;
+    acc.appendChild(card);
+    wire(card);
+    openOnly(card);
+    refresh();
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    startRename(card);
   });
+})();
 </script>
 {% endblock %}

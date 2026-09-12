@@ -11,9 +11,11 @@ import textwrap
 from pathlib import Path
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify, send_file
+    url_for, session, flash, jsonify, send_file, has_request_context
 )
 from werkzeug.utils import secure_filename
+
+import clients
 
 # ── Optional: real Bedrock client (comment out if SDK not installed) ──────────
 try:
@@ -43,13 +45,19 @@ BEDROCK_MODEL_ID  = "us.anthropic.claude-sonnet-4-5-20251001-v1:0"
 # Room definitions — keyed by housing type
 # ─────────────────────────────────────────────────────────────────────────────
 ROOM_CATALOGUE = {
-    "hdb_2room": ["Living Room", "Kitchen", "Bedroom", "Bathroom"],
-    "hdb_3room": ["Living Room", "Kitchen", "Master Bedroom", "Bedroom", "Bathroom"],
-    "hdb_4room": ["Living Room", "Dining Room", "Kitchen", "Master Bedroom",
-                   "Bedroom 2", "Bedroom 3", "Bathroom", "Master Bathroom"],
-    "hdb_5room": ["Living Room", "Dining Room", "Kitchen", "Master Bedroom",
-                   "Bedroom 2", "Bedroom 3", "Bedroom 4", "Bathroom",
-                   "Master Bathroom", "Study"],
+    # HDB flat naming counts LIVING + BEDROOMS (kitchen and bathrooms are extra):
+    #   2-room = living + 1 bedroom      4-room = living + 3 bedrooms
+    #   3-room = living + 2 bedrooms     5-room = living + dining + 3 bedrooms
+    "hdb_2room": ["Living Room", "Bedroom", "Kitchen", "Bathroom",
+                  "Service Yard"],
+    "hdb_3room": ["Living Room", "Master Bedroom", "Bedroom 2", "Kitchen",
+                  "Master Bathroom", "Bathroom", "Service Yard"],
+    "hdb_4room": ["Living Room", "Master Bedroom", "Bedroom 2", "Bedroom 3",
+                  "Kitchen", "Master Bathroom", "Bathroom", "Service Yard",
+                  "Household Shelter"],
+    "hdb_5room": ["Living Room", "Dining Room", "Master Bedroom", "Bedroom 2",
+                  "Bedroom 3", "Kitchen", "Master Bathroom", "Bathroom",
+                  "Service Yard", "Household Shelter"],
     "condo":     ["Living Room", "Dining Room", "Kitchen", "Master Bedroom",
                    "Bedroom 2", "Master Bathroom", "Bathroom", "Study",
                    "Balcony"],
@@ -90,6 +98,10 @@ ROOM_ITEMS = {
     "Ground-Floor Space":   ["Reception Desk", "Display Shelving", "POS Counter"],
     "Open Living / Sleeping Area": ["Loft Bed / Murphy Bed", "Sofa", "Kitchen Bar",
                                      "Storage Ottoman", "Wardrobe"],
+    "Service Yard": ["Washing machine", "Dryer", "Laundry rack",
+                     "Utility sink", "Storage shelving", "Water heater"],
+    "Household Shelter": ["Shelving system", "Storage boxes", "Bicycle rack",
+                          "Ventilation cover", "Door organiser"],
 }
 
 HOUSING_LABELS = {
@@ -128,7 +140,10 @@ def save_upload(file_obj, subfolder: str = "") -> str | None:
 
 def get_rooms_for_type(housing_type: str) -> list[dict]:
     """Return list of {key, label, items} dicts for the given housing type."""
-    room_names = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
+    # Prefer the room list the model identified in step 1; fall back to the
+    # static catalogue when there is none (or outside a request context).
+    ai_rooms = session.get("ai_rooms") if has_request_context() else None
+    room_names = ai_rooms or ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
     rooms = []
     for name in room_names:
         key = name.lower().replace(" ", "_").replace("/", "_")
@@ -190,11 +205,21 @@ def _mock_bedrock_response(messages: list) -> str:
     last = messages[-1]["content"]
     text = last if isinstance(last, str) else (last[0].get("text", "") if last else "")
 
-    if "rooms" in text.lower() or "segregate" in text.lower():
+    # NOTE: the brief prompt also mentions "rooms", so exclude it here or the
+    # brief request would be answered with the room-analysis JSON.
+    if ("rooms" in text.lower() or "segregate" in text.lower()) \
+            and "brief" not in text.lower():
         return json.dumps({
             "rooms": ["Living Room", "Dining Room", "Kitchen",
                       "Master Bedroom", "Bedroom 2", "Master Bathroom", "Bathroom"],
-            "summary": "Based on your 4-Room HDB at approximately 95 sqm, I've identified 7 distinct spaces. The open-plan living and dining area flows naturally into the kitchen — a typical layout that gives excellent flexibility for your design. The master suite includes a dedicated bathroom, while a second bedroom and shared bathroom complete the private zone."
+            "summary": "Based on your 4-Room HDB at approximately 95 sqm, I've identified 7 distinct spaces. The open-plan living and dining area flows naturally into the kitchen \u2014 a typical layout that gives excellent flexibility for your design. The master suite includes a dedicated bathroom, while a second bedroom and shared bathroom complete the private zone.",
+            "observations": [
+                "Living and dining read as one continuous space \u2014 treat them as a single visual zone.",
+                "The kitchen sits at the service end of the flat, next to the yard.",
+                "Both bedrooms share a wall, so acoustic separation is worth raising early."
+            ],
+            "source": "housing_type_only",
+            "confidence": "medium",
         })
 
     if "brief" in text.lower() or "design brief" in text.lower():
@@ -223,30 +248,179 @@ def _mock_bedrock_response(messages: list) -> str:
     # generic room concept
     return "A serene, considered space that balances function with quiet beauty. Natural light is maximised, storage is integrated, and every element earns its place. The material palette echoes the home's overarching warmth — oiled oak, linen, and aged brass — while bespoke joinery provides the room's defining character."
 
+SPACE_ANALYSIS_SYSTEM = (
+    "You are an interior designer who reads residential floor plans for a living, "
+    "working mainly with Singapore homes — HDB flats, condominiums and landed houses. "
+    "You are precise about what you can actually see, and honest about what you cannot. "
+    "You never invent measurements that are not legible in the plan."
+)
 
-def generate_room_summary(housing_type: str, floor_size: str, notes: str) -> dict:
-    """Ask AI to identify rooms from housing type."""
+
+def build_space_analysis_request(
+    housing_type: str,
+    floor_size: str,
+    num_floors: str,
+    notes: str,
+    floor_plan_path: str | None = None,
+) -> tuple[list, str]:
+    """Build the (messages, system) pair for the step-1 space analysis.
+    Makes no API call — print the result to inspect the prompt for free."""
+
     prompt = textwrap.dedent(f"""
-        Housing type: {HOUSING_LABELS.get(housing_type, housing_type)}
-        Approximate size: {floor_size or 'unknown'} sqm
-        Additional notes: {notes or 'none'}
+        A homeowner has given us the following about their space.
 
-        Segregate this home into its individual rooms and provide:
-        1. A JSON list of room names under the key "rooms"
-        2. A brief human-readable "summary" of the layout (2–3 sentences)
+        Housing type : {HOUSING_LABELS.get(housing_type, housing_type)}
+        Approx. size : {floor_size or 'not given'} sqm
+        Floors       : {num_floors or '1'}
+        Their notes  : {notes or 'none'}
+        Floor plan   : {'attached as an image' if floor_plan_path else 'not provided'}
 
-        Respond ONLY with valid JSON in this exact format:
-        {{"rooms": ["Room 1", "Room 2", ...], "summary": "..."}}
-    """)
+        Task: list the individual rooms in this home, so we can ask about each one separately.
 
-    raw = call_bedrock([{"role": "user", "content": prompt}],
-                       system="You are an expert interior design consultant specialising in Singapore residential spaces.")
+        If a floor plan is attached, read it. Use the room labels printed on the plan, and
+        include service spaces that appear (Household Shelter, Service Yard, Balcony, Store, WC).
+        If no plan is attached, infer a typical layout for this housing type and say so.
+
+        Rules:
+        - Use names a Singapore homeowner would recognise.
+        - Split rooms only where a designer would treat them separately.
+        - Do not invent measurements you cannot read from the plan.
+        - Set "source" to "floorplan" ONLY if you actually read rooms off an attached plan.
+
+        Respond with ONLY valid JSON, no prose before or after:
+        {{"rooms": ["Living Room", "Kitchen"],
+          "summary": "2-3 sentences the homeowner reads on the next page.",
+          "observations": ["short note on layout, light or flow"],
+          "source": "floorplan",
+          "confidence": "high"}}
+    """).strip()
+
+    content = [{"type": "text", "text": prompt}]
+    if floor_plan_path:
+        data, media_type = image_to_base64(floor_plan_path)
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type, "data": data},
+        })
+
+    return [{"role": "user", "content": content}], SPACE_ANALYSIS_SYSTEM
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STUB — stands in for the AI floor-plan read.
+#
+# Active whenever Bedrock is unavailable (or force it with USE_FLOORPLAN_STUB=1
+# / disable with USE_FLOORPLAN_STUB=0). Returns exactly the same dict shape as
+# generate_room_summary(), so swapping to the real read is deleting one early
+# return — nothing downstream changes.
+# ─────────────────────────────────────────────────────────────────────────────
+USE_FLOORPLAN_STUB = os.environ.get("USE_FLOORPLAN_STUB", "auto").lower()
+
+
+def _floorplan_stub_enabled() -> bool:
+    if USE_FLOORPLAN_STUB in ("1", "true", "yes", "on"):
+        return True
+    if USE_FLOORPLAN_STUB in ("0", "false", "no", "off"):
+        return False
+    return not BEDROCK_AVAILABLE          # "auto"
+
+
+def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
+                        notes="", floor_plan_path=None) -> dict:
+    """Derive the room list from the housing type alone. No model call."""
+    rooms = list(ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"]))
+    label = HOUSING_LABELS.get(housing_type, housing_type)
+
+    beds  = [r for r in rooms if "Bedroom" in r]
+    baths = [r for r in rooms if "Bathroom" in r]
+
+    def plural(n, word):
+        return f"{n} {word}" + ("" if n == 1 else "s")
+
+    summary = (
+        f"Your {label}"
+        + (f", around {floor_size} sqm," if floor_size else "")
+        + f" works out to {len(rooms)} spaces: {plural(len(beds), 'bedroom')} "
+        f"and {plural(len(baths), 'bathroom')}, plus the shared living areas."
+    )
+    if (num_floors or "1") not in ("1", ""):
+        summary += f" Spread over {num_floors} floors."
+
+    observations = [
+        "Room list is derived from the housing type — upload a floor plan for a closer match.",
+        "Remove any room you don't have, and it won't appear in your brief.",
+    ]
+    if notes:
+        observations.append(f"Your note: {notes}")
+
+    return {
+        "rooms":        rooms,
+        "summary":      summary,
+        "observations": observations,
+        "source":       "housing_type_only",
+        "confidence":   "low",
+    }
+
+
+def generate_room_summary(housing_type, floor_size, notes,
+                          num_floors="1", floor_plan_path=None) -> dict:
+    """Identify the rooms in this home, reading the floor plan when one was uploaded.
+
+    Always returns the same five keys so mock mode and real mode behave alike.
+    """
+    # ── STUB: delete these two lines once the real floor-plan read works ──
+    if _floorplan_stub_enabled():
+        return stub_read_floorplan(housing_type, floor_size, num_floors,
+                                   notes, floor_plan_path)
+
+    messages, system = build_space_analysis_request(
+        housing_type, floor_size, num_floors, notes, floor_plan_path
+    )
+    raw = call_bedrock(messages, system=system)
+
+    fallback_rooms = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
+
     try:
         data = json.loads(raw)
-        return data
-    except json.JSONDecodeError:
-        rooms = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
-        return {"rooms": rooms, "summary": raw}
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        app.logger.warning("Space analysis: model did not return JSON - using catalogue")
+        return {
+            "rooms":        fallback_rooms,
+            "summary":      raw if isinstance(raw, str) else "",
+            "observations": [],
+            "source":       "housing_type_only",
+            "confidence":   "low",
+        }
+
+    # A bad response must never empty out steps 2-4.
+    raw_rooms = data.get("rooms")
+    rooms = ([str(r).strip() for r in raw_rooms if str(r).strip()]
+             if isinstance(raw_rooms, list) else [])
+    if not rooms:
+        rooms = fallback_rooms
+
+    raw_obs = data.get("observations")
+    observations = ([str(o).strip() for o in raw_obs if str(o).strip()]
+                    if isinstance(raw_obs, list) else [])
+
+    # The model cannot have read a plan we never sent it.
+    source = data.get("source")
+    if not floor_plan_path or source not in ("floorplan", "housing_type_only"):
+        source = "floorplan" if floor_plan_path and source == "floorplan" else "housing_type_only"
+
+    confidence = data.get("confidence")
+    if confidence not in ("high", "medium", "low"):
+        confidence = "medium"
+
+    return {
+        "rooms":        rooms,
+        "summary":      str(data.get("summary", "")).strip(),
+        "observations": observations,
+        "source":       source,
+        "confidence":   confidence,
+    }
 
 
 def generate_design_brief(project: dict) -> str:
@@ -349,12 +523,77 @@ def generate_floor_plan_svg(rooms: list[dict]) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Session <-> saved brief
+#
+# The cookie holds only client_id/email. Everything else lives in the JSON
+# store, so it survives a closed browser and the cookie stays small.
+# ─────────────────────────────────────────────────────────────────────────────
+BRIEF_KEYS = ("step1", "ai_rooms", "ai_room_summary", "requirements", "inspiration")
+
+
+def persist_brief():
+    """Copy the working session into the client's saved brief. No-op if the
+    visitor never identified themselves, so the app still works without login."""
+    cid = session.get("client_id")
+    if not cid:
+        return
+    clients.save_brief(cid, {k: session[k] for k in BRIEF_KEYS if k in session})
+
+
+def hydrate_session(client):
+    """Load a client's saved brief back into the session."""
+    brief = clients.load_brief(client["client_id"])
+    for k in BRIEF_KEYS:
+        session.pop(k, None)
+        if k in brief:
+            session[k] = brief[k]
+    session["client_id"] = client["client_id"]
+    session["email"] = client["email"]
+    session.modified = True
+    return brief
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Routes
 # ─────────────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    session.clear()
-    return render_template("index.html", current_step=0)
+    # Deliberately does NOT clear the session - landing on the logo used to
+    # destroy a half-finished brief. Use /start to switch client or reset.
+    return render_template("index.html", current_step=0,
+                           signed_in_as=session.get("email"))
+
+
+# ── Step 0: Who is this? ──────────────────────────────────────────────────────
+@app.route("/start", methods=["GET", "POST"])
+def start():
+    """Email-only sign in. No password: an email is enough to reattach someone
+    to their saved brief, and the code/magic-link step slots in here later."""
+    if request.method == "POST":
+        if request.form.get("action") == "new_project":
+            for k in BRIEF_KEYS:
+                session.pop(k, None)
+            if session.get("client_id"):
+                clients.save_brief(session["client_id"], {})
+            session.modified = True
+            return redirect(url_for("step1"))
+
+        email = clients.normalise_email(request.form.get("email"))
+        if not clients.is_valid_email(email):
+            flash("That doesn't look like an email address.", "error")
+            return render_template("start.html", current_step=0, email=email)
+
+        client, is_new = clients.find_or_create_client(email)
+        brief = hydrate_session(client)
+
+        if is_new or not brief:
+            return redirect(url_for("step1"))
+        return render_template("start.html", current_step=0, email=email,
+                               returning=True,
+                               progress=clients.brief_progress(brief))
+
+    return render_template("start.html", current_step=0,
+                           email=session.get("email", ""))
 
 
 # ── Step 1: Housing & Floor Plan ─────────────────────────────────────────────
@@ -372,9 +611,11 @@ def step1():
 
         # Ask AI to identify rooms
         room_data = generate_room_summary(
-            housing_type,
-            request.form.get("floor_size", ""),
-            request.form.get("space_notes", ""),
+        housing_type,
+        request.form.get("floor_size", ""),
+        request.form.get("space_notes", ""),
+        num_floors=request.form.get("num_floors", "1"),
+        floor_plan_path=floor_plan_path,
         )
 
         session["step1"] = {
@@ -389,6 +630,7 @@ def step1():
         session["ai_room_summary"] = room_data.get("summary", "")
         session.modified = True
 
+        persist_brief()
         return redirect(url_for("step2"))
 
     return render_template("step1.html", current_step=1,
@@ -398,6 +640,53 @@ def step1():
 # ── Step 2: Inspiration ───────────────────────────────────────────────────────
 @app.route("/step2", methods=["GET", "POST"])
 def step2():
+    """Step 2 — Room requirements. Runs BEFORE inspiration, so the client
+    settles what rooms exist and what they need before picking a look."""
+    if "step1" not in session:
+        return redirect(url_for("step1"))
+
+    housing_type = session["step1"]["housing_type"]
+    rooms = get_rooms_for_type(housing_type)
+
+    if request.method == "POST":
+        # Each room card carries a hidden "kept_rooms" input holding its current
+        # label, so removed cards vanish from this list and renamed/added ones
+        # arrive with their new names. Order is DOM order.
+        kept = [r.strip() for r in request.form.getlist("kept_rooms") if r.strip()]
+        if kept:
+            seen, unique = set(), []
+            for label in kept:                      # guard against duplicates
+                if label.lower() not in seen:
+                    seen.add(label.lower())
+                    unique.append(label)
+            session["ai_rooms"] = unique
+            session.modified = True
+            rooms = get_rooms_for_type(housing_type)
+
+        req_data = {}
+        for room in rooms:
+            key = room["key"]
+            req_data[f"{key}_prompt"]      = request.form.get(f"{key}_prompt", "")
+            req_data[f"{key}_items"]       = request.form.getlist(f"{key}_items")
+            req_data[f"{key}_budget"]      = request.form.get(f"{key}_budget", "")
+            req_data[f"{key}_priority"]    = request.form.get(f"{key}_priority", "medium")
+            req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
+
+        req_data["project_notes"] = request.form.get("project_notes", "")
+        session["requirements"] = req_data
+        session.modified = True
+        persist_brief()
+        return redirect(url_for("step3"))
+
+    return render_template("step2.html", current_step=2, rooms=rooms,
+                           ai_room_summary=session.get("ai_room_summary", ""),
+                           saved=session.get("requirements", {}))
+
+
+# ── Step 3: Inspiration ───────────────────────────────────────────────────────
+@app.route("/step3", methods=["GET", "POST"])
+def step3():
+    """Step 3 — Inspiration images, style and palette, per confirmed room."""
     if "step1" not in session:
         return redirect(url_for("step1"))
 
@@ -416,64 +705,40 @@ def step2():
             paths = [save_upload(f, f"inspo/{key}") for f in files if f and f.filename]
             saved_inspo[key] = [p for p in paths if p]
 
-        # overall
         overall_files = request.files.getlist("inspo_overall")
         saved_inspo["overall"] = [
             save_upload(f, "inspo/overall") for f in overall_files if f and f.filename
         ]
 
-        session["step2"] = {
-            "design_style":  style,
+        session["inspiration"] = {
+            "design_style":   style,
             "colour_palette": palette,
-            "colour_hex":    colour_hex.strip(),
-            "colour_name":   colour_name.strip() or "Custom",
-            "custom_colour": request.form.get("custom_colour", ""),
-            "inspo_paths":   saved_inspo,
-            "vibes":         {r["key"]: request.form.get(f"vibe_{r['key']}", "") for r in rooms},
+            "colour_hex":     colour_hex.strip(),
+            "colour_name":    colour_name.strip() or "Custom",
+            "custom_colour":  request.form.get("custom_colour", ""),
+            "inspo_paths":    saved_inspo,
+            "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "") for r in rooms},
         }
         session.modified = True
-        return redirect(url_for("step3"))
-
-    ai_summary = session.get("ai_room_summary", "")
-    return render_template("step2.html", current_step=2,
-                           rooms=rooms, ai_room_summary=ai_summary)
-
-
-# ── Step 3: Requirements ──────────────────────────────────────────────────────
-@app.route("/step3", methods=["GET", "POST"])
-def step3():
-    if "step1" not in session:
-        return redirect(url_for("step1"))
-
-    housing_type = session["step1"]["housing_type"]
-    rooms = get_rooms_for_type(housing_type)
-
-    if request.method == "POST":
-        req_data = {}
-        for room in rooms:
-            key = room["key"]
-            req_data[f"{key}_prompt"]      = request.form.get(f"{key}_prompt", "")
-            req_data[f"{key}_items"]       = request.form.getlist(f"{key}_items")
-            req_data[f"{key}_budget"]      = request.form.get(f"{key}_budget", "")
-            req_data[f"{key}_priority"]    = request.form.get(f"{key}_priority", "medium")
-            req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
-
-        req_data["project_notes"] = request.form.get("project_notes", "")
-        session["step3"] = req_data
-        session.modified = True
+        persist_brief()
         return redirect(url_for("step4"))
 
-    return render_template("step3.html", current_step=3, rooms=rooms)
+    return render_template("step3.html", current_step=3, rooms=rooms,
+                           ai_room_summary=session.get("ai_room_summary", ""),
+                           saved=session.get("inspiration", {}))
 
 
 # ── Step 4: Results ────────────────────────────────────────────────────────────
 @app.route("/step4")
 def step4():
-    for step in ("step1", "step2", "step3"):
+    for step, route in (("step1", "step1"), ("requirements", "step2"),
+                        ("inspiration", "step3")):
         if step not in session:
-            return redirect(url_for(step.replace("step", "step")))
+            return redirect(url_for(route))
 
-    s1, s2, s3 = session["step1"], session["step2"], session["step3"]
+    s1 = session["step1"]
+    s2 = session["inspiration"]      # style / palette / inspo images
+    s3 = session["requirements"]     # per-room items, budget, prompts
     housing_type = s1["housing_type"]
     rooms_base   = get_rooms_for_type(housing_type)
 
@@ -526,7 +791,9 @@ def export_brief():
     if "step1" not in session:
         return redirect(url_for("index"))
 
-    s1, s2, s3 = session.get("step1", {}), session.get("step2", {}), session.get("step3", {})
+    s1 = session.get("step1", {})
+    s2 = session.get("inspiration", {})
+    s3 = session.get("requirements", {})
     housing_type = s1.get("housing_type", "")
     rooms_base   = get_rooms_for_type(housing_type)
 
