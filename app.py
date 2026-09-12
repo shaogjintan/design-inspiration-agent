@@ -8,7 +8,12 @@ import json
 import uuid
 import base64
 import textwrap
+import urllib.request
+import urllib.error
 from pathlib import Path
+
+from dotenv import load_dotenv
+
 from flask import (
     Flask, render_template, request, redirect,
     url_for, session, flash, jsonify, send_file, has_request_context
@@ -17,16 +22,11 @@ from werkzeug.utils import secure_filename
 
 import clients
 
-# ── Optional: real Bedrock client (comment out if SDK not installed) ──────────
-try:
-    import boto3
-    BEDROCK_AVAILABLE = True
-except ImportError:
-    BEDROCK_AVAILABLE = False
-
 # ─────────────────────────────────────────────────────────────────────────────
 # App config
 # ─────────────────────────────────────────────────────────────────────────────
+load_dotenv(".env.local")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "forma-dev-secret-2026")
 
@@ -37,9 +37,10 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "pdf"}
 
-# AWS Bedrock config — set these env vars when you have the API
-AWS_REGION        = os.environ.get("AWS_REGION", "us-east-1")
-BEDROCK_MODEL_ID  = "us.anthropic.claude-sonnet-4-5-20251001-v1:0"
+# LLM Gateway config
+LLM_GATEWAY_URL = os.environ.get("LLM_GATEWAY_URL")
+LLM_GATEWAY_API_KEY = os.environ.get("LLM_GATEWAY_API_KEY")
+LLM_MODEL = os.environ.get("LLM_MODEL")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Room definitions — keyed by housing type
@@ -167,36 +168,65 @@ def image_to_base64(path: str) -> tuple[str, str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AWS Bedrock wrapper
+# LLM Gateway wrapper
 # ─────────────────────────────────────────────────────────────────────────────
-def call_bedrock(messages: list, system: str = "", max_tokens: int = 2048) -> str:
+def call_llm(messages: list, system: str = "", max_tokens: int = 2048) -> str:
     """
-    Call Claude Sonnet 4.5 via AWS Bedrock.
-    Falls back to a mock response when credentials are unavailable.
+    Call the team's LLM Gateway.
+    Falls back to the existing mock response if the gateway is unavailable.
     """
-    if BEDROCK_AVAILABLE:
-        try:
-            client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "messages": messages,
-            }
-            if system:
-                body["system"] = system
 
-            response = client.invoke_model(
-                modelId=BEDROCK_MODEL_ID,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(body),
-            )
-            result = json.loads(response["body"].read())
-            return result["content"][0]["text"]
-        except Exception as e:
-            app.logger.warning(f"Bedrock call failed: {e} — using mock response")
+    if not LLM_GATEWAY_URL or not LLM_GATEWAY_API_KEY or not LLM_MODEL:
+        app.logger.warning(
+            "LLM Gateway configuration missing — using mock response"
+        )
+        return _mock_bedrock_response(messages)
 
-    # ── STUB: mock response when Bedrock is unavailable ──────────────────────
+    gateway_messages = []
+
+    if system:
+        gateway_messages.append({
+            "role": "system",
+            "content": system
+        })
+
+    gateway_messages.extend(messages)
+
+    payload = {
+        "model": LLM_MODEL,
+        "messages": gateway_messages,
+        "stream": False,
+        "options": {
+            "num_predict": max_tokens
+        }
+    }
+
+    req = urllib.request.Request(
+        f"{LLM_GATEWAY_URL.rstrip('/')}/api/chat",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key": LLM_GATEWAY_API_KEY,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result["message"]["content"]
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        app.logger.warning(
+            f"LLM Gateway HTTP error {e.code}: {error_body} — using mock response"
+        )
+
+    except Exception as e:
+        app.logger.warning(
+            f"LLM Gateway call failed: {e} — using mock response"
+        )
+
     return _mock_bedrock_response(messages)
 
 
@@ -322,7 +352,8 @@ def _floorplan_stub_enabled() -> bool:
         return True
     if USE_FLOORPLAN_STUB in ("0", "false", "no", "off"):
         return False
-    return not BEDROCK_AVAILABLE          # "auto"
+
+    return True # temp
 
 
 def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
@@ -376,7 +407,7 @@ def generate_room_summary(housing_type, floor_size, notes,
     messages, system = build_space_analysis_request(
         housing_type, floor_size, num_floors, notes, floor_plan_path
     )
-    raw = call_bedrock(messages, system=system)
+    raw = call_llm(messages, system=system)
 
     fallback_rooms = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
 
@@ -448,7 +479,7 @@ def generate_design_brief(project: dict) -> str:
         Respond with ONLY the HTML content, no surrounding tags.
     """)
 
-    return call_bedrock(
+    return call_llm(
         [{"role": "user", "content": prompt}],
         system="You are a senior interior designer writing a premium design brief.",
         max_tokens=1024
@@ -468,7 +499,7 @@ def generate_room_concept(room: dict, style: str, palette: str, prompt_text: str
         Focus on mood, materials, lighting, and spatial flow. Be specific and design-forward.
     """)
 
-    return call_bedrock(
+    return call_llm(
         [{"role": "user", "content": msg}],
         system="You are a senior interior designer crafting room concept descriptions.",
         max_tokens=256
