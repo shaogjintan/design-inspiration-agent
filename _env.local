@@ -1,0 +1,7 @@
+# AWS LLM Gateway (Ollama-compatible API fronting Bedrock Claude Sonnet 4.5)
+# Team: Shaken Not Stirred (9RGSAV87)
+# Server-side only — never prefix these with NEXT_PUBLIC_, that would ship
+# the API key to every browser that loads the app.
+LLM_GATEWAY_URL=https://api.softwaresystems.app
+LLM_GATEWAY_API_KEY=775b2a623ad6413ff5338cd17d240ad7263c772d58fef1ba
+LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
