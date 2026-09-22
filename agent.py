@@ -380,10 +380,25 @@ def run_agent(
             concept = f"Design concept for {room['label']} could not be generated. Please regenerate."
             room_errors += 1
 
+        # A drawn concept visual for the room — the gateway has no image model,
+        # so every shape here is generated from the style, palette and items.
+        try:
+            visual = _app.generate_room_concept_visual(
+                room["label"],
+                style       = inspiration.get("design_style", ""),
+                palette_hex = inspiration.get("colour_hex", ""),
+                materials   = inspo_analysis.get("materials", []),
+                items       = requirements.get(f"{key}_items", []) or [],
+            )
+        except Exception as e:
+            logger.warning(f"Concept visual failed for {room['label']}: {e}")
+            visual = ""
+
         room_results.append({
             "key":      key,
             "label":    room["label"],
             "concept":  concept,
+            "visual":   visual,
             "direction": room_inspo_note if isinstance(room_inspo_note, dict) else {},
             "items":    requirements.get(f"{key}_items", []),
             "priority": requirements.get(f"{key}_priority", "medium"),

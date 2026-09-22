@@ -17,6 +17,9 @@
     <div class="ai-banner__body">
       <div class="ai-banner__label">AI Room Analysis</div>
       <div class="ai-banner__text">{{ ai_room_summary }}</div>
+      {% if ai_room_practical %}
+      <div class="ai-banner__text ai-banner__text--practical">{{ ai_room_practical }}</div>
+      {% endif %}
     </div>
   </div>
 

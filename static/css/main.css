@@ -2299,3 +2299,37 @@ em { font-style: italic; color: var(--gold); }
 .inspo-analysis__summary-text,
 .room-result-card__concept,
 .plan-notice__text { overflow-wrap: break-word; }
+
+/* ── Room concept visual (ported from main) ───────────────────────────────── */
+.room-concept-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--cream);
+  border: 1px solid var(--cream-dark);
+}
+.room-concept-visual svg { width: 100%; height: 100%; display: block; }
+.room-concept-visual__tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: rgba(255,255,255,.75);
+  padding: .15em .55em;
+  border-radius: 99px;
+}
+
+/* Second line of the room analysis — the practical read on budget, priority
+   and constraints. Separated so the two lines do not run together. */
+.ai-banner__text--practical {
+  margin-top: .45rem;
+  padding-top: .45rem;
+  border-top: 1px solid var(--cream-dark);
+  color: var(--ink-muted);
+  font-size: .85rem;
+}

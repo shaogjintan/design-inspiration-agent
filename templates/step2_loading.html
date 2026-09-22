@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set current_step = 2 %}
+{% block title %}FORMA — Reviewing your rooms{% endblock %}
+{% block content %}
+
+<div class="step-wrap mo">
+  <div class="mo-stage" id="mo-stage" role="status" aria-live="polite">
+
+    <svg class="mo-plan" viewBox="0 0 320 196" role="img"
+         aria-label="Confirmed rooms settling into place">
+      <rect class="mo-plan__shell" x="6" y="6" width="308" height="184" rx="10"/>
+      <g>
+        <rect class="mo-room mo-room--1" x="20"  y="20"  width="118" height="76"  rx="6"/>
+        <rect class="mo-room mo-room--2" x="146" y="20"  width="74"  height="76"  rx="6"/>
+        <rect class="mo-room mo-room--3" x="228" y="20"  width="72"  height="42"  rx="6"/>
+        <rect class="mo-room mo-room--4" x="228" y="70"  width="72"  height="106" rx="6"/>
+        <rect class="mo-room mo-room--5" x="20"  y="104" width="76"  height="72"  rx="6"/>
+        <rect class="mo-room mo-room--6" x="104" y="104" width="116" height="72"  rx="6"/>
+      </g>
+    </svg>
+
+    <h2 class="mo-title">Checking your rooms</h2>
+    <p class="mo-sub" id="mo-sub">
+      Reading back the {{ room_count }} space{{ '' if room_count == 1 else 's' }}
+      you confirmed for {{ housing_label }}.
+    </p>
+
+    <div class="mo-bar" aria-hidden="true"><span class="mo-bar__fill"></span></div>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+  const sub   = document.getElementById('mo-sub');
+  const stage = document.getElementById('mo-stage');
+  const next  = '{{ url_for("step3") }}';
+
+  // Whatever happens, the homeowner continues — the summary is a nicety and the
+  // server falls back to a composed line if the model is slow or unavailable.
+  function go() { window.location.replace(next); }
+
+  fetch('/step2/summarise', { method: 'POST', headers: { 'Accept': 'application/json' } })
+    .then(res => res.json().catch(() => ({ ok: false })))
+    .then(() => {
+      sub.textContent = 'All set.';
+      stage.classList.add('is-done');
+      setTimeout(go, 420);
+    })
+    .catch(go);
+})();
+</script>
+{% endblock %}

@@ -226,13 +226,19 @@
           {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
         </div>
 
-        <!-- Placeholder render area (future: real image gen) -->
-        <div class="render-placeholder">
-          <div class="render-placeholder__inner">
-            <div class="render-placeholder__icon">{{ icon("image") }}</div>
-            <div class="render-placeholder__text">AI Render — {{ room.label }}</div>
-            <div class="render-placeholder__sub">Visual generation coming with Bedrock Image API</div>
+        <!-- Drawn concept visual — stylised from the palette and items, not a
+             photoreal render. Falls back to a plain plate if it failed. -->
+        <div class="room-concept-visual">
+          {% if room.visual %}
+            {{ room.visual | safe }}
+          {% else %}
+          <div class="render-placeholder">
+            <div class="render-placeholder__inner">
+              <div class="render-placeholder__icon">{{ icon("image") }}</div>
+              <div class="render-placeholder__text">{{ room.label }}</div>
+            </div>
           </div>
+          {% endif %}
         </div>
 
         <div class="room-result-card__desc">

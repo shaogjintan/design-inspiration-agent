@@ -248,6 +248,109 @@ def room_list_vs_housing_type(housing_type: str, room_names) -> dict | None:
     return {"label": HOUSING_LABELS.get(housing_type, housing_type), "diffs": diffs}
 
 
+ROOM_FIELD_SUFFIXES = ("prompt", "items", "budget", "priority", "constraints")
+
+
+def room_key(label: str) -> str:
+    return label.lower().replace(" ", "_").replace("/", "_")
+
+
+def _pairing_kind(label: str) -> tuple:
+    """How a room is identified when matching an old list against a new one.
+
+    Coarser than match_catalogue_room, which short-circuits on an exact
+    catalogue hit and so never sees "Bathroom" and "Common Bathroom" as the
+    same room. Here they share a kind and differ only by the master flag.
+    """
+    t = label.lower()
+    master = any(w in t for w in ("master", "main", "primary"))
+    if any(w in t for w in ("bath", "wc", "toilet", "shower", "ensuite")):
+        return ("bath", master)
+    if "bed" in t:
+        digits = re.findall(r"\d", t)
+        return ("bed", master, digits[0] if digits else "")
+    for kind in ("kitchen", "living", "dining", "study", "balcony", "garage",
+                 "shelter", "yard", "utility", "store", "garden"):
+        if kind in t:
+            return (kind,)
+    return (t.strip(),)
+
+
+def remap_requirements(old_labels, new_labels, reqs: dict) -> tuple[dict, int]:
+    """Carry each room's answers over when the room list is replaced.
+
+    Requirements are keyed off the room's name, so swapping "Bathroom" for
+    "Common Bathroom" — which a floor-plan read and the standard-layout button
+    both do — otherwise strands everything the homeowner typed under a key
+    nothing reads any more.
+
+    Rooms pair within their kind. An ensuite matches an ensuite only when both
+    lists actually mark one; otherwise they pair in list order, because names
+    like "Bath 1" and "Bath 2" carry no master/common signal and guessing puts
+    the ensuite's notes in the common bathroom.
+    """
+    if not reqs:
+        return reqs, 0
+
+    def has_data(label):
+        k = room_key(label)
+        return any(f"{k}_{s}" in reqs for s in ROOM_FIELD_SUFFIXES)
+
+    def is_master(label):
+        kind = _pairing_kind(label)
+        return len(kind) > 1 and bool(kind[1])
+
+    def by_kind(labels):
+        out: dict[str, list[str]] = {}
+        for label in labels:
+            out.setdefault(_pairing_kind(label)[0], []).append(label)
+        return out
+
+    old_groups = by_kind([o for o in old_labels if has_data(o)])
+    new_groups = by_kind(new_labels)
+
+    pairs: list[tuple[str, str]] = []
+    for kind, olds in old_groups.items():
+        news = list(new_groups.get(kind, []))
+        if not news:
+            continue
+        olds = list(olds)
+
+        # Only honour the ensuite when both sides name one; otherwise position
+        # is the more reliable signal.
+        old_m = next((o for o in olds if is_master(o)), None)
+        new_m = next((n for n in news if is_master(n)), None)
+        if old_m and new_m:
+            pairs.append((old_m, new_m))
+            olds.remove(old_m)
+            news.remove(new_m)
+
+        pairs.extend(zip(olds, news))
+
+    out, moved = dict(reqs), 0
+    for old, target in pairs:
+        old_key, new_key = room_key(old), room_key(target)
+        if old_key == new_key:
+            continue
+        for suffix in ROOM_FIELD_SUFFIXES:
+            if f"{old_key}_{suffix}" in out:
+                out[f"{new_key}_{suffix}"] = out.pop(f"{old_key}_{suffix}")
+        moved += 1
+
+    return out, moved
+
+
+def apply_room_list(new_rooms: list[str], **extra) -> None:
+    """Swap in a new room list, bringing the existing answers with it."""
+    old_rooms = project_get("ai_rooms") or []
+    reqs = project_get("requirements") or {}
+    migrated, moved = remap_requirements(old_rooms, new_rooms, reqs)
+    if moved:
+        app.logger.info("Room list changed — carried answers for %d room(s)", moved)
+        extra["requirements"] = migrated
+    project_set(ai_rooms=new_rooms, **extra)
+
+
 def get_rooms_for_type(housing_type: str) -> list[dict]:
     """Return list of {key, label, items, hint} dicts for the given housing type."""
     # Prefer the homeowner's confirmed room list; fall back to the static
@@ -741,6 +844,137 @@ def canonicalise_plan_rooms(rooms: list[str]) -> list[str]:
     return final
 
 
+BUDGET_LABELS = {"economy": "economy", "mid": "mid-range",
+                 "premium": "premium", "luxury": "luxury"}
+
+
+def _requirements_facts(room_names, requirements: dict) -> dict:
+    """The countable facts behind the step-3 banner, worked out here so the
+    model is never asked to tally anything it could get wrong."""
+    high, budgets, constraints = [], {}, []
+    for name in room_names:
+        k = room_key(name)
+        if requirements.get(f"{k}_priority") == "high":
+            high.append(name)
+        tier = requirements.get(f"{k}_budget")
+        if tier:
+            budgets.setdefault(BUDGET_LABELS.get(tier, tier), []).append(name)
+        note = (requirements.get(f"{k}_constraints") or "").strip()
+        if note:
+            constraints.append(f"{name}: {note}")
+    return {"high": high, "budgets": budgets, "constraints": constraints}
+
+
+def compose_room_analysis(step1: dict, room_names: list[str],
+                          requirements: dict | None = None) -> tuple[str, str]:
+    """Describe the confirmed rooms without a model call.
+
+    Deterministic and instant, so the step-3 banner always matches the list the
+    homeowner actually has. Used as the fallback when the short summary call
+    below is unavailable or too slow.
+    """
+    requirements = requirements or {}
+    names = [r for r in (room_names or []) if r]
+    label = step1.get("housing_type_label") or HOUSING_LABELS.get(
+        step1.get("housing_type", ""), "home")
+    beds  = _count_room_kind(names, "Bedroom")
+    baths = _count_room_kind(names, "Bathroom")
+
+    def plural(n, word):
+        return f"{n} {word}" + ("" if n == 1 else "s")
+
+    size = str(step1.get("floor_size", "") or "").strip()
+    overview = (f"Your {label}"
+                + (f", around {size} sqm," if size else "")
+                + f" comes to {len(names)} spaces: {plural(beds, 'bedroom')}"
+                  f" and {plural(baths, 'bathroom')}, plus the shared areas.")
+
+    f = _requirements_facts(names, requirements)
+    bits = []
+    if f["high"]:
+        bits.append(f"{', '.join(f['high'])} {'is' if len(f['high']) == 1 else 'are'} highest priority")
+    for tier, rooms in f["budgets"].items():
+        bits.append(f"{len(rooms)} room{'' if len(rooms) == 1 else 's'} at {tier} budget")
+    if f["constraints"]:
+        bits.append(f"{len(f['constraints'])} room{'' if len(f['constraints']) == 1 else 's'} with specific constraints")
+
+    practical = ("You've flagged " + "; ".join(bits) + "."
+                 if bits else
+                 "No priorities, budgets or constraints set yet — you can add them any time.")
+    return overview, practical
+
+
+def summarise_confirmed_rooms(step1: dict, room_names: list[str],
+                              requirements: dict | None = None) -> tuple[str, str]:
+    """Two short lines about what the homeowner just confirmed.
+
+    One on the rooms themselves, one on how they want to spend and what they
+    have ruled out. Text-only and tightly capped, so it lands in a couple of
+    seconds between pages 2 and 3.
+    """
+    requirements = requirements or {}
+    names = [r for r in (room_names or []) if r]
+    label = step1.get("housing_type_label") or step1.get("housing_type", "home")
+
+    # Counted here rather than left to the model, which has miscounted bedrooms
+    # from a room list before and would state it as fact.
+    beds  = _count_room_kind(names, "Bedroom")
+    baths = _count_room_kind(names, "Bathroom")
+    f = _requirements_facts(names, requirements)
+
+    budget_line = "; ".join(
+        f"{tier}: {', '.join(rooms)}" for tier, rooms in f["budgets"].items()
+    ) or "none set"
+
+    prompt = textwrap.dedent(f"""
+        A homeowner has just confirmed the rooms in their {label}
+        {f'of about {step1.get("floor_size")} sqm' if step1.get('floor_size') else ''}.
+
+        Rooms ({len(names)}): {', '.join(names)}
+        That is {beds} bedroom{'' if beds == 1 else 's'} and {baths} bathroom{'' if baths == 1 else 's'}.
+        Highest priority: {', '.join(f['high']) or 'none marked'}
+        Budgets: {budget_line}
+        Constraints they gave: {' | '.join(f['constraints']) or 'none'}
+        Overall notes: {requirements.get('project_notes') or 'none'}
+
+        Reply with ONLY this JSON, one sentence each, 22 words maximum per value:
+        {{"rooms": "...", "priorities": "..."}}
+
+        "rooms" — what stands out about this set of spaces: an unusual
+        combination, how they group, or a space worth planning around. Do not
+        list every room.
+
+        "priorities" — what their budget, priority and constraint choices mean
+        for the work: where the money is going, what has to come first, what
+        they have ruled out. If they set none, say so plainly in one short
+        sentence and suggest nothing.
+
+        Use only the facts above. Never state a count you worked out yourself.
+        No greetings, no quotes inside the values.
+    """).strip()
+
+    raw = call_llm([{"role": "user", "content": prompt}],
+                   system="You are an interior designer. You reply with JSON only "
+                          "and never exceed the word limits given.",
+                   max_tokens=170,
+                   timeout=FLOORPLAN_READ_TIMEOUT,
+                   fallback_to_mock=False)
+
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+
+    data = _loads_salvaging_truncation(text)
+    overview  = " ".join(str(data.get("rooms", "")).split())
+    practical = " ".join(str(data.get("priorities", "")).split())
+    if not overview:
+        raise ValueError("no room summary returned")
+    return overview, practical
+
+
 def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
                          num_floors="1", notes="") -> dict:
     """Read just the room list off the floor plan, fast.
@@ -1097,51 +1331,487 @@ Visual preferences observed across all inspiration images:
     )
 
 
-def generate_floor_plan_svg(rooms: list[dict]) -> str:
-    """Generate a simple schematic 2D floor plan as inline SVG."""
-    n = len(rooms)
-    cols = min(3, n)
-    rows = -(-n // cols)  # ceiling division
+STYLE_PALETTES = {
+    "minimalist":   ("#EDEAE4", "#C9C2B6", "#F6F4F0", "#D9D2C6"),
+    "scandinavian": ("#F2ECE3", "#C9B79C", "#FBF8F2", "#D8C4A8"),
+    "japandi":      ("#E9E2D4", "#B9A88C", "#F4EFE6", "#CBB795"),
+    "industrial":   ("#B9B4AC", "#6E6A63", "#CFCAC2", "#8A857D"),
+    "bohemian":     ("#E7D2B8", "#C58B5C", "#F3E6D2", "#B87A44"),
+    "contemporary": ("#E4E2DE", "#9AA0A6", "#F2F1EF", "#C4C2BE"),
+    "classical":    ("#EDE4D2", "#B79B6E", "#F6EFE0", "#CBB183"),
+    "tropical":     ("#DCE6D3", "#7FA06A", "#EEF3E8", "#A8C293"),
+}
 
-    w, h   = 600, 400
-    pad    = 20
-    gutter = 10
-    cell_w = (w - 2 * pad - gutter * (cols - 1)) // cols
-    cell_h = (h - 2 * pad - gutter * (rows - 1)) // rows
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared furniture glyph system
+#
+# One place maps a selected item name -> a drawable furniture glyph. BOTH the
+# room concept visual and the 2D floor plan use this, so the two views always
+# show the SAME furniture, driven by what the homeowner actually selected in
+# Step 2. Each glyph has a canonical label and a relative footprint (w, h in a
+# 0-1 space) plus a shape kind.
+# ─────────────────────────────────────────────────────────────────────────────
+# Each selectable item maps to (label, icon, rel_w, rel_h). "icon" selects a
+# dedicated 2D top-down drawer below, so a bed looks like a bed and a dresser
+# looks like a dresser — not just a rectangle.
+# NOTE: more specific keywords first so e.g. "bedside table" doesn't match "bed".
+_ITEM_GLYPHS = [
+    (("bedside", "nightstand", "side table"),           "Side table",  "side_table",  0.14, 0.14),
+    (("king bed", "queen bed", "single bed", "murphy bed", "loft bed", "bed"), "Bed", "bed", 0.46, 0.40),
+    (("sofa", "couch", "settee"),                       "Sofa",        "sofa",        0.48, 0.22),
+    (("armchair", "accent chair", "reading chair"),     "Armchair",    "armchair",    0.20, 0.20),
+    (("dining table", "dining set"),                    "Dining table","dining",      0.46, 0.34),
+    (("coffee table",),                                 "Coffee table","coffee",      0.30, 0.18),
+    (("tv console", "tv"),                              "TV console",  "tv",          0.40, 0.12),
+    (("island", "breakfast bar"),                       "Island",      "island",      0.36, 0.22),
+    (("refrigerator", "fridge", "wine chiller"),        "Fridge",      "fridge",      0.16, 0.20),
+    (("oven", "hob", "hood", "microwave", "stove"),     "Cooktop",     "cooktop",     0.22, 0.16),
+    (("dishwasher", "washing machine", "washer", "dryer"), "Appliance","appliance",   0.16, 0.16),
+    (("pantry", "cabinet", "storage", "sideboard", "buffet", "shelv", "bookshelf", "display"), "Storage", "storage", 0.34, 0.14),
+    (("wardrobe", "closet", "walk-in"),                 "Wardrobe",    "wardrobe",    0.30, 0.16),
+    (("dresser", "vanity table"),                       "Dresser",     "dresser",     0.26, 0.14),
+    (("desk", "study desk", "workbench"),               "Desk",        "desk",        0.30, 0.16),
+    (("freestanding bathtub", "bathtub", "tub"),        "Bathtub",     "bathtub",     0.28, 0.18),
+    (("rainfall shower", "shower"),                     "Shower",      "shower",      0.18, 0.18),
+    (("double vanity", "vanity", "basin"),              "Vanity",      "vanity",      0.22, 0.14),
+    (("smart mirror", "mirror"),                        "Mirror",      "mirror",      0.18, 0.06),
+    (("dining chairs", "chairs", "bar stool"),          "Chairs",      "chairs",      0.16, 0.16),
+    (("outdoor sofa", "outdoor furniture", "planter", "bbq", "pergola", "decking"), "Outdoor", "plant", 0.18, 0.18),
+]
 
-    svg_parts = [
-        f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
-        f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
-        f'<rect width="{w}" height="{h}" fill="#F8F6F2" rx="4"/>',
-    ]
 
-    for i, room in enumerate(rooms):
+# ─────────────────────────────────────────────────────────────────────────────
+# Room visuals — ported from main.
+# Top-down furniture glyphs, per-room concept swatches, and a floor plan that
+# places real furniture. No image model involved: every shape is drawn.
+# ─────────────────────────────────────────────────────────────────────────────
+def _items_to_glyphs(items: list, room_name: str) -> list[dict]:
+    """Turn a room's selected items into a de-duplicated list of glyph specs.
+
+    Falls back to sensible glyphs inferred from the room name when the homeowner
+    selected no items, so the room still shows something.
+    """
+    def spec(label, icon, rw, rh):
+        return {"label": label, "icon": icon, "rw": rw, "rh": rh}
+
+    picked: list[dict] = []
+    seen_labels: set[str] = set()
+    for raw in (items or []):
+        s = str(raw).lower()
+        for keywords, label, icon, rw, rh in _ITEM_GLYPHS:
+            if any(k in s for k in keywords):
+                if label not in seen_labels:
+                    seen_labels.add(label)
+                    picked.append(spec(label, icon, rw, rh))
+                break
+
+    if picked:
+        return picked[:6]   # cap so the drawing stays readable
+
+    # ── Fallback: infer 1-2 glyphs from the room type ────────────────────────
+    n = room_name.lower()
+    if "kitchen" in n:
+        return [spec("Cooktop", "cooktop", 0.22, 0.16), spec("Storage", "storage", 0.34, 0.14)]
+    if "bath" in n or "ensuite" in n or "powder" in n or "wc" in n:
+        return [spec("Vanity", "vanity", 0.22, 0.14), spec("Shower", "shower", 0.18, 0.18)]
+    if "bed" in n:
+        return [spec("Bed", "bed", 0.46, 0.40), spec("Wardrobe", "wardrobe", 0.30, 0.16)]
+    if "dining" in n or "meals" in n:
+        return [spec("Dining table", "dining", 0.46, 0.34)]
+    if "study" in n or "office" in n:
+        return [spec("Desk", "desk", 0.30, 0.16)]
+    if "living" in n or "family" in n:
+        return [spec("Sofa", "sofa", 0.48, 0.22), spec("Coffee table", "coffee", 0.30, 0.18)]
+    if "balcony" in n or "garden" in n or "outdoor" in n or "alfresco" in n:
+        return [spec("Plant", "plant", 0.18, 0.18)]
+    return [spec("Furniture", "storage", 0.34, 0.14)]
+
+
+# ── 2D top-down furniture icon drawers ───────────────────────────────────────
+# Every drawer receives a bounding box (x, y, w, h) and a fill colour and
+# returns SVG that reads as that piece of furniture from above. Black outline
+# throughout. Keep shapes simple but recognisable.
+_STK = 'stroke="#1C1B19" stroke-width="1.6" stroke-linejoin="round"'
+_STK_THIN = 'stroke="#1C1B19" stroke-width="1"'
+
+
+def _icon_bed(x, y, w, h, fill):
+    # mattress + two pillows at the head (top) + duvet fold line
+    return (
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{fill}" {_STK}/>'
+        f'<rect x="{x+w*0.10}" y="{y+h*0.08}" width="{w*0.34}" height="{h*0.20}" rx="3" fill="#fff" {_STK_THIN}/>'
+        f'<rect x="{x+w*0.56}" y="{y+h*0.08}" width="{w*0.34}" height="{h*0.20}" rx="3" fill="#fff" {_STK_THIN}/>'
+        f'<line x1="{x}" y1="{y+h*0.42}" x2="{x+w}" y2="{y+h*0.42}" {_STK_THIN}/>'
+    )
+
+
+def _icon_sofa(x, y, w, h, fill):
+    # backrest (top strip) + two arms + seat cushions
+    arm = w * 0.12
+    return (
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="{fill}" {_STK}/>'
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.28}" rx="4" fill="{fill}" {_STK_THIN}/>'
+        f'<rect x="{x}" y="{y}" width="{arm}" height="{h}" rx="4" fill="{fill}" {_STK_THIN}/>'
+        f'<rect x="{x+w-arm}" y="{y}" width="{arm}" height="{h}" rx="4" fill="{fill}" {_STK_THIN}/>'
+        f'<line x1="{x+w*0.5}" y1="{y+h*0.32}" x2="{x+w*0.5}" y2="{y+h}" {_STK_THIN}/>'
+    )
+
+
+def _icon_armchair(x, y, w, h, fill):
+    arm = w * 0.2
+    return (
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="5" fill="{fill}" {_STK}/>'
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.3}" rx="4" fill="{fill}" {_STK_THIN}/>'
+        f'<rect x="{x}" y="{y}" width="{arm}" height="{h}" rx="3" fill="{fill}" {_STK_THIN}/>'
+        f'<rect x="{x+w-arm}" y="{y}" width="{arm}" height="{h}" rx="3" fill="{fill}" {_STK_THIN}/>'
+    )
+
+
+def _icon_dining(x, y, w, h, fill):
+    # oval table + chair squares around it
+    cx, cy = x + w / 2, y + h / 2
+    chairs = ""
+    for i in range(3):
+        chx = x + w * (0.22 + 0.28 * i)
+        chairs += f'<rect x="{chx}" y="{y-4}" width="{w*0.14}" height="6" rx="2" fill="{fill}" {_STK_THIN}/>'
+        chairs += f'<rect x="{chx}" y="{y+h-2}" width="{w*0.14}" height="6" rx="2" fill="{fill}" {_STK_THIN}/>'
+    return (
+        chairs +
+        f'<ellipse cx="{cx}" cy="{cy}" rx="{w*0.40}" ry="{h*0.36}" fill="{fill}" {_STK}/>'
+    )
+
+
+def _icon_coffee(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="{fill}" {_STK}/>'
+            f'<rect x="{x+w*0.2}" y="{y+h*0.25}" width="{w*0.6}" height="{h*0.5}" rx="4" fill="none" {_STK_THIN}/>')
+
+
+def _icon_side_table(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{fill}" {_STK}/>'
+            f'<circle cx="{x+w/2}" cy="{y+h/2}" r="{min(w,h)*0.22}" fill="none" {_STK_THIN}/>')
+
+
+def _icon_tv(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" fill="{fill}" {_STK}/>'
+            f'<line x1="{x+w*0.33}" y1="{y}" x2="{x+w*0.33}" y2="{y+h}" {_STK_THIN}/>'
+            f'<line x1="{x+w*0.66}" y1="{y}" x2="{x+w*0.66}" y2="{y+h}" {_STK_THIN}/>')
+
+
+def _icon_storage(x, y, w, h, fill):
+    # long cabinet with drawer divisions
+    out = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" fill="{fill}" {_STK}/>'
+    for i in range(1, 4):
+        out += f'<line x1="{x+w*i/4}" y1="{y}" x2="{x+w*i/4}" y2="{y+h}" {_STK_THIN}/>'
+    return out
+
+
+def _icon_dresser(x, y, w, h, fill):
+    # chest of drawers: rows with little knobs
+    out = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" {_STK}/>'
+    for i in range(1, 3):
+        out += f'<line x1="{x}" y1="{y+h*i/3}" x2="{x+w}" y2="{y+h*i/3}" {_STK_THIN}/>'
+    for i in range(3):
+        out += f'<circle cx="{x+w/2}" cy="{y+h*(i+0.5)/3}" r="1.6" fill="#1C1B19"/>'
+    return out
+
+
+def _icon_wardrobe(x, y, w, h, fill):
+    # two-door wardrobe with a centre line and handles
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" fill="{fill}" {_STK}/>'
+            f'<line x1="{x+w/2}" y1="{y}" x2="{x+w/2}" y2="{y+h}" {_STK}/>'
+            f'<circle cx="{x+w*0.46}" cy="{y+h/2}" r="1.6" fill="#1C1B19"/>'
+            f'<circle cx="{x+w*0.54}" cy="{y+h/2}" r="1.6" fill="#1C1B19"/>')
+
+
+def _icon_desk(x, y, w, h, fill):
+    # desk surface + a chair circle in front
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.6}" rx="2" fill="{fill}" {_STK}/>'
+            f'<circle cx="{x+w/2}" cy="{y+h*0.82}" r="{h*0.2}" fill="{fill}" {_STK_THIN}/>')
+
+
+def _icon_fridge(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" {_STK}/>'
+            f'<line x1="{x}" y1="{y+h*0.4}" x2="{x+w}" y2="{y+h*0.4}" {_STK_THIN}/>'
+            f'<rect x="{x+w*0.72}" y="{y+h*0.12}" width="3" height="{h*0.2}" fill="#1C1B19"/>')
+
+
+def _icon_cooktop(x, y, w, h, fill):
+    # stove with four burners
+    out = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" {_STK}/>'
+    for dx in (0.3, 0.7):
+        for dy in (0.3, 0.7):
+            out += f'<circle cx="{x+w*dx}" cy="{y+h*dy}" r="{min(w,h)*0.14}" fill="none" {_STK_THIN}/>'
+    return out
+
+
+def _icon_appliance(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" {_STK}/>'
+            f'<circle cx="{x+w/2}" cy="{y+h/2}" r="{min(w,h)*0.3}" fill="none" {_STK}/>')
+
+
+def _icon_island(x, y, w, h, fill):
+    # counter block + stools along the bottom
+    out = f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.7}" rx="3" fill="{fill}" {_STK}/>'
+    for i in range(3):
+        out += f'<circle cx="{x+w*(0.25+0.25*i)}" cy="{y+h*0.85}" r="{h*0.12}" fill="{fill}" {_STK_THIN}/>'
+    return out
+
+
+def _icon_bathtub(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{h*0.45}" fill="{fill}" {_STK}/>'
+            f'<rect x="{x+w*0.14}" y="{y+h*0.22}" width="{w*0.72}" height="{h*0.56}" rx="{h*0.28}" fill="none" {_STK_THIN}/>')
+
+
+def _icon_shower(x, y, w, h, fill):
+    # square tray + shower head dot + drain
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" fill="{fill}" {_STK}/>'
+            f'<circle cx="{x+w*0.25}" cy="{y+h*0.25}" r="3" fill="none" {_STK_THIN}/>'
+            f'<line x1="{x}" y1="{y}" x2="{x+w}" y2="{y+h}" {_STK_THIN} opacity="0.4"/>'
+            f'<line x1="{x+w}" y1="{y}" x2="{x}" y2="{y+h}" {_STK_THIN} opacity="0.4"/>')
+
+
+def _icon_vanity(x, y, w, h, fill):
+    # counter + oval basin
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="2" fill="{fill}" {_STK}/>'
+            f'<ellipse cx="{x+w/2}" cy="{y+h/2}" rx="{w*0.22}" ry="{h*0.3}" fill="#fff" {_STK_THIN}/>')
+
+
+def _icon_mirror(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{max(h,6)}" rx="2" fill="#EAF2F5" {_STK}/>')
+
+
+def _icon_chairs(x, y, w, h, fill):
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="{fill}" {_STK}/>'
+            f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.28}" rx="2" fill="{fill}" {_STK_THIN}/>')
+
+
+def _icon_plant(x, y, w, h, fill):
+    cx = x + w / 2
+    return (f'<rect x="{x+w*0.3}" y="{y+h*0.6}" width="{w*0.4}" height="{h*0.4}" rx="2" fill="{fill}" {_STK}/>'
+            f'<circle cx="{cx}" cy="{y+h*0.35}" r="{min(w,h)*0.34}" fill="{fill}" {_STK}/>')
+
+
+_ICON_DRAWERS = {
+    "bed": _icon_bed, "sofa": _icon_sofa, "armchair": _icon_armchair,
+    "dining": _icon_dining, "coffee": _icon_coffee, "side_table": _icon_side_table,
+    "tv": _icon_tv, "storage": _icon_storage, "dresser": _icon_dresser,
+    "wardrobe": _icon_wardrobe, "desk": _icon_desk, "fridge": _icon_fridge,
+    "cooktop": _icon_cooktop, "appliance": _icon_appliance, "island": _icon_island,
+    "bathtub": _icon_bathtub, "shower": _icon_shower, "vanity": _icon_vanity,
+    "mirror": _icon_mirror, "chairs": _icon_chairs, "plant": _icon_plant,
+}
+
+
+def _draw_glyph(g: dict, cx: float, cy: float, box_w: float, box_h: float,
+                fill: str, label: bool = True, label_size: float = 8.0) -> str:
+    """Draw one recognisable 2D top-down furniture icon centred at (cx, cy)
+    inside a region of size (box_w x box_h), then label it underneath."""
+    w = max(16, g["rw"] * box_w)
+    h = max(12, g["rh"] * box_h)
+    x = cx - w / 2
+    y = cy - h / 2
+    drawer = _ICON_DRAWERS.get(g.get("icon", ""), _icon_storage)
+    icon = drawer(x, y, w, h, fill)
+    out = f'<g>{icon}</g>'
+    if label:
+        out += (f'<text x="{cx:.0f}" y="{y + h + label_size + 2:.0f}" '
+                f'font-size="{label_size}" fill="#1C1B19" text-anchor="middle" '
+                f'font-weight="500">{g["label"]}</text>')
+    return out
+
+
+def generate_room_concept_visual(room_label: str, style: str,
+                                 palette_hex: str = "", materials: list | None = None,
+                                 items: list | None = None) -> str:
+    """Produce a data-driven SVG 'concept visual' for one room.
+
+    This is NOT a photoreal render (the gateway has no image model). It's an
+    honest, stylised concept swatch tinted by the chosen style + palette, that
+    lays out the homeowner's ACTUAL selected furniture (from Step 2) as
+    black-outlined, labelled shapes — so two rooms with different items look
+    different. Materials (from the inspiration analysis) tint the caption band.
+    """
+    style_key = (style or "").lower().strip()
+    base, accent, wall, floor = STYLE_PALETTES.get(
+        style_key, STYLE_PALETTES["contemporary"])
+
+    # If the homeowner picked a specific palette colour, use it as the accent so
+    # the visual reflects their choice.
+    if palette_hex and palette_hex.startswith("#") and len(palette_hex) in (4, 7):
+        accent = palette_hex
+
+    materials = [m for m in (materials or []) if m][:3]
+    mat_text = "  ·  ".join(materials) if materials else (style.title() if style else "Considered materials")
+
+    w, h = 400, 260
+    cap_h = 26                       # caption band height
+    pad = 14
+    room_top, room_bottom = pad, h - cap_h - pad
+    room_left, room_right = pad, w - pad
+
+    # Clean 2D top-down room: flat floor + wall border. Furniture icons are laid
+    # out in a grid so each one is big enough to read.
+    glyphs = _items_to_glyphs(items, room_label)
+    n = len(glyphs)
+    cols = 1 if n == 1 else (2 if n <= 4 else 3)
+    rows = -(-n // cols)  # ceil
+
+    inner_w = room_right - room_left
+    inner_h = room_bottom - room_top
+    cell_w = inner_w / cols
+    cell_h = inner_h / rows
+
+    parts: list[str] = []
+    for i, g in enumerate(glyphs):
         col = i % cols
         row = i // cols
-        x = pad + col * (cell_w + gutter)
-        y = pad + row * (cell_h + gutter)
-        colour = room.get("colour", "#C9D4E0")
+        cx = room_left + cell_w * (col + 0.5)
+        # leave a little headroom in each cell for the label under the icon
+        cy = room_top + cell_h * (row + 0.5) - cell_h * 0.08
+        parts.append(_draw_glyph(g, cx, cy,
+                                 box_w=cell_w * 0.78, box_h=cell_h * 0.62,
+                                 fill=accent, label=True,
+                                 label_size=9.5))
 
-        svg_parts.append(
-            f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" '
-            f'fill="{colour}" fill-opacity="0.7" stroke="#888" stroke-width="1" rx="3"/>'
-        )
-        # Room label
-        label = room["label"]
-        if len(label) > 16:
-            label = label[:14] + "…"
-        svg_parts.append(
-            f'<text x="{x + cell_w // 2}" y="{y + cell_h // 2 - 6}" '
-            f'text-anchor="middle" font-size="11" fill="#333" font-weight="500">{label}</text>'
-        )
-        # Dimensions hint
-        svg_parts.append(
-            f'<text x="{x + cell_w // 2}" y="{y + cell_h // 2 + 10}" '
-            f'text-anchor="middle" font-size="9" fill="#777">approx. area</text>'
-        )
+    return "\n".join([
+        f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%;height:100%;display:block;font-family:Inter,sans-serif;">',
+        # floor (flat, top-down)
+        f'<rect width="{w}" height="{h}" fill="{floor}" opacity="0.35"/>',
+        # room walls (bold border)
+        f'<rect x="{room_left}" y="{room_top}" width="{inner_w}" height="{inner_h}" '
+        f'fill="{wall}" fill-opacity="0.5" stroke="#1C1B19" stroke-width="3" rx="4"/>',
+        # a doorway gap on the bottom wall
+        f'<rect x="{room_left + inner_w*0.42}" y="{room_bottom-2}" width="{inner_w*0.16}" height="5" fill="{floor}"/>',
+        # furniture icons (recognisable 2D top-down, labelled)
+        "".join(parts),
+        # materials caption band along the bottom (room name is in the card header)
+        f'<rect x="0" y="{h-cap_h}" width="{w}" height="{cap_h}" fill="#1C1B19" opacity="0.78"/>',
+        f'<text x="{w//2}" y="{h-9}" font-size="11" fill="#fff" text-anchor="middle" opacity="0.95">{mat_text}</text>',
+        '</svg>',
+    ])
 
-    svg_parts.append("</svg>")
-    return "\n".join(svg_parts)
+
+# Relative footprint weights so the schematic sizes rooms sensibly
+# (a living room reads bigger than a bathroom).
+def _room_weight(name: str) -> float:
+    n = name.lower()
+    if "living" in n or "dining" in n or "family" in n or "meals" in n:
+        return 2.4
+    if "master bed" in n:
+        return 1.8
+    if "kitchen" in n:
+        return 1.5
+    if "bed" in n or "study" in n or "garage" in n:
+        return 1.4
+    if "balcony" in n or "yard" in n or "utility" in n or "store" in n \
+            or "shelter" in n or "powder" in n or "wc" in n:
+        return 0.7
+    if "bath" in n or "ensuite" in n:
+        return 0.9
+    return 1.0
+
+
+def _furniture_markers(room_name: str, items: list, x: int, y: int,
+                       cw: int, ch: int, accent: str) -> list[str]:
+    """Furniture glyphs inside a room cell, drawn from the SAME shared glyph
+    system the room concept visuals use — so both views show the homeowner's
+    actual selected items, black-outlined and labelled, and stay consistent."""
+    glyphs = _items_to_glyphs(items, room_name)
+    parts: list[str] = []
+    # Grid-place the glyphs inside the room cell so labels don't collide.
+    n = len(glyphs)
+    cols = 2 if n > 1 else 1
+    rows = -(-n // cols)  # ceil
+    # leave room at the bottom for the room name label
+    usable_h = ch - 24
+    cell_w = cw / cols
+    cell_h = usable_h / rows
+    for i, g in enumerate(glyphs):
+        col = i % cols
+        row = i // cols
+        cx = x + cell_w * (col + 0.5)
+        cy = y + 8 + cell_h * (row + 0.5)
+        parts.append(_draw_glyph(g, cx, cy,
+                                 box_w=cell_w * 0.72, box_h=cell_h * 0.55,
+                                 fill=accent, label=True, label_size=7.0))
+    return parts
+
+
+def generate_floor_plan_svg(rooms: list[dict]) -> str:
+    """Generate a schematic 'space + furniture overview'.
+
+    NOTE: This is a schematic derived from the DETECTED ROOMS and the
+    homeowner's selected furniture — it is not a scaled reconstruction of the
+    uploaded plan (that needs CAD geometry extraction, which is out of scope).
+    Rooms are sized by typical footprint and annotated with furniture markers.
+    """
+    n = len(rooms)
+    if n == 0:
+        return '<svg viewBox="0 0 600 200"></svg>'
+
+    # Row-pack rooms so each row's total weight is roughly balanced.
+    weights = [_room_weight(r["label"]) for r in rooms]
+    max_per_row = 3 if n > 4 else 2
+    rows: list[list[int]] = []
+    row: list[int] = []
+    for i in range(n):
+        row.append(i)
+        if len(row) >= max_per_row:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+
+    w = 600
+    pad, gutter = 24, 8
+    row_h = 120
+    h = pad * 2 + len(rows) * row_h + (len(rows) - 1) * gutter
+
+    svg = [
+        f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
+        # outer wall
+        f'<rect x="6" y="6" width="{w-12}" height="{h-12}" fill="#FBF9F5" '
+        f'stroke="#4A4844" stroke-width="3" rx="4"/>',
+    ]
+
+    y = pad
+    for r_idx, r in enumerate(rows):
+        total_w = sum(weights[i] for i in r)
+        avail = w - 2 * pad - gutter * (len(r) - 1)
+        x = pad
+        for i in r:
+            cw = int(avail * (weights[i] / total_w))
+            ch = row_h
+            room = rooms[i]
+            colour = room.get("colour", "#C9D4E0")
+            accent = "#6E6A63"
+
+            # room cell (wall-bounded)
+            svg.append(
+                f'<rect x="{x}" y="{y}" width="{cw}" height="{ch}" '
+                f'fill="{colour}" fill-opacity="0.55" stroke="#8A8580" '
+                f'stroke-width="1.5"/>'
+            )
+            # furniture markers from selected items
+            svg += _furniture_markers(room["label"], room.get("items", []),
+                                      x, y, cw, ch, accent)
+            # label
+            label = room["label"]
+            if len(label) > 18:
+                label = label[:16] + "…"
+            svg.append(
+                f'<text x="{x + cw // 2}" y="{y + ch - 10}" text-anchor="middle" '
+                f'font-size="10.5" fill="#1C1B19" font-weight="500">{label}</text>'
+            )
+            x += cw + gutter
+        y += row_h + gutter
+
+    svg.append("</svg>")
+    return "\n".join(svg)
+
+
 
 
 
@@ -1917,9 +2587,10 @@ def step2_use_standard():
         s1["housing_type"], s1.get("floor_size", ""),
         s1.get("num_floors", "1"), s1.get("space_notes", ""),
     )
-    project_set(
-        ai_rooms           = fallback["rooms"],
+    apply_room_list(
+        fallback["rooms"],
         ai_room_summary    = fallback["summary"],
+        ai_room_practical  = "",
         ai_room_source     = "housing_type_only",
         ai_room_confidence = fallback["confidence"],
     )
@@ -1962,8 +2633,8 @@ def step1_read_plan():
         app.logger.warning(f"Floor-plan read failed ({e}) — keeping catalogue rooms")
         return jsonify({"ok": True, "read": False})
 
-    project_set(
-        ai_rooms           = data["rooms"],
+    apply_room_list(
+        data["rooms"],
         ai_room_summary    = data["summary"],
         ai_room_source     = "floorplan",
         ai_room_confidence = data["confidence"],
@@ -1993,7 +2664,7 @@ def step2():
                 if label.lower() not in seen:
                     seen.add(label.lower())
                     unique.append(label)
-            project_set(ai_rooms=unique)
+            apply_room_list(unique)
             rooms = get_rooms_for_type(housing_type)
 
         req_data = {}
@@ -2007,9 +2678,10 @@ def step2():
 
         req_data["project_notes"] = request.form.get("project_notes", "")
         project_set(requirements=req_data)
-        # Rooms or requirements just changed — any existing brief is now stale.
-        project_clear("agent_result")
-        return redirect(url_for("step3"))
+        # Rooms or requirements just changed — the brief and the step-1 room
+        # summary both describe the old list now.
+        project_clear("agent_result", "rooms_summarised")
+        return redirect(url_for("step2_reviewing"))
 
     plan_mismatch = None
     if project_get("ai_room_source") == "floorplan":
@@ -2022,6 +2694,42 @@ def step2():
                            plan_mismatch=plan_mismatch,
                            housing_label=HOUSING_LABELS.get(housing_type, housing_type),
                            saved=project_get("requirements", {}))
+
+
+@app.route("/step2/reviewing")
+def step2_reviewing():
+    """Holding screen while the confirmed room list is summarised."""
+    if not project_get("requirements"):
+        return redirect(url_for("step2"))
+    if project_get("rooms_summarised"):
+        return redirect(url_for("step3"))
+    s1 = project_get("step1") or {}
+    return render_template("step2_loading.html", current_step=2,
+                           room_count=len(project_get("ai_rooms") or []),
+                           housing_label=s1.get("housing_type_label", "your home"))
+
+
+@app.route("/step2/summarise", methods=["POST"])
+def step2_summarise():
+    s1 = project_get("step1") or {}
+    rooms = project_get("ai_rooms") or []
+    if not rooms:
+        return jsonify({"ok": False, "error": "No rooms to summarise"}), 400
+
+    reqs = project_get("requirements", {})
+    try:
+        overview, practical = summarise_confirmed_rooms(s1, rooms, reqs)
+        source = "ai"
+    except Exception as e:
+        # A stale banner is the bug we are fixing, so fall back to the
+        # deterministic description rather than leaving step 1's text in place.
+        app.logger.warning(f"Room summary failed ({e}) — composing it locally")
+        overview, practical = compose_room_analysis(s1, rooms, reqs)
+        source = "composed"
+
+    project_set(ai_room_summary=overview, ai_room_practical=practical,
+                rooms_summarised=True)
+    return jsonify({"ok": True, "source": source})
 
 
 # ── Step 3: Inspiration ───────────────────────────────────────────────────────
@@ -2068,6 +2776,7 @@ def step3():
 
     return render_template("step3.html", current_step=3, rooms=rooms,
                            ai_room_summary=project_get("ai_room_summary", ""),
+                           ai_room_practical=project_get("ai_room_practical", ""),
                            saved=project_get("inspiration", {}))
 
 
