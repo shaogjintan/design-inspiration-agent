@@ -102,7 +102,12 @@
               <div class="multi-upload__text">Drop images for <strong>{{ room.label }}</strong> or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Up to 5 images</div>
             </div>
-            <div class="multi-upload__previews" id="prev_{{ room.key }}"></div>
+            <div class="multi-upload__previews" id="prev_{{ room.key }}">
+              {% for path in saved.get('inspo_paths', {}).get(room.key, []) %}
+                {% set src = upload_url(path) %}
+                {% if src %}<div class="thumb thumb--saved"><img src="{{ src }}" alt="Saved inspiration for {{ room.label }}"></div>{% endif %}
+              {% endfor %}
+            </div>
           </div>
           <div class="form-group" style="margin-top:0.75rem;">
             <label class="form-label form-label--sm">Describe the vibe for this room <span class="form-label__opt">(optional)</span></label>
@@ -122,7 +127,12 @@
               <div class="multi-upload__text">Drop overall inspiration images or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Mood boards, magazine cuts, etc.</div>
             </div>
-            <div class="multi-upload__previews" id="prev_overall"></div>
+            <div class="multi-upload__previews" id="prev_overall">
+              {% for path in saved.get('inspo_paths', {}).get('overall', []) %}
+                {% set src = upload_url(path) %}
+                {% if src %}<div class="thumb thumb--saved"><img src="{{ src }}" alt="Saved whole-home inspiration"></div>{% endif %}
+              {% endfor %}
+            </div>
           </div>
         </div>
       </div>

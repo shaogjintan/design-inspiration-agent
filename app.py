@@ -1447,7 +1447,19 @@ _ITEM_GLYPHS = [
     (("rainfall shower", "shower"),                     "Shower",      "shower",      0.18, 0.18),
     (("double vanity", "vanity", "basin"),              "Vanity",      "vanity",      0.22, 0.14),
     (("smart mirror", "mirror"),                        "Mirror",      "mirror",      0.18, 0.06),
-    (("dining chairs", "chairs", "bar stool"),          "Chairs",      "chairs",      0.16, 0.16),
+    (("dining chairs", "chairs", "ergonomic chair", "chair", "bar stool"), "Chairs", "chairs", 0.16, 0.16),
+    # Lighting, soft furnishings and fittings had no entries at all, so a
+    # living room with a lamp, a rug and curtains ticked showed none of them.
+    (("floor lamp", "pendant light", "lamp", "sconce"), "Lamp",        "lamp",        0.14, 0.14),
+    (("carpet", "rug"),                                 "Rug",         "rug",         0.44, 0.30),
+    (("curtain", "blind", "louvre", "drape"),           "Curtains",    "curtains",    0.34, 0.10),
+    (("ceiling fan", "fan"),                            "Ceiling fan", "fan",         0.20, 0.20),
+    (("towel rail", "towel"),                           "Towel rail",  "mirror",      0.18, 0.06),
+    (("monitor arm", "monitor"),                        "Desk",        "desk",        0.30, 0.16),
+    (("pool", "jacuzzi"),                               "Pool",        "bathtub",     0.40, 0.26),
+    (("landscaping", "garden bed", "lawn"),             "Planting",    "plant",       0.18, 0.18),
+    (("pos counter", "reception desk", "kitchen bar", "counter"), "Counter", "island", 0.34, 0.18),
+    (("door organiser", "organiser", "hook"),           "Storage",     "storage",     0.28, 0.12),
     (("outdoor sofa", "outdoor furniture", "planter", "bbq", "pergola", "decking"), "Outdoor", "plant", 0.18, 0.18),
 ]
 
@@ -1457,7 +1469,7 @@ _ITEM_GLYPHS = [
 # Top-down furniture glyphs, per-room concept swatches, and a floor plan that
 # places real furniture. No image model involved: every shape is drawn.
 # ─────────────────────────────────────────────────────────────────────────────
-def _items_to_glyphs(items: list, room_name: str) -> list[dict]:
+def _items_to_glyphs(items: list, room_name: str, limit: int = 8) -> list[dict]:
     """Turn a room's selected items into a de-duplicated list of glyph specs.
 
     Falls back to sensible glyphs inferred from the room name when the homeowner
@@ -1478,7 +1490,7 @@ def _items_to_glyphs(items: list, room_name: str) -> list[dict]:
                 break
 
     if picked:
-        return picked[:6]   # cap so the drawing stays readable
+        return picked[:limit]
 
     # ── Fallback: infer 1-2 glyphs from the room type ────────────────────────
     n = room_name.lower()
@@ -1673,6 +1685,42 @@ def _icon_plant(x, y, w, h, fill):
             f'<circle cx="{cx}" cy="{y+h*0.35}" r="{min(w,h)*0.34}" fill="{fill}" {_STK}/>')
 
 
+def _icon_lamp(x, y, w, h, fill):
+    """Top-down lamp: shade ring with the bulb at its centre."""
+    r = min(w, h) / 2
+    cx, cy = x + w / 2, y + h / 2
+    return (f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="{fill}" {_STK}/>'
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{max(2, r*0.32):.1f}" fill="#FFF8E6" {_STK_THIN}/>')
+
+
+def _icon_rug(x, y, w, h, fill):
+    """Rug: soft rectangle with an inset border, drawn under everything else."""
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{fill}" {_STK_THIN}/>'
+            f'<rect x="{x + w*0.1:.1f}" y="{y + h*0.16:.1f}" width="{w*0.8:.1f}" '
+            f'height="{h*0.68:.1f}" rx="3" fill="none" {_STK_THIN}/>')
+
+
+def _icon_curtains(x, y, w, h, fill):
+    """Curtains seen from above: a rail with gathered folds either end."""
+    return (f'<rect x="{x}" y="{y + h*0.42:.1f}" width="{w}" height="{max(3, h*0.16):.1f}" '
+            f'rx="2" fill="{fill}" {_STK_THIN}/>'
+            f'<circle cx="{x + w*0.12:.1f}" cy="{y + h*0.5:.1f}" r="{max(3, h*0.3):.1f}" fill="{fill}" {_STK_THIN}/>'
+            f'<circle cx="{x + w*0.88:.1f}" cy="{y + h*0.5:.1f}" r="{max(3, h*0.3):.1f}" fill="{fill}" {_STK_THIN}/>')
+
+
+def _icon_fan(x, y, w, h, fill):
+    """Ceiling fan: hub with four blades."""
+    cx, cy = x + w / 2, y + h / 2
+    r = min(w, h) / 2
+    blades = "".join(
+        f'<ellipse cx="{cx + dx*r*0.55:.1f}" cy="{cy + dy*r*0.55:.1f}" '
+        f'rx="{r*0.42 if dx else r*0.16:.1f}" ry="{r*0.16 if dx else r*0.42:.1f}" '
+        f'fill="{fill}" {_STK_THIN}/>'
+        for dx, dy in ((1,0), (-1,0), (0,1), (0,-1))
+    )
+    return blades + f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{max(2, r*0.2):.1f}" fill="{fill}" {_STK}/>'
+
+
 _ICON_DRAWERS = {
     "bed": _icon_bed, "sofa": _icon_sofa, "armchair": _icon_armchair,
     "dining": _icon_dining, "coffee": _icon_coffee, "side_table": _icon_side_table,
@@ -1681,6 +1729,7 @@ _ICON_DRAWERS = {
     "cooktop": _icon_cooktop, "appliance": _icon_appliance, "island": _icon_island,
     "bathtub": _icon_bathtub, "shower": _icon_shower, "vanity": _icon_vanity,
     "mirror": _icon_mirror, "chairs": _icon_chairs, "plant": _icon_plant,
+    "lamp": _icon_lamp, "rug": _icon_rug, "curtains": _icon_curtains, "fan": _icon_fan,
 }
 
 
@@ -1801,7 +1850,11 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
     """Furniture glyphs inside a room cell, drawn from the SAME shared glyph
     system the room concept visuals use — so both views show the homeowner's
     actual selected items, black-outlined and labelled, and stay consistent."""
-    glyphs = _items_to_glyphs(items, room_name)
+    # A floor-plan cell is a fraction of the page, so it takes the headline
+    # items only. The per-room concept visual has space for the full set.
+    all_glyphs = _items_to_glyphs(items, room_name)
+    glyphs = all_glyphs[:4]
+    extra = len(all_glyphs) - len(glyphs)
     if not glyphs:
         return ""      # a room with nothing to furnish draws nothing
     parts: list[str] = []
@@ -1821,6 +1874,13 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
         parts.append(_draw_glyph(g, cx, cy,
                                  box_w=cell_w * 0.72, box_h=cell_h * 0.55,
                                  fill=accent, label=True, label_size=7.0))
+
+    # Say what was left out rather than silently truncating.
+    if extra:
+        parts.append(
+            f'<text x="{x + cw/2:.0f}" y="{y + ch - 26:.0f}" font-size="7" '
+            f'fill="#6B6660" text-anchor="middle">+{extra} more</text>'
+        )
     return parts
 
 
@@ -2580,6 +2640,15 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
                 out[str(key).strip()] = cleaned
         return out
 
+    # The model reports whether it actually worked from images. If it says it
+    # did not, nothing it wrote about the floor plan can be real.
+    plan_was_read = has_plan and data.get("source") == "images"
+    if has_plan and not plan_was_read:
+        app.logger.warning(
+            "A floor plan was attached but the model reported source=%r — "
+            "discarding its plan observations as unfounded", data.get("source"),
+        )
+
     result = {
         "dominant_styles":  clean_list(data.get("dominant_styles")),
         "colours":          clean_list(data.get("colours")),
@@ -2589,13 +2658,18 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
         "common_patterns":  clean_list(data.get("common_patterns")),
         "possible_outliers": clean_list(data.get("possible_outliers")),
         "room_specific":    clean_room_specific(data.get("room_specific")),
-        "floor_plan_observations": clean_list(data.get("floor_plan_observations"))[:4] if has_plan else [],
-        "room_list_mismatches":    clean_list(data.get("room_list_mismatches"))[:3] if has_plan else [],
+        # Gated on the model's own claim, not just on a plan file being attached.
+        # A run on 22 Sep reported source="text_only" and opened its summary with
+        # "Without visual references" — then still returned four confident
+        # observations about a floor plan it had never seen, because the prompt
+        # asked for them and the only gate was "was a file attached".
+        "floor_plan_observations": clean_list(data.get("floor_plan_observations"))[:4] if plan_was_read else [],
+        "room_list_mismatches":    clean_list(data.get("room_list_mismatches"))[:3] if plan_was_read else [],
         "summary":          str(data.get("summary", "")).strip(),
         "source":           data.get("source", "text_only"),
         "confidence":       data.get("confidence", "medium") if data.get("confidence") in ("high", "medium", "low") else "medium",
         "image_count":      image_count,
-        "read_floor_plan":  has_plan,
+        "read_floor_plan":  plan_was_read,
     }
 
     # Sanity: if no lists have content, use the fallback
@@ -3000,17 +3074,23 @@ def step3():
         palette = request.form.get("colour_palette", "")
         colour_hex, colour_name = (palette.split("|") + ["", ""])[:2]
 
+        # Keep images uploaded earlier — a file input is empty when the page is
+        # re-submitted, so rebuilding this from the form alone silently dropped
+        # every previous upload and orphaned the files on disk.
+        prev_inspo = (project_get("inspiration") or {}).get("inspo_paths", {}) or {}
         saved_inspo = {}
         for room in rooms:
             key = room["key"]
             files = request.files.getlist(f"inspo_{key}")
-            paths = [save_upload(f, f"inspo/{key}") for f in files if f and f.filename]
-            saved_inspo[key] = [p for p in paths if p]
+            new_paths = [save_upload(f, f"inspo/{key}") for f in files if f and f.filename]
+            kept_prev = [p for p in prev_inspo.get(key, []) if p and Path(p).exists()]
+            saved_inspo[key] = kept_prev + [p for p in new_paths if p]
 
         overall_files = request.files.getlist("inspo_overall")
-        saved_inspo["overall"] = [
-            save_upload(f, "inspo/overall") for f in overall_files if f and f.filename
-        ]
+        new_overall = [save_upload(f, "inspo/overall")
+                       for f in overall_files if f and f.filename]
+        kept_overall = [p for p in prev_inspo.get("overall", []) if p and Path(p).exists()]
+        saved_inspo["overall"] = kept_overall + [p for p in new_overall if p]
 
         project_set(inspiration={
             "design_style":   style,
@@ -3306,6 +3386,35 @@ def apply_refinement():
         project_set(requirements=req)
 
     return jsonify({"ok": True})
+
+
+@app.route("/uploads/<path:relpath>")
+def serve_upload(relpath):
+    """Serve a file from the uploads folder, safely.
+
+    Only files that resolve to inside UPLOAD_FOLDER are served, so a crafted
+    path cannot escape the directory.
+    """
+    base = UPLOAD_FOLDER.resolve()
+    target = (base / relpath).resolve()
+    if base not in target.parents or not target.is_file():
+        return "Not found", 404
+    return send_file(str(target))
+
+
+def upload_url(stored_path: str) -> str:
+    """Turn a stored absolute upload path into a /uploads/<relpath> URL.
+    Returns '' when the path is outside the uploads folder or missing."""
+    if not stored_path:
+        return ""
+    try:
+        rel = Path(stored_path).resolve().relative_to(UPLOAD_FOLDER.resolve())
+    except (ValueError, OSError):
+        return ""
+    return url_for("serve_upload", relpath=str(rel))
+
+
+app.jinja_env.globals["upload_url"] = upload_url
 
 
 # ── Export brief as plain text ─────────────────────────────────────────────────

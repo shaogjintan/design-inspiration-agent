@@ -2421,3 +2421,16 @@ html.is-opening body {
 @media (prefers-reduced-motion: reduce) {
   .mover__figure.is-hopping { animation: none; }
 }
+
+/* A thumbnail restored from a previous visit, so it reads as already-saved
+   rather than as a file just picked in this session. */
+.thumb--saved { position: relative; }
+
+.thumb--saved::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--gold);
+  border-radius: inherit;
+  pointer-events: none;
+}
