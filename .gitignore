@@ -6,6 +6,9 @@ venv/
 
 # Environment
 .env
+.env.local
+_env.local
+*.local
 
 # Runtime user uploads and generated output
 uploads/

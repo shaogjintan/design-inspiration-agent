@@ -48,6 +48,17 @@ def _now() -> str:
 def _trace_entry(step: str, action: str, reason: str,
                  status: str, summary: str,
                  confidence: str | None = None) -> dict:
+    # Every step reports a confidence. If the caller didn't set one, derive it
+    # from the status so the Agent Activity panel always shows a signal:
+    #   success -> high   |   needs_input -> medium   |   failed -> low
+    #   skipped -> keeps whatever was passed (usually the cached confidence)
+    if confidence is None:
+        confidence = {
+            "success":     "high",
+            "needs_input": "medium",
+            "failed":      "low",
+            "skipped":     "medium",
+        }.get(status, "medium")
     return {
         "timestamp":  _now(),
         "step":       step,
@@ -108,7 +119,11 @@ def run_agent(
     # agent.py is pure logic; app.py owns the tool implementations.
     import app as _app
 
-    trace: list[dict] = list(existing_trace or [])
+    # Rebuild the trace FRESH each run. The Agent Activity panel must reflect the
+    # CURRENT state — carrying old entries left stale "needs you" / "waiting for
+    # homeowner" lines around even after the homeowner had answered. We ignore
+    # existing_trace on purpose.
+    trace: list[dict] = []
 
     # ─────────────────────────────────────────────────────────────────────────
     # OBSERVE: What do we know about this project?
@@ -181,7 +196,10 @@ def run_agent(
             else "No prior inspiration analysis found — running now."
         )
         try:
-            inspo_analysis = _app.analyse_inspiration(inspiration, rooms)
+            inspo_analysis = _app.analyse_inspiration(
+                inspiration, rooms,
+                memory={"step1": step1, "requirements": requirements},
+            )
             trace.append(_trace_entry(
                 step    = f"Analysed {total_images} inspiration image{'s' if total_images != 1 else ''}",
                 action  = "analyse_inspiration",
@@ -244,13 +262,29 @@ def run_agent(
         logger.warning(f"Conflict detection failed: {e}")
         all_detected = []
 
-    # Merge: preserve resolved decisions, absorb new conflicts
+    # Merge policy:
+    #  - Any conflict the homeowner ALREADY RESOLVED is kept forever (so the
+    #    decision is never lost and the question is never asked again), even if
+    #    it is no longer re-detected this run.
+    #  - Newly detected, still-open conflicts are added.
+    #  - A previously-open (unresolved) conflict that is no longer detected is
+    #    dropped (the underlying issue went away).
+    detected_ids = {c["id"] for c in all_detected}
     merged_conflicts: list[dict] = []
-    for c in all_detected:
-        if c["id"] in existing_by_id:
-            merged_conflicts.append(existing_by_id[c["id"]])
-        else:
+    seen_ids: set[str] = set()
+
+    # 1) carry over every resolved decision first
+    for cid, c in existing_by_id.items():
+        if c.get("resolved"):
             merged_conflicts.append(c)
+            seen_ids.add(cid)
+
+    # 2) add newly detected conflicts that aren't already resolved
+    for c in all_detected:
+        if c["id"] in seen_ids:
+            continue  # already carried as a resolved decision
+        merged_conflicts.append(c)
+        seen_ids.add(c["id"])
 
     open_conflicts   = [c for c in merged_conflicts if not c.get("resolved")]
     closed_conflicts = [c for c in merged_conflicts if c.get("resolved")]
@@ -265,14 +299,18 @@ def run_agent(
             summary = conflict_titles,
         ))
     else:
-        if all_detected:
-            # All previously detected conflicts are resolved
+        if closed_conflicts:
+            # All questions answered — show WHICH decisions were applied so the
+            # homeowner can see their answers were taken into account.
+            applied = "; ".join(
+                f"{c['title']} → {c['decision']}" for c in closed_conflicts[:3]
+            )
             trace.append(_trace_entry(
-                step    = "All conflicts resolved",
+                step    = "Applied your decisions",
                 action  = "detect_conflicts",
-                reason  = "Checking for unresolved ambiguities.",
+                reason  = "Incorporating the homeowner's answers into the brief.",
                 status  = "success",
-                summary = f"{len(closed_conflicts)} homeowner decision(s) incorporated.",
+                summary = applied,
             ))
         else:
             trace.append(_trace_entry(
@@ -355,16 +393,35 @@ def run_agent(
                 prompt_text     = requirements.get(f"{key}_prompt", ""),
                 inspo_analysis  = inspo_analysis,
                 room_inspo_note = room_inspo_note,
+                budget          = requirements.get(f"{key}_budget", ""),
+                priority        = requirements.get(f"{key}_priority", ""),
+                constraints     = requirements.get(f"{key}_constraints", ""),
             )
         except Exception as e:
             logger.warning(f"Room concept failed for {room['label']}: {e}")
             concept = f"Design concept for {room['label']} could not be generated. Please regenerate."
             room_errors += 1
 
+        # Build a data-driven concept visual for this room (SVG, no external
+        # assets — the gateway has no image-generation model).
+        selected_items = requirements.get(f"{key}_items", []) or []
+        try:
+            visual = _app.generate_room_concept_visual(
+                room["label"],
+                style       = inspiration.get("design_style", ""),
+                palette_hex = inspiration.get("colour_hex", ""),
+                materials   = inspo_analysis.get("materials", []),
+                items       = selected_items,
+            )
+        except Exception as e:
+            logger.warning(f"Concept visual failed for {room['label']}: {e}")
+            visual = ""
+
         room_results.append({
             "key":      key,
             "label":    room["label"],
             "concept":  concept,
+            "visual":   visual,
             "items":    requirements.get(f"{key}_items", []),
             "priority": requirements.get(f"{key}_priority", "medium"),
             "budget":   requirements.get(f"{key}_budget", ""),
@@ -421,6 +478,17 @@ def run_agent(
             summary = "Design direction ready for homeowner review and designer sharing.",
         ))
 
+    # Overall run confidence: "low" if any step failed, "medium" if anything
+    # needs input or a low-confidence step exists, else "high".
+    statuses = [t.get("status") for t in trace]
+    confs    = [t.get("confidence") for t in trace]
+    if "failed" in statuses:
+        overall_confidence = "low"
+    elif "needs_input" in statuses or "low" in confs:
+        overall_confidence = "medium"
+    else:
+        overall_confidence = "high"
+
     return {
         "inspiration_analysis": inspo_analysis,
         "conflicts":            merged_conflicts,
@@ -429,4 +497,5 @@ def run_agent(
         "floor_plan_svg":       floor_plan_svg,
         "agent_trace":          trace,
         "needs_input":          needs_input,
+        "overall_confidence":   overall_confidence,
     }

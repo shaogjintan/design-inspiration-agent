@@ -1293,13 +1293,17 @@ em { font-style: italic; color: var(--gold); }
 
 .inspo-tag {
   display: inline-block;
-  padding: .2em .65em;
+  max-width: 100%;
+  padding: .25em .7em;
   background: var(--cream);
   border: 1px solid var(--stone);
-  border-radius: 99px;
+  border-radius: 14px;
   font-size: .78rem;
+  line-height: 1.35;
   color: var(--ink-light);
-  white-space: nowrap;
+  white-space: normal;          /* allow long descriptions to wrap */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .inspo-analysis__outliers {
@@ -1463,22 +1467,28 @@ em { font-style: italic; color: var(--gold); }
 
 .decision-item {
   display: flex;
-  align-items: baseline;
-  gap: .75rem;
+  flex-direction: column;
+  gap: .3rem;
   font-size: .875rem;
-  padding: .6rem 1rem;
+  padding: .7rem 1rem;
   background: var(--cream);
+  border-left: 3px solid var(--success);
   border-radius: var(--radius-md);
 }
 
-.decision-item__title {
-  font-weight: 500;
-  color: var(--ink);
-  flex-shrink: 0;
+.decision-item__q {
+  color: var(--ink-muted);
+  font-size: .82rem;
 }
 
-.decision-item__answer {
-  color: var(--ink-light);
+.decision-item__a {
+  color: var(--ink);
+}
+
+.decision-item__check {
+  color: var(--success);
+  font-weight: 700;
+  margin-right: .2rem;
 }
 
 /* ── Agent Activity / Trace ──────────────────────────────────────────────────── */
@@ -1703,4 +1713,53 @@ em { font-style: italic; color: var(--gold); }
 .refinements-history__result {
   color: var(--ink-light);
   font-weight: 500;
+}
+
+/* ── Room concept visual (Step 4) ────────────────────────────────────────────── */
+.room-concept-visual {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--cream);
+  border: 1px solid var(--cream-dark);
+}
+.room-concept-visual svg { width: 100%; height: 100%; display: block; }
+.room-concept-visual__tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: .62rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: rgba(255,255,255,.75);
+  padding: .15em .55em;
+  border-radius: 99px;
+}
+
+/* ── Refine feasibility verdict ──────────────────────────────────────────────── */
+.refine-feasibility {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  margin: .25rem 0 .5rem;
+}
+.refine-feasibility__badge {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  padding: .22em .7em;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.refine-feasibility__badge--feasible    { background: #D4EDDA; color: #155724; }
+.refine-feasibility__badge--tradeoffs   { background: #FFF3CD; color: #856404; }
+.refine-feasibility__badge--notfeasible { background: #F8D7DA; color: #721C24; }
+.refine-feasibility__note {
+  font-size: .82rem;
+  color: var(--ink-light);
+  line-height: 1.4;
 }

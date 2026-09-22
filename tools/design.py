@@ -20,13 +20,15 @@ def generate_design_brief(project):
 
 
 def generate_room_concept(room, style, palette, prompt_text,
-                          inspo_analysis=None, room_inspo_note=""):
+                          inspo_analysis=None, room_inspo_note="",
+                          budget="", priority="", constraints=""):
     """Generate an 80–120 word design concept for a single room."""
     import app
     return app.generate_room_concept(
         room, style, palette, prompt_text,
         inspo_analysis=inspo_analysis,
-        room_inspo_note=room_inspo_note
+        room_inspo_note=room_inspo_note,
+        budget=budget, priority=priority, constraints=constraints,
     )
 
 

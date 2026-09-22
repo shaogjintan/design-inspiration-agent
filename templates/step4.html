@@ -172,11 +172,12 @@
   {% if closed_conflicts %}
   <div class="result-section">
     <h3 class="result-section__title">✓ Decisions recorded</h3>
+    <p class="result-section__desc">These answers have been applied to your design brief below. FORMA won't ask them again.</p>
     <div class="decisions-list">
       {% for conflict in closed_conflicts %}
       <div class="decision-item">
-        <span class="decision-item__title">{{ conflict.title }}</span>
-        <span class="decision-item__answer">→ {{ conflict.decision }}</span>
+        <div class="decision-item__q">{{ conflict.question or conflict.title }}</div>
+        <div class="decision-item__a"><span class="decision-item__check">✓</span> You chose: <strong>{{ conflict.decision }}</strong></div>
       </div>
       {% endfor %}
     </div>
@@ -203,13 +204,19 @@
           {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
         </div>
 
-        <!-- Placeholder render area (future: real image gen) -->
-        <div class="render-placeholder">
-          <div class="render-placeholder__inner">
-            <div class="render-placeholder__icon">◫</div>
-            <div class="render-placeholder__text">AI Render — {{ room.label }}</div>
-            <div class="render-placeholder__sub">Visual generation coming with Bedrock Image API</div>
+        <!-- Data-driven concept visual (stylised, not a photoreal render) -->
+        <div class="room-concept-visual">
+          {% if room.visual %}
+            {{ room.visual | safe }}
+          {% else %}
+          <div class="render-placeholder">
+            <div class="render-placeholder__inner">
+              <div class="render-placeholder__icon">◫</div>
+              <div class="render-placeholder__text">{{ room.label }}</div>
+            </div>
           </div>
+          {% endif %}
+          <div class="room-concept-visual__tag">Concept impression</div>
         </div>
 
         <div class="room-result-card__desc">
@@ -232,7 +239,8 @@
 
   <!-- 2D Floor Plan -->
   <div class="result-section">
-    <h3 class="result-section__title">◰ 2D Floor Plan</h3>
+    <h3 class="result-section__title">◰ Space &amp; Furniture Overview</h3>
+    <p class="result-section__desc">A schematic of your detected rooms with indicative furniture placement based on your selections. Not a scaled reconstruction of your uploaded plan.</p>
     <div class="floorplan-card">
       <div class="floorplan-render" id="floorplan-svg">
         {{ floor_plan_svg | safe }}
@@ -300,6 +308,10 @@
         <span class="refine-proposal-box__icon">◈</span>
         <strong class="refine-proposal-box__title" id="refine-proposal-title"></strong>
       </div>
+      <div class="refine-feasibility" id="refine-feasibility" style="display:none;">
+        <span class="refine-feasibility__badge" id="refine-feasibility-badge"></span>
+        <span class="refine-feasibility__note" id="refine-feasibility-note"></span>
+      </div>
       <p class="refine-proposal-box__text" id="refine-proposal-text"></p>
       <div class="refine-proposal-box__changes" id="refine-proposal-changes"></div>
       <div class="refine-proposal-box__affected" id="refine-proposal-affected"></div>
@@ -319,11 +331,16 @@
   <div class="result-section">
     <h3 class="result-section__title">
       ◉ Agent Activity
+      {% if overall_confidence %}
+      <span class="confidence-badge confidence-badge--{{ overall_confidence }}" style="margin-left:.6rem;vertical-align:middle;">
+        overall confidence: {{ overall_confidence }}
+      </span>
+      {% endif %}
       <button type="button" class="trace-toggle-btn" id="trace-toggle" aria-expanded="false">
         Show
       </button>
     </h3>
-    <p class="result-section__desc">Every action FORMA took to produce this brief.</p>
+    <p class="result-section__desc">Every action FORMA took to produce this brief, each with a confidence signal.</p>
 
     <div class="agent-trace" id="agent-trace" style="display:none;">
       {% for entry in agent_trace %}
@@ -477,6 +494,29 @@
             data.proposal.summary || 'Proposed change';
           document.getElementById('refine-proposal-text').textContent =
             data.proposal.raw_text || '';
+
+          // Feasibility verdict
+          const feasEl   = document.getElementById('refine-feasibility');
+          const feasBadge = document.getElementById('refine-feasibility-badge');
+          const feasNote = document.getElementById('refine-feasibility-note');
+          const feas = data.proposal.feasibility || 'feasible';
+          const feasMap = {
+            'feasible':                { label: '✓ Feasible',            cls: 'feasible' },
+            'feasible_with_tradeoffs': { label: '~ Feasible with trade-offs', cls: 'tradeoffs' },
+            'not_feasible':            { label: '✗ Not feasible as-is',  cls: 'notfeasible' },
+          };
+          const fm = feasMap[feas] || feasMap['feasible'];
+          feasBadge.textContent = fm.label;
+          feasBadge.className = 'refine-feasibility__badge refine-feasibility__badge--' + fm.cls;
+          feasNote.textContent = data.proposal.feasibility_note || '';
+          feasEl.style.display = 'flex';
+
+          // If not feasible, reframe the Apply button (still allowed, but muted)
+          if (feas === 'not_feasible') {
+            refineApplyBtn.textContent = 'Apply anyway';
+          } else {
+            refineApplyBtn.textContent = 'Apply changes';
+          }
 
           const changesEl = document.getElementById('refine-proposal-changes');
           changesEl.innerHTML = '';
