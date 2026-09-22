@@ -6,6 +6,12 @@ venv/
 
 # Environment
 .env
+.env.local
+_env.local
+
+# Tooling
+.claude/
+.ipynb_checkpoints/
 
 # Runtime user uploads and generated output
 uploads/

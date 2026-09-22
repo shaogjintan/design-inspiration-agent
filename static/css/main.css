@@ -13,6 +13,10 @@
   --ink:          #1C1B19;
   --ink-light:    #4A4844;
   --ink-muted:    #8A8580;
+  /* --ink-muted is 3.36:1 on cream — fine for large text, under the 4.5:1 body
+     floor. Small secondary copy uses this instead (5.23:1), warm-tinted from
+     the same hue rather than a neutral grey. */
+  --ink-secondary: #6B6660;
   --gold:         #C9A96E;
   --gold-light:   #E8D5B0;
   --white:        #FFFFFF;
@@ -713,6 +717,16 @@ em { font-style: italic; color: var(--gold); }
   font-weight: 500;
   color: var(--ink);
   letter-spacing: .02em;
+  text-align: left;
+}
+
+.accordion-header__hint {
+  display: block;
+  font-size: .7rem;
+  font-weight: 400;
+  color: var(--ink-secondary);
+  letter-spacing: .01em;
+  margin-top: .15rem;
 }
 
 .accordion-header__chevron {
@@ -1064,6 +1078,37 @@ em { font-style: italic; color: var(--gold); }
   color: var(--ink-light);
   line-height: 1.7;
   margin-bottom: .75rem;
+}
+
+.plan-observations {
+  margin: .35rem 0 0 1rem;
+  padding: 0;
+  font-size: .8rem;
+  color: var(--ink-light);
+  line-height: 1.6;
+}
+
+.plan-observations li { margin-bottom: .25rem; }
+
+.room-direction {
+  border-top: 1px solid var(--stone);
+  padding-top: .75rem;
+  margin-bottom: .75rem;
+}
+
+.room-direction__text {
+  font-size: .8rem;
+  color: var(--ink-light);
+  line-height: 1.65;
+  margin-bottom: .6rem;
+}
+
+.room-direction__note {
+  font-size: .75rem;
+  color: var(--ink-muted);
+  font-style: italic;
+  line-height: 1.6;
+  margin-top: .6rem;
 }
 
 .room-result-card__items { display: flex; flex-wrap: wrap; gap: .35rem; }
@@ -1703,4 +1748,216 @@ em { font-style: italic; color: var(--gold); }
 .refinements-history__result {
   color: var(--ink-light);
   font-weight: 500;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Step 4 — working state
+   The agent run is genuinely slow, so the wait shows the real pipeline rather
+   than a spinner. Stages advance on measured timings, but the last one is only
+   marked done when the response actually lands.
+   ───────────────────────────────────────────────────────────────────────────── */
+.working {
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem 1.75rem;
+  box-shadow: 0 1px 2px rgba(28, 27, 25, .04),
+              0 8px 24px -14px rgba(28, 27, 25, .16);
+}
+
+.working__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.working__step {
+  position: relative;
+  display: flex;
+  gap: .9rem;
+  padding-bottom: 1.4rem;
+}
+
+.working__step:last-child { padding-bottom: 0; }
+
+/* Connector between markers — the thread the run travels down. */
+.working__step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--stone);
+}
+
+.working__step.is-done:not(:last-child)::before { background: var(--gold-light); }
+
+.working__marker {
+  position: relative;
+  flex: none;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--stone-dark);
+  background: var(--white);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: border-color .3s cubic-bezier(.16, 1, .3, 1),
+              background-color .3s cubic-bezier(.16, 1, .3, 1),
+              color .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.working__tick {
+  width: 11px;
+  height: 11px;
+  transform: scale(.6);
+  transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Active: the ring breathes. One authored moment, bounded to 19px. */
+.working__step.is-active .working__marker {
+  border-color: var(--gold);
+}
+
+.working__step.is-active .working__marker::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold);
+  animation: working-pulse 1.9s cubic-bezier(.16, 1, .3, 1) infinite;
+}
+
+@keyframes working-pulse {
+  0%   { transform: scale(.72); opacity: .7; }
+  70%  { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+.working__step.is-done .working__marker {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--white);
+}
+
+.working__step.is-done .working__tick { transform: scale(1); }
+
+.working__text {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.working__title {
+  font-size: .875rem;
+  color: var(--ink-secondary);
+  letter-spacing: .01em;
+  transition: color .3s cubic-bezier(.16, 1, .3, 1),
+              font-weight .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.working__step.is-active .working__title {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.working__step.is-done .working__title { color: var(--ink-light); }
+
+.working__detail {
+  font-size: .75rem;
+  color: var(--ink-secondary);
+  line-height: 1.55;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity .3s cubic-bezier(.16, 1, .3, 1),
+              max-height .35s cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Only the stage in progress explains itself — the list stays scannable. */
+.working__step.is-active .working__detail {
+  opacity: 1;
+  max-height: 3rem;
+}
+
+.working__foot {
+  margin: 1.5rem 0 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--cream-dark);
+  font-size: .75rem;
+  color: var(--ink-secondary);
+}
+
+.working-error {
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: center;
+}
+
+.working-error__msg {
+  font-size: .875rem;
+  color: var(--ink-light);
+  line-height: 1.6;
+  margin: 0 0 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .working { padding: 1.75rem 1.25rem 1.4rem; }
+}
+
+/* ── Browser surfaces ─────────────────────────────────────────────────────────
+   The parts we did not draw still carry the design: selection, caret, focus
+   ring, scrollbar and native control accents all ship grey by default.
+   ───────────────────────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--gold-light);
+  color: var(--ink);
+}
+
+:root {
+  accent-color: var(--gold);
+  caret-color: var(--gold);
+  scrollbar-color: var(--stone-dark) transparent;
+  scrollbar-width: thin;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+::-webkit-scrollbar-thumb {
+  background: var(--stone-dark);
+  border-radius: 99px;
+  border: 3px solid var(--cream);
+}
+
+::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+
+/* Figures read as a column, not ransom-note widths. */
+.summary-bar__val,
+.trace-entry__time,
+.room-result-card__badge { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the state changes legible, drop the movement. */
+  .working__step.is-active .working__marker::after { animation: none; opacity: .5; }
+  .working__tick { transition: none; }
+
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

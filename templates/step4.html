@@ -113,6 +113,28 @@
         {% endif %}
       </div>
 
+      {% if inspo_analysis.floor_plan_observations %}
+      <div class="inspo-tag-group">
+        <div class="inspo-tag-group__label">From your floor plan</div>
+        <ul class="plan-observations">
+          {% for o in inspo_analysis.floor_plan_observations %}<li>{{ o }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if inspo_analysis.room_list_mismatches %}
+      <div class="inspo-analysis__outliers">
+        <div class="inspo-analysis__outlier-icon">!</div>
+        <div>
+          <strong>Your floor plan doesn't quite match your room list:</strong>
+          <ul class="plan-observations">
+            {% for m in inspo_analysis.room_list_mismatches %}<li>{{ m }}</li>{% endfor %}
+          </ul>
+          Your room list is unchanged — go back to step 2 if you want to adjust it.
+        </div>
+      </div>
+      {% endif %}
+
       {% if inspo_analysis.possible_outliers %}
       <div class="inspo-analysis__outliers">
         <div class="inspo-analysis__outlier-icon">!</div>
@@ -215,6 +237,28 @@
         <div class="room-result-card__desc">
           <div class="room-result-card__prompt-label">AI Concept</div>
           <p class="room-result-card__concept">{{ room.concept }}</p>
+
+          {% if room.direction %}
+          <div class="room-direction">
+            <div class="room-result-card__prompt-label">Design Direction</div>
+            {% if room.direction.style_interpretation %}
+            <p class="room-direction__text">{{ room.direction.style_interpretation }}</p>
+            {% endif %}
+            {% for label, key in [('Colours', 'colours'), ('Materials', 'materials'), ('Lighting', 'lighting'), ('Forms', 'forms')] %}
+              {% if room.direction[key] %}
+              <div class="inspo-tag-group">
+                <div class="inspo-tag-group__label">{{ label }}</div>
+                <div class="inspo-tag-group__tags">
+                  {% for item in room.direction[key] %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% if room.direction.note %}
+            <p class="room-direction__note">{{ room.direction.note }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
 
           {% if room["items"] %}
           <div class="room-result-card__items">

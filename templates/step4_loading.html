@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% set current_step = 4 %}
+{% block title %}FORMA — Reading your project{% endblock %}
+{% block content %}
+
+<div class="step-wrap step-wrap--wide">
+  <div class="step-header">
+    <div class="step-header__tag">Step 04</div>
+    <h2 class="step-header__title">Your Design Vision</h2>
+    <p class="step-header__desc">FORMA is reading everything you gave it. This takes about a minute.</p>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Housing</span>
+      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Style</span>
+      <span class="summary-bar__val">{{ project.design_style }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Palette</span>
+      <span class="summary-bar__val">
+        {% if project.colour_hex %}
+        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
+        {% endif %}
+        {{ project.colour_name }}
+      </span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Rooms</span>
+      <span class="summary-bar__val">{{ room_count }}</span>
+    </div>
+  </div>
+
+  <div class="working" id="working" role="status" aria-live="polite">
+    <ol class="working__steps">
+      {% set steps = [
+        ('Reading your floor plan' if has_floor_plan else 'Reading your space', 'the layout, and how the rooms sit together'),
+        ('Studying your references', 'colour, material, light and form across every image'),
+        ('Checking for conflicts', 'where your references and requirements pull apart'),
+        ('Writing your brief', 'the direction, in plain language'),
+        ('Drafting ' ~ room_count ~ ' room concepts', 'one for every space you confirmed')
+      ] %}
+      {% for title, detail in steps %}
+      <li class="working__step" data-index="{{ loop.index0 }}">
+        <span class="working__marker" aria-hidden="true">
+          <svg class="working__tick" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 8.5l3 3 6-7"/>
+          </svg>
+        </span>
+        <span class="working__text">
+          <span class="working__title">{{ title }}</span>
+          <span class="working__detail">{{ detail }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+
+    <p class="working__foot" id="working-foot">Leave this page open — it updates on its own.</p>
+  </div>
+
+  <div class="working-error" id="working-error" hidden>
+    <p class="working-error__msg" id="working-error-msg"></p>
+    <button type="button" class="btn btn--primary" id="working-retry">Try again</button>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+  const stepEls = Array.from(document.querySelectorAll('.working__step'));
+  const foot    = document.getElementById('working-foot');
+  const errBox  = document.getElementById('working-error');
+  const errMsg  = document.getElementById('working-error-msg');
+  const working = document.getElementById('working');
+
+  // Roughly how long each stage takes, measured against the real gateway. The
+  // last stage is never auto-completed: it stays active until the response
+  // actually lands, so the list can run slow but never lies about being done.
+  const HOLD = [4000, 26000, 2000, 9000];
+
+  let active = -1;
+  function activate(i) {
+    if (i <= active) return;
+    active = i;
+    stepEls.forEach((el, n) => {
+      el.classList.toggle('is-done',   n < i);
+      el.classList.toggle('is-active', n === i);
+    });
+  }
+
+  let timer = null;
+  function advance(i) {
+    activate(i);
+    if (i < HOLD.length) timer = setTimeout(() => advance(i + 1), HOLD[i]);
+  }
+  advance(0);
+
+  function finish() {
+    clearTimeout(timer);
+    stepEls.forEach(el => {
+      el.classList.remove('is-active');
+      el.classList.add('is-done');
+    });
+    foot.textContent = 'Done — opening your brief.';
+  }
+
+  function fail(message) {
+    clearTimeout(timer);
+    working.hidden = true;
+    errMsg.textContent = message;
+    errBox.hidden = false;
+  }
+
+  fetch('/step4/prepare', { method: 'POST', headers: { 'Accept': 'application/json' } })
+    .then(res => res.json().catch(() => ({ ok: false, error: 'The server sent back something unreadable.' })))
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'FORMA could not finish reading your project.');
+      finish();
+      // Let the final ticks land before the page turns over.
+      setTimeout(() => window.location.replace('{{ url_for("step4") }}'), 420);
+    })
+    .catch(err => fail(err.message || 'Something went wrong on the way to your brief.'));
+
+  document.getElementById('working-retry').addEventListener('click', () => {
+    window.location.reload();
+  });
+})();
+</script>
+{% endblock %}

@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify, send_file, has_request_context
+    url_for, session, flash, jsonify, send_file, has_request_context, g
 )
 from werkzeug.utils import secure_filename
 
@@ -68,18 +68,18 @@ ROOM_CATALOGUE = {
     "hdb_2room": ["Living Room", "Bedroom", "Kitchen", "Bathroom",
                   "Service Yard"],
     "hdb_3room": ["Living Room", "Master Bedroom", "Bedroom 2", "Kitchen",
-                  "Master Bathroom", "Bathroom", "Service Yard"],
+                  "Master Bathroom", "Common Bathroom", "Service Yard"],
     "hdb_4room": ["Living Room", "Master Bedroom", "Bedroom 2", "Bedroom 3",
-                  "Kitchen", "Master Bathroom", "Bathroom", "Service Yard",
+                  "Kitchen", "Master Bathroom", "Common Bathroom", "Service Yard",
                   "Household Shelter"],
     "hdb_5room": ["Living Room", "Dining Room", "Master Bedroom", "Bedroom 2",
-                  "Bedroom 3", "Kitchen", "Master Bathroom", "Bathroom",
+                  "Bedroom 3", "Kitchen", "Master Bathroom", "Common Bathroom",
                   "Service Yard", "Household Shelter"],
     "condo":     ["Living Room", "Dining Room", "Kitchen", "Master Bedroom",
-                   "Bedroom 2", "Master Bathroom", "Bathroom", "Study",
+                   "Bedroom 2", "Master Bathroom", "Common Bathroom", "Study",
                    "Balcony"],
     "landed":    ["Living Room", "Dining Room", "Kitchen", "Master Bedroom",
-                   "Bedroom 2", "Bedroom 3", "Master Bathroom", "Bathroom",
+                   "Bedroom 2", "Bedroom 3", "Master Bathroom", "Common Bathroom",
                    "Study", "Garage", "Garden / Outdoor", "Utility Room"],
     "studio":    ["Open Living / Sleeping Area", "Kitchen", "Bathroom"],
     "shophouse": ["Living Room", "Kitchen", "Master Bedroom", "Bedroom 2",
@@ -103,6 +103,7 @@ ROOM_ITEMS = {
     "Bedroom 3":            ["Single Bed", "Wardrobe", "Study Desk"],
     "Bedroom 4":            ["Single Bed", "Wardrobe"],
     "Bathroom":             ["Shower", "Bathtub", "Vanity", "Storage Cabinet", "Mirror"],
+    "Common Bathroom":      ["Shower", "Bathtub", "Vanity", "Storage Cabinet", "Mirror"],
     "Master Bathroom":      ["Rainfall Shower", "Freestanding Bathtub", "Double Vanity",
                               "Heated Towel Rail", "Smart Mirror"],
     "Study":                ["Desk", "Bookshelf", "Ergonomic Chair", "Monitor Arm",
@@ -119,6 +120,17 @@ ROOM_ITEMS = {
                      "Utility sink", "Storage shelving", "Water heater"],
     "Household Shelter": ["Shelving system", "Storage boxes", "Bicycle rack",
                           "Ventilation cover", "Door organiser"],
+}
+
+# Short descriptors for rooms whose name alone is ambiguous — chiefly which
+# bathroom is the ensuite and which is shared.
+ROOM_HINTS = {
+    "Master Bathroom":   "Ensuite — opens off the master bedroom",
+    "Common Bathroom":   "Shared — serves the other bedrooms and guests",
+    "Bathroom":          "The flat's only bathroom",
+    "Master Bedroom":    "The largest bedroom, with its own bathroom",
+    "Household Shelter": "The HDB shelter — usually used as storage",
+    "Service Yard":      "Utility space off the kitchen",
 }
 
 HOUSING_LABELS = {
@@ -156,18 +168,28 @@ def save_upload(file_obj, subfolder: str = "") -> str | None:
 
 
 def get_rooms_for_type(housing_type: str) -> list[dict]:
-    """Return list of {key, label, items} dicts for the given housing type."""
-    # Prefer the room list the model identified in step 1; fall back to the
-    # static catalogue when there is none (or outside a request context).
-    ai_rooms = session.get("ai_rooms") if has_request_context() else None
-    room_names = ai_rooms or ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
+    """Return list of {key, label, items, hint} dicts for the given housing type."""
+    # Prefer the homeowner's confirmed room list; fall back to the static
+    # catalogue when there is none (or outside a request context).
+    confirmed = project_get("ai_rooms") if has_request_context() else None
+    room_names = confirmed or ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
+
+    # A plain "Bathroom" means different things depending on its company: on its
+    # own it is the only one, but alongside a master ensuite it is the common one.
+    # Older saved projects still use the plain name, so decide per room list.
+    has_master_bath = any("Master Bathroom" in n for n in room_names)
+
     rooms = []
     for name in room_names:
         key = name.lower().replace(" ", "_").replace("/", "_")
+        hint = ROOM_HINTS.get(name, "")
+        if name == "Bathroom" and has_master_bath:
+            hint = ROOM_HINTS["Common Bathroom"]
         rooms.append({
             "key":   key,
             "label": name,
             "items": ROOM_ITEMS.get(name, []),
+            "hint":  hint,
         })
     return rooms
 
@@ -232,6 +254,10 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
+                app.logger.info(
+                    "LLM tokens: in=%s out=%s",
+                    result.get("prompt_eval_count"), result.get("eval_count"),
+                )
                 return result["message"]["content"]
 
         except urllib.error.HTTPError as e:
@@ -537,10 +563,18 @@ def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
     if (num_floors or "1") not in ("1", ""):
         summary += f" Spread over {num_floors} floors."
 
-    observations = [
-        "Room list is derived from the housing type — upload a floor plan for a closer match.",
-        "Remove any room you don't have, and it won't appear in your brief.",
-    ]
+    if floor_plan_path:
+        observations = [
+            "These are the usual rooms for this housing type — your floor plan "
+            "is read at the Vision step, and FORMA will flag anything that "
+            "doesn't match what you set here.",
+            "Add, rename or remove rooms so this matches your home.",
+        ]
+    else:
+        observations = [
+            "Room list is derived from the housing type — upload a floor plan for a closer match.",
+            "Remove any room you don't have, and it won't appear in your brief.",
+        ]
     if notes:
         observations.append(f"Your note: {notes}")
 
@@ -737,10 +771,17 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
         - If analysis confidence is low, acknowledge that recommendations are
           based on limited information.
 
-        Write a polished, editorial-quality design brief that an interior designer
-        would be proud to present. Use <p> and <strong> tags. Cover: project overview,
-        design direction, material story, lighting strategy, and key considerations.
-        Keep it under 500 words.
+        Write the brief an interior designer would actually hand over: dense,
+        specific, nothing padded. Use <p> and <strong> tags.
+
+        LENGTH — this is a hard requirement, not a target. The homeowner reads
+        this on one screen without scrolling:
+        - EXACTLY 3 paragraphs, each 2-3 sentences. Around 120 words total.
+        - Paragraph 1: the design direction. Paragraph 2: materials and light.
+          Paragraph 3: the one thing to get right, and any real caveat.
+        - Cut every sentence that restates their inputs back at them. They know
+          what they chose; tell them what it means.
+        - No preamble, no summary sentence at the end, no headings.
         Respond with ONLY the HTML content, no surrounding tags.
     """)
 
@@ -748,16 +789,35 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
         [{"role": "user", "content": prompt}],
         system="You are a senior interior designer writing a premium design brief. "
                "You always explain WHY you recommend something, connecting it to "
-               "the homeowner's stated requirements or visually observed preferences.",
-        max_tokens=1500
+               "the homeowner's stated requirements or visually observed preferences. "
+               "You write short. Length is a constraint you never exceed.",
+        max_tokens=400
     )
+
+
+def format_room_direction(entry) -> str:
+    """Flatten one room_specific entry into prompt-ready text."""
+    if isinstance(entry, str):
+        return entry.strip()
+    if not isinstance(entry, dict):
+        return ""
+    lines = []
+    if entry.get("style_interpretation"):
+        lines.append(entry["style_interpretation"])
+    for label in ("colours", "materials", "lighting", "forms"):
+        if entry.get(label):
+            lines.append(f"{label.capitalize()} for this room: {', '.join(entry[label])}")
+    if entry.get("note"):
+        lines.append(f"Note: {entry['note']}")
+    return " ".join(lines)
 
 
 def generate_room_concept(room: dict, style: str, palette: str, prompt_text: str,
                           inspo_analysis: dict | None = None,
-                          room_inspo_note: str = "") -> str:
+                          room_inspo_note: dict | str = "") -> str:
     """Generate a short room concept paragraph, grounded in inspiration analysis."""
     ia = inspo_analysis or {}
+    room_direction = format_room_direction(room_inspo_note)
     ia_context = ""
     if ia and ia.get("dominant_styles"):
         ia_context = f"""
@@ -768,8 +828,8 @@ Visual preferences observed across all inspiration images:
 - Lighting: {', '.join(ia.get('lighting', [])[:3])}
 - Forms: {', '.join(ia.get('forms', [])[:3])}
 """
-        if room_inspo_note:
-            ia_context += f"- Room-specific note: {room_inspo_note}"
+        if room_direction:
+            ia_context += f"- Direction for this specific room: {room_direction}"
 
     msg = textwrap.dedent(f"""
         Room: {room['label']}
@@ -779,15 +839,19 @@ Visual preferences observed across all inspiration images:
         Items needed: {', '.join(room.get('items_selected', [])) or 'not specified'}
         {ia_context}
 
-        Write a single evocative paragraph (80–120 words) describing the design concept for this room.
-        Focus on mood, materials, lighting, and spatial flow. Be specific and design-forward.
-        Where possible, connect recommendations to the homeowner's requirements or observed preferences.
+        Write ONE paragraph of 30-40 words on the design concept for this room.
+        That is roughly two sentences — a hard limit, not a target. The card this
+        sits in is small and sits beside a dozen others.
+        Name the mood and the two or three decisions that carry it. Every word
+        must be specific to THIS room; drop anything that would read the same
+        for any other space. No opening throat-clearing, no closing flourish.
     """)
 
     return call_llm(
         [{"role": "user", "content": msg}],
-        system="You are a senior interior designer crafting room concept descriptions.",
-        max_tokens=256
+        system="You are a senior interior designer crafting room concept descriptions. "
+               "You write tight, concrete prose and never exceed the word limit given.",
+        max_tokens=110
     )
 
 
@@ -1088,16 +1152,58 @@ INSPIRATION_ANALYSIS_SYSTEM = (
 )
 
 
-def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
+def _loads_salvaging_truncation(text: str) -> dict:
+    """Parse the model's JSON, rescuing a response cut off by the token ceiling.
+
+    A room-by-room analysis is long enough that a large home can run out of
+    budget mid-object. Dropping the last room beats dropping every room.
     """
-    Analyse the uploaded inspiration images (and text cues) to extract a
-    structured picture of the homeowner's visual preferences.
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    stack: list[str] = []
+    cut, open_at_cut = None, None
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if escaped:
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif ch == '"':
+            in_string = not in_string
+        elif in_string:
+            continue
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            cut, open_at_cut = i, list(stack)
+
+    if cut is None or not open_at_cut:
+        raise ValueError("no complete JSON value to salvage")
+
+    closers = "".join("}" if b == "{" else "]" for b in reversed(open_at_cut))
+    return json.loads(text[:cut + 1] + closers)
+
+
+def analyse_inspiration(inspiration: dict, rooms: list[dict],
+                        step1: dict | None = None,
+                        requirements: dict | None = None) -> dict:
+    """
+    The single analysis pass for step 4: reads the floor plan, the inspiration
+    images and every choice made in steps 1-3 in one multimodal call.
 
     Returns a dict with keys:
         dominant_styles, colours, materials, lighting, forms,
         common_patterns, possible_outliers, room_specific,
+        floor_plan_observations, room_list_mismatches,
         summary, image_count, source
     """
+    step1 = step1 or {}
+    requirements = requirements or {}
     inspo_paths: dict = inspiration.get("inspo_paths", {})
     style_text: str   = inspiration.get("design_style", "")
     palette_text: str = inspiration.get("colour_name", "")
@@ -1115,31 +1221,78 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
 
     image_count = len(all_paths)
 
-    # ── Build the prompt ──────────────────────────────────────────────────────
-    vibe_lines = "\n".join(
-        f"  - {k}: {v}" for k, v in vibes.items() if v
-    ) or "  (none provided)"
+    # Encode the plan before building the prompt: the prompt tells the model
+    # "IMAGE 1 is the floor plan", so that claim has to match what we send.
+    floor_plan_path = step1.get("floor_plan_path")
+    encoded_plan = None
+    if floor_plan_path and Path(floor_plan_path).exists():
+        try:
+            encoded_plan, _media_type = image_to_base64(floor_plan_path)
+        except Exception as e:
+            app.logger.warning(f"Could not encode floor plan {floor_plan_path}: {e}")
+    has_plan = encoded_plan is not None
 
-    room_image_lines = "\n".join(
-        f"  - {k}: {len(v)} image(s)" for k, v in room_image_map.items()
-    ) or "  (no images uploaded)"
+    # ── Build the prompt ──────────────────────────────────────────────────────
+    def _room_line(room: dict) -> str:
+        key = room["key"]
+        n = len(room_image_map.get(key, []))
+        bits = [f"{n} image(s)" if n else "no images"]
+        if vibes.get(key):
+            bits.append(f'homeowner\'s words: "{vibes[key]}"')
+        return f"  - {key} ({room['label']}) — " + "; ".join(bits)
+
+    def _room_line_full(room: dict) -> str:
+        key = room["key"]
+        line = _room_line(room)
+        items = requirements.get(f"{key}_items") or []
+        wants = requirements.get(f"{key}_prompt", "")
+        extra = []
+        if items:
+            extra.append("needs " + ", ".join(items[:6]))
+        if wants:
+            extra.append(f'asked for: "{wants[:120]}"')
+        if requirements.get(f"{key}_priority"):
+            extra.append(f"priority {requirements[f'{key}_priority']}")
+        return line + ("; " + "; ".join(extra) if extra else "")
+
+    room_lines = "\n".join(_room_line_full(r) for r in rooms) or "  (no rooms confirmed)"
+
+    overall_images = len(room_image_map.get("overall", []))
+
+    plan_block = (
+        "IMAGE 1 IS THE FLOOR PLAN of this home — not an inspiration reference. "
+        "Read it for the actual layout: which rooms exist, how they connect, and "
+        "anything that contradicts the room list below. Never invent measurements "
+        "that are not legible in the plan."
+        if has_plan else
+        "No floor plan was uploaded, so the room list below comes from the housing "
+        "type. Leave floor_plan_observations empty and room_list_mismatches empty."
+    )
 
     prompt = textwrap.dedent(f"""
-        A homeowner is planning a home renovation.
+        A homeowner is planning a home renovation. Everything they have told us
+        is below; this is the only pass you get, so use all of it.
+
+        Their home:
+        - Housing type: {step1.get('housing_type_label') or step1.get('housing_type') or 'not specified'}
+        - Floor area: {step1.get('floor_size') or 'not specified'} sqm
+        - Floors: {step1.get('num_floors') or '1'}
+        - Their notes on the space: {step1.get('space_notes') or 'none'}
+        - Overall project notes: {requirements.get('project_notes') or 'none'}
 
         They have selected:
         - Design style preference: {style_text or 'not specified'}
         - Colour palette preference: {palette_text or 'not specified'}
         - Custom palette description: {custom_colour or 'none'}
 
-        Room vibes they described in words:
-{vibe_lines}
+        {plan_block}
 
-        Images provided per space:
-{room_image_lines}
-        Total images: {image_count}
+        The rooms they confirmed, and what they want in each:
+{room_lines}
 
-        {"The inspiration images are attached. Analyse ALL of them together." if image_count > 0 else "No images were uploaded — base your analysis on the text cues alone."}
+        Total inspiration images: {image_count}{f" (of which {overall_images} are whole-home references that apply to every space)" if overall_images else ""}
+
+        {"The inspiration images are attached after the floor plan." if (image_count and has_plan) else "The inspiration images are attached. Analyse ALL of them together." if image_count else "No inspiration images were uploaded — base the visual analysis on the text cues alone."}
 
         Your task:
         1. Identify what this homeowner is visually drawn to — be specific about:
@@ -1150,13 +1303,38 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
            - Furniture forms (e.g. low-profile, rounded, rectilinear)
            - Recurring visual patterns (e.g. concealed storage, open shelving)
         2. Note any outliers — references that differ significantly from the rest.
-        3. Note any visual inconsistencies between rooms (e.g. kitchen references
-           use dark materials while living room references use light ones).
-        4. Write a 2-3 sentence plain-English summary the homeowner will read.
+        3. Give a design direction for EVERY room listed above, keyed by its
+           room_key exactly as written. For each room, work out how the chosen
+           style ({style_text or 'their references'}) should actually read in
+           THAT space given its function — a service yard and a master bedroom
+           carry the same style very differently. Name specific colours,
+           materials, lighting and furniture forms for the room, not generic ones.
+        4. If a floor plan was provided, read it and report what it actually
+           shows: how the spaces connect, circulation, orientation, anything
+           that affects the design. Then compare it against the confirmed room
+           list and flag genuine differences — a room on the plan they did not
+           list, a room they listed that is not on the plan, or two spaces the
+           plan shows as one. Do NOT rewrite their room list; just flag it.
+        5. Write the summary the homeowner reads first: TWO sentences, no more.
+           Say what their references add up to, not what they selected.
 
         Rules:
         - Only describe what you can actually see / infer from the provided content.
         - Be specific. 'warm white' is better than 'white'.
+        - floor_plan_observations: at most 4 entries, one short sentence each.
+        - room_list_mismatches: only genuine differences, at most 3, one short
+          sentence each. An empty list is the right answer when it all matches.
+        - A room with no images of its own still gets a direction — derive it from
+          the whole-home references and the chosen style, and say so in its "note".
+        - HARD LIMITS inside room_specific, applied to every room. Exceeding them
+          is an error, not extra helpfulness:
+            * colours, materials, lighting, forms: EXACTLY 2 entries each, and
+              every entry is 1-3 words. They render as small UI tags, so
+              "oiled oak" is right and "warm oiled oak with visible grain" is not.
+            * style_interpretation: ONE sentence, 20 words maximum.
+            * note: ONE sentence, 15 words maximum. Omit it entirely unless the
+              room needs a genuine caveat.
+          Do not restate the homeowner's style name in every room.
         - If confidence is low (e.g. no images, vague text), say so in the summary.
         - Set "source" to "images" if you analysed real images,
           "text_only" if you worked from text cues alone.
@@ -1170,8 +1348,19 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
           "forms": ["..."],
           "common_patterns": ["..."],
           "possible_outliers": ["..."],
-          "room_specific": {{"room_key": "brief observation"}},
-          "summary": "2-3 sentences for the homeowner.",
+          "room_specific": {{
+            "room_key": {{
+              "style_interpretation": "One sentence, max 20 words.",
+              "colours": ["warm taupe", "off-white"],
+              "materials": ["oiled oak", "matte ceramic"],
+              "lighting": ["warm indirect", "slim sconce"],
+              "forms": ["low profile", "concealed storage"],
+              "note": "One short sentence, or omit."
+            }}
+          }},
+          "floor_plan_observations": ["What the plan actually shows."],
+          "room_list_mismatches": ["Plan shows X, room list says Y."],
+          "summary": "Two sentences for the homeowner.",
           "source": "images",
           "confidence": "high"
         }}
@@ -1182,13 +1371,16 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
     # in a separate "images" array as raw base64 strings.
     message: dict = {"role": "user", "content": prompt}
 
-    # Attach up to 10 images to keep the request within token limits.
-    # We sample evenly across rooms so all spaces are represented.
-    MAX_IMAGES = 10
-    encoded_images: list = []
+    # Each image costs roughly 1,500 input tokens, so the count is capped. The
+    # floor plan goes first and is never dropped — the prompt refers to it as
+    # "IMAGE 1" — and the inspiration images are sampled evenly across rooms so
+    # every space stays represented.
+    MAX_INSPO_IMAGES = 6
+    encoded_images: list = [encoded_plan] if encoded_plan else []
+
     if all_paths:
-        step = max(1, len(all_paths) // MAX_IMAGES)
-        selected = all_paths[::step][:MAX_IMAGES]
+        step = max(1, len(all_paths) // MAX_INSPO_IMAGES)
+        selected = all_paths[::step][:MAX_INSPO_IMAGES]
         for path in selected:
             try:
                 img_data, _media_type = image_to_base64(path)
@@ -1206,9 +1398,15 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
 
     try:
         # Vision requests take longer — give them more time.
+        # The per-room directions dominate the response, so the budget has to
+        # scale with the number of rooms or the JSON gets truncated mid-object.
+        # max_tokens is only a ceiling — the brevity caps in the prompt are what
+        # keep actual usage down. The timeout has to scale with it, though: a
+        # 12-room home generates for well over the old 90s and would otherwise
+        # time out into mock data that looks real.
         raw = call_llm(messages, system=INSPIRATION_ANALYSIS_SYSTEM,
-                       max_tokens=1024,
-                       timeout=120 if encoded_images else 60)
+                       max_tokens=min(4096, 800 + 200 * len(rooms)),
+                       timeout=min(300, 120 + 10 * len(rooms) + (60 if encoded_images else 0)))
         # Strip markdown code fences if the model wraps its JSON
         raw_stripped = raw.strip()
         if raw_stripped.startswith("```"):
@@ -1216,7 +1414,7 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
             if raw_stripped.startswith("json"):
                 raw_stripped = raw_stripped[4:]
             raw_stripped = raw_stripped.strip()
-        data = json.loads(raw_stripped)
+        data = _loads_salvaging_truncation(raw_stripped)
         if not isinstance(data, dict):
             raise ValueError("Expected a JSON object")
     except Exception as e:
@@ -1228,6 +1426,29 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
             return [str(x).strip() for x in val if str(x).strip()]
         return []
 
+    def clean_room_specific(val):
+        """Normalise to {room_key: {...}}. Older saved briefs — and a model that
+        ignores the schema — give a plain string per room, so accept both."""
+        if not isinstance(val, dict):
+            return {}
+        out = {}
+        for key, entry in val.items():
+            if isinstance(entry, str):
+                entry = {"style_interpretation": entry.strip()}
+            if not isinstance(entry, dict):
+                continue
+            cleaned = {
+                "style_interpretation": str(entry.get("style_interpretation", "")).strip(),
+                "colours":   clean_list(entry.get("colours")),
+                "materials": clean_list(entry.get("materials")),
+                "lighting":  clean_list(entry.get("lighting")),
+                "forms":     clean_list(entry.get("forms")),
+                "note":      str(entry.get("note", "")).strip(),
+            }
+            if any(cleaned.values()):
+                out[str(key).strip()] = cleaned
+        return out
+
     result = {
         "dominant_styles":  clean_list(data.get("dominant_styles")),
         "colours":          clean_list(data.get("colours")),
@@ -1236,11 +1457,14 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict]) -> dict:
         "forms":            clean_list(data.get("forms")),
         "common_patterns":  clean_list(data.get("common_patterns")),
         "possible_outliers": clean_list(data.get("possible_outliers")),
-        "room_specific":    data.get("room_specific") if isinstance(data.get("room_specific"), dict) else {},
+        "room_specific":    clean_room_specific(data.get("room_specific")),
+        "floor_plan_observations": clean_list(data.get("floor_plan_observations"))[:4] if has_plan else [],
+        "room_list_mismatches":    clean_list(data.get("room_list_mismatches"))[:3] if has_plan else [],
         "summary":          str(data.get("summary", "")).strip(),
         "source":           data.get("source", "text_only"),
         "confidence":       data.get("confidence", "medium") if data.get("confidence") in ("high", "medium", "low") else "medium",
         "image_count":      image_count,
+        "read_floor_plan":  has_plan,
     }
 
     # Sanity: if no lists have content, use the fallback
@@ -1282,10 +1506,13 @@ def _inspiration_analysis_fallback(style: str, palette: str, custom_colour: str,
         "common_patterns":  vibe_list,
         "possible_outliers": [],
         "room_specific":    {},
+        "floor_plan_observations": [],
+        "room_list_mismatches":    [],
         "summary":          summary,
         "source":           "text_only",
         "confidence":       "low",
         "image_count":      image_count,
+        "read_floor_plan":  False,
     }
 
 
@@ -1293,30 +1520,58 @@ def _inspiration_analysis_fallback(style: str, palette: str, custom_colour: str,
 # The cookie holds only client_id/email. Everything else lives in the JSON
 # store, so it survives a closed browser and the cookie stays small.
 # ─────────────────────────────────────────────────────────────────────────────
-BRIEF_KEYS = ("step1", "ai_rooms", "ai_room_summary", "requirements", "inspiration",
-              "inspiration_analysis", "conflicts", "agent_trace", "refinements")
+def current_client_id() -> str:
+    """The id this visitor's project is filed under.
 
-
-def persist_brief():
-    """Copy the working session into the client's saved brief. No-op if the
-    visitor never identified themselves, so the app still works without login."""
+    Anonymous visitors get one too, so there is always somewhere server-side to
+    put the project and the cookie never has to carry more than this id.
+    """
     cid = session.get("client_id")
     if not cid:
-        return
-    clients.save_brief(cid, {k: session[k] for k in BRIEF_KEYS if k in session})
+        cid = "a_" + uuid.uuid4().hex[:10]
+        session["client_id"] = cid
+        session.modified = True
+    return cid
+
+
+def _project_state() -> dict:
+    """The working project, read once per request and cached on ``g``.
+
+    A completed project runs to ~12 KB — three times what a cookie can hold —
+    and browsers drop an oversized cookie silently, taking the whole session
+    with it. So the project lives in the JSON store and only its id is signed
+    into the cookie.
+    """
+    if "project_state" not in g:
+        g.project_state = clients.load_brief(current_client_id())
+    return g.project_state
+
+
+def project_get(key, default=None):
+    return _project_state().get(key, default)
+
+
+def project_set(**values):
+    """Update the project and write it through to the store."""
+    state = _project_state()
+    state.update(values)
+    clients.save_brief(current_client_id(), state)
+
+
+def project_clear(*keys):
+    state = _project_state()
+    for key in keys:
+        state.pop(key, None)
+    clients.save_brief(current_client_id(), state)
 
 
 def hydrate_session(client):
-    """Load a client's saved brief back into the session."""
-    brief = clients.load_brief(client["client_id"])
-    for k in BRIEF_KEYS:
-        session.pop(k, None)
-        if k in brief:
-            session[k] = brief[k]
+    """Attach the session to this client's saved project."""
     session["client_id"] = client["client_id"]
     session["email"] = client["email"]
     session.modified = True
-    return brief
+    g.pop("project_state", None)
+    return _project_state()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1337,11 +1592,8 @@ def start():
     to their saved brief, and the code/magic-link step slots in here later."""
     if request.method == "POST":
         if request.form.get("action") == "new_project":
-            for k in BRIEF_KEYS:
-                session.pop(k, None)
-            if session.get("client_id"):
-                clients.save_brief(session["client_id"], {})
-            session.modified = True
+            clients.save_brief(current_client_id(), {})
+            g.pop("project_state", None)
             return redirect(url_for("step1"))
 
         email = clients.normalise_email(request.form.get("email"))
@@ -1375,34 +1627,35 @@ def step1():
         if "floor_plan" in request.files:
             floor_plan_path = save_upload(request.files["floor_plan"], "floorplans")
 
-        # Ask AI to identify rooms
-        room_data = generate_room_summary(
-        housing_type,
-        request.form.get("floor_size", ""),
-        request.form.get("space_notes", ""),
-        num_floors=request.form.get("num_floors", "1"),
-        floor_plan_path=floor_plan_path,
+        # No model call here — the room list comes straight from the housing
+        # type so this step is instant. The floor plan is read later, in the
+        # single step-4 analysis that sees it alongside every other choice.
+        room_data = stub_read_floorplan(
+            housing_type,
+            request.form.get("floor_size", ""),
+            request.form.get("num_floors", "1"),
+            request.form.get("space_notes", ""),
+            floor_plan_path,
         )
 
-        session["step1"] = {
-            "housing_type":       housing_type,
-            "housing_type_label": HOUSING_LABELS.get(housing_type, housing_type),
-            "floor_size":         request.form.get("floor_size", ""),
-            "num_floors":         request.form.get("num_floors", "1"),
-            "space_notes":        request.form.get("space_notes", ""),
-            "floor_plan_path":    floor_plan_path,
-        }
-        session["ai_rooms"]         = room_data.get("rooms", ROOM_CATALOGUE.get(housing_type, []))
-        session["ai_room_summary"]  = room_data.get("summary", "")
-        session["ai_room_source"]   = room_data.get("source", "housing_type_only")
-        session["ai_room_confidence"] = room_data.get("confidence", "medium")
-        session.modified = True
-
-        persist_brief()
+        project_set(
+            step1 = {
+                "housing_type":       housing_type,
+                "housing_type_label": HOUSING_LABELS.get(housing_type, housing_type),
+                "floor_size":         request.form.get("floor_size", ""),
+                "num_floors":         request.form.get("num_floors", "1"),
+                "space_notes":        request.form.get("space_notes", ""),
+                "floor_plan_path":    floor_plan_path,
+            },
+            ai_rooms           = room_data.get("rooms", ROOM_CATALOGUE.get(housing_type, [])),
+            ai_room_summary    = room_data.get("summary", ""),
+            ai_room_source     = room_data.get("source", "housing_type_only"),
+            ai_room_confidence = room_data.get("confidence", "medium"),
+        )
         return redirect(url_for("step2"))
 
     return render_template("step1.html", current_step=1,
-                           form_data=session.get("step1"))
+                           form_data=project_get("step1"))
 
 
 # ── Step 2: Inspiration ───────────────────────────────────────────────────────
@@ -1410,10 +1663,10 @@ def step1():
 def step2():
     """Step 2 — Room requirements. Runs BEFORE inspiration, so the client
     settles what rooms exist and what they need before picking a look."""
-    if "step1" not in session:
+    if not project_get("step1"):
         return redirect(url_for("step1"))
 
-    housing_type = session["step1"]["housing_type"]
+    housing_type = project_get("step1")["housing_type"]
     rooms = get_rooms_for_type(housing_type)
 
     if request.method == "POST":
@@ -1427,8 +1680,7 @@ def step2():
                 if label.lower() not in seen:
                     seen.add(label.lower())
                     unique.append(label)
-            session["ai_rooms"] = unique
-            session.modified = True
+            project_set(ai_rooms=unique)
             rooms = get_rooms_for_type(housing_type)
 
         req_data = {}
@@ -1441,24 +1693,24 @@ def step2():
             req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
 
         req_data["project_notes"] = request.form.get("project_notes", "")
-        session["requirements"] = req_data
-        session.modified = True
-        persist_brief()
+        project_set(requirements=req_data)
+        # Rooms or requirements just changed — any existing brief is now stale.
+        project_clear("agent_result")
         return redirect(url_for("step3"))
 
     return render_template("step2.html", current_step=2, rooms=rooms,
-                           ai_room_summary=session.get("ai_room_summary", ""),
-                           saved=session.get("requirements", {}))
+                           ai_room_summary=project_get("ai_room_summary", ""),
+                           saved=project_get("requirements", {}))
 
 
 # ── Step 3: Inspiration ───────────────────────────────────────────────────────
 @app.route("/step3", methods=["GET", "POST"])
 def step3():
     """Step 3 — Inspiration images, style and palette, per confirmed room."""
-    if "step1" not in session:
+    if not project_get("step1"):
         return redirect(url_for("step1"))
 
-    housing_type = session["step1"]["housing_type"]
+    housing_type = project_get("step1")["housing_type"]
     rooms = get_rooms_for_type(housing_type)
 
     if request.method == "POST":
@@ -1478,7 +1730,7 @@ def step3():
             save_upload(f, "inspo/overall") for f in overall_files if f and f.filename
         ]
 
-        session["inspiration"] = {
+        project_set(inspiration={
             "design_style":   style,
             "colour_palette": palette,
             "colour_hex":     colour_hex.strip(),
@@ -1486,29 +1738,16 @@ def step3():
             "custom_colour":  request.form.get("custom_colour", ""),
             "inspo_paths":    saved_inspo,
             "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "") for r in rooms},
-        }
-        session.modified = True
-
-        # ── Run inspiration analysis ──────────────────────────────────────────
-        # This is the key agentic step: we send every uploaded image to Claude
-        # and get back structured visual characteristics.
-        try:
-            inspo_analysis = analyse_inspiration(session["inspiration"], rooms)
-        except Exception as e:
-            app.logger.warning(f"Inspiration analysis error: {e}")
-            inspo_analysis = _inspiration_analysis_fallback(
-                style, colour_name.strip() or "Custom",
-                request.form.get("custom_colour", ""), {}, 0
-            )
-        session["inspiration_analysis"] = inspo_analysis
-        session.modified = True
-
-        persist_brief()
+        })
+        # The analysis itself runs in step 4, where the agent has the full
+        # project to reason over. Drop any earlier result so it can't be
+        # reused against the images and style just submitted.
+        project_clear("agent_result", "inspiration_analysis", "agent_trace")
         return redirect(url_for("step4"))
 
     return render_template("step3.html", current_step=3, rooms=rooms,
-                           ai_room_summary=session.get("ai_room_summary", ""),
-                           saved=session.get("inspiration", {}))
+                           ai_room_summary=project_get("ai_room_summary", ""),
+                           saved=project_get("inspiration", {}))
 
 
 # ── Step 4: Results ────────────────────────────────────────────────────────────
@@ -1516,42 +1755,31 @@ def step3():
 def step4():
     for step, route in (("step1", "step1"), ("requirements", "step2"),
                         ("inspiration", "step3")):
-        if step not in session:
+        if not project_get(step):
             return redirect(url_for(route))
 
-    s1 = session["step1"]
-    s2 = session["inspiration"]
-    s3 = session["requirements"]
-    housing_type = s1["housing_type"]
-    rooms_base   = get_rooms_for_type(housing_type)
+    s1 = project_get("step1")
+    s2 = project_get("inspiration")
+    rooms_base = get_rooms_for_type(s1["housing_type"])
 
-    # ── Run the FORMA agent reasoning loop ───────────────────────────────────
-    result = forma_agent.run_agent(
-        step1                        = s1,
-        requirements                 = s3,
-        inspiration                  = s2,
-        rooms                        = rooms_base,
-        existing_inspiration_analysis = session.get("inspiration_analysis"),
-        existing_conflicts            = session.get("conflicts"),
-        existing_trace                = session.get("agent_trace"),
-        force_reanalyse               = False,
-    )
-
-    # ── Persist agent outputs back to session ────────────────────────────────
-    session["inspiration_analysis"] = result["inspiration_analysis"]
-    session["conflicts"]            = result["conflicts"]
-    session["agent_trace"]          = result["agent_trace"]
-    session.modified = True
-    persist_brief()
-
-    # ── Split conflicts for display ───────────────────────────────────────────
-    open_conflicts   = [c for c in result["conflicts"] if not c.get("resolved")]
-    closed_conflicts = [c for c in result["conflicts"] if c.get("resolved")]
-
-    # ── Build project dict for template ──────────────────────────────────────
     project = {**s1, **s2}
     project["rooms"] = rooms_base
+
+    # The agent takes the better part of a minute. Rather than hold the response
+    # open and leave the browser on step 3 staring at nothing, render the page
+    # now and let it fetch the result itself.
+    result = project_get("agent_result")
+    if not result:
+        return render_template("step4_loading.html", current_step=4,
+                               project=project,
+                               room_count=len(rooms_base),
+                               has_floor_plan=bool(s1.get("floor_plan_path")))
+
     project["inspiration_analysis"] = result["inspiration_analysis"]
+
+    # Conflicts are answered after the run, so read the live copy rather than
+    # the snapshot taken when the agent finished.
+    conflicts = project_get("conflicts", result["conflicts"])
 
     return render_template("step4.html", current_step=4,
                            project=project,
@@ -1559,17 +1787,56 @@ def step4():
                            room_results=result["room_results"],
                            floor_plan_svg=result["floor_plan_svg"],
                            inspo_analysis=result["inspiration_analysis"],
-                           open_conflicts=open_conflicts,
-                           closed_conflicts=closed_conflicts,
+                           open_conflicts=[c for c in conflicts if not c.get("resolved")],
+                           closed_conflicts=[c for c in conflicts if c.get("resolved")],
                            agent_trace=result["agent_trace"],
                            needs_input=result["needs_input"],
-                           refinements=session.get("refinements", []))
+                           refinements=project_get("refinements", []))
+
+
+@app.route("/step4/prepare", methods=["POST"])
+def step4_prepare():
+    """Run the agent and store the result. The loading page calls this, then
+    reloads into the cached render above."""
+    for step in ("step1", "requirements", "inspiration"):
+        if not project_get(step):
+            return jsonify({"ok": False, "error": "No active project"}), 400
+
+    if project_get("agent_result"):
+        return jsonify({"ok": True, "cached": True})
+
+    s1 = project_get("step1")
+    rooms_base = get_rooms_for_type(s1["housing_type"])
+
+    try:
+        result = forma_agent.run_agent(
+            step1                         = s1,
+            requirements                  = project_get("requirements"),
+            inspiration                   = project_get("inspiration"),
+            rooms                         = rooms_base,
+            existing_inspiration_analysis = project_get("inspiration_analysis"),
+            existing_conflicts            = project_get("conflicts"),
+            existing_trace                = project_get("agent_trace"),
+            force_reanalyse               = False,
+        )
+    except Exception as e:
+        app.logger.exception("Agent run failed")
+        return jsonify({"ok": False, "error": str(e)[:200]}), 500
+
+    project_set(
+        agent_result         = result,
+        inspiration_analysis = result["inspiration_analysis"],
+        conflicts            = result["conflicts"],
+        agent_trace          = result["agent_trace"],
+    )
+    return jsonify({"ok": True})
 
 
 # ── Regenerate ────────────────────────────────────────────────────────────────
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
-    # Simply re-run step4 — session data is preserved
+    """Throw away the stored result so step 4 runs the agent again."""
+    project_clear("agent_result", "inspiration_analysis", "agent_trace")
     return redirect(url_for("step4"))
 
 
@@ -1587,7 +1854,7 @@ def resolve_conflict():
     if not conflict_id or not decision:
         return jsonify({"ok": False, "error": "Missing conflict_id or decision"}), 400
 
-    conflicts = session.get("conflicts", [])
+    conflicts = project_get("conflicts", [])
     updated = False
     for c in conflicts:
         if c["id"] == conflict_id:
@@ -1597,9 +1864,7 @@ def resolve_conflict():
             break
 
     if updated:
-        session["conflicts"] = conflicts
-        session.modified = True
-        persist_brief()
+        project_set(conflicts=conflicts)
 
     return jsonify({"ok": True, "updated": updated})
 
@@ -1623,7 +1888,7 @@ def refine():
       }
     }
     """
-    if "step1" not in session:
+    if not project_get("step1"):
         return jsonify({"ok": False, "error": "No active project"}), 400
 
     data = request.get_json(silent=True) or {}
@@ -1632,11 +1897,11 @@ def refine():
     if not user_request or len(user_request) > 1000:
         return jsonify({"ok": False, "error": "Request must be 1–1000 characters"}), 400
 
-    s1 = session.get("step1", {})
-    s2 = session.get("inspiration", {})
-    s3 = session.get("requirements", {})
-    ia = session.get("inspiration_analysis", {})
-    conflicts = session.get("conflicts", [])
+    s1 = project_get("step1", {})
+    s2 = project_get("inspiration", {})
+    s3 = project_get("requirements", {})
+    ia = project_get("inspiration_analysis", {})
+    conflicts = project_get("conflicts", [])
 
     # Build context summary for the agent
     closed = [c for c in conflicts if c.get("resolved")]
@@ -1744,40 +2009,36 @@ def apply_refinement():
     if not user_request:
         return jsonify({"ok": False, "error": "No request provided"}), 400
 
-    # Store refinements as a list in the session so history is preserved
-    refinements = session.get("refinements", [])
+    # Store refinements as a list so history is preserved
+    refinements = project_get("refinements", [])
     refinements.append({
         "request":  user_request,
         "proposal": proposal,
         "applied_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
     })
-    session["refinements"] = refinements
-    session.modified = True
+    project_set(refinements=refinements)
 
-    # Also record in inspiration_analysis / requirements so the next
-    # run_agent() call sees the homeowner's intent
-    # We store refinement summaries as project notes additions
-    existing_notes = session.get("requirements", {}).get("project_notes", "")
+    # Also record in requirements so the next run_agent() call sees the
+    # homeowner's intent. We store refinement summaries as project notes.
+    existing_notes = project_get("requirements", {}).get("project_notes", "")
     refinement_note = f"\n[Refinement] {proposal.get('summary', user_request)}"
     if refinement_note not in existing_notes:
-        req = session.get("requirements", {})
+        req = project_get("requirements", {})
         req["project_notes"] = (existing_notes + refinement_note).strip()
-        session["requirements"] = req
-        session.modified = True
+        project_set(requirements=req)
 
-    persist_brief()
     return jsonify({"ok": True})
 
 
 # ── Export brief as plain text ─────────────────────────────────────────────────
 @app.route("/export-brief")
 def export_brief():
-    if "step1" not in session:
+    if not project_get("step1"):
         return redirect(url_for("index"))
 
-    s1 = session.get("step1", {})
-    s2 = session.get("inspiration", {})
-    s3 = session.get("requirements", {})
+    s1 = project_get("step1", {})
+    s2 = project_get("inspiration", {})
+    s3 = project_get("requirements", {})
     housing_type = s1.get("housing_type", "")
     rooms_base   = get_rooms_for_type(housing_type)
 

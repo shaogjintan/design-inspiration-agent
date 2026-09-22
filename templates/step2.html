@@ -24,7 +24,10 @@
         <input type="hidden" name="kept_rooms" value="{{ room.label }}">
         <div class="accordion-head-row">
           <button type="button" class="accordion-header">
-            <span class="accordion-header__label">{{ room.label }}</span>
+            <span class="accordion-header__label">
+              {{ room.label }}
+              {% if room.hint %}<span class="accordion-header__hint">{{ room.hint }}</span>{% endif %}
+            </span>
             <span class="accordion-header__chevron">↓</span>
           </button>
           <button type="button" class="room-icon-btn room-rename" title="Rename room" aria-label="Rename {{ room.label }}">

@@ -139,19 +139,23 @@ def run_agent(
     ))
 
     # ─────────────────────────────────────────────────────────────────────────
-    # REASON + ACT: Floor plan
+    # REASON: Where the room list came from
     # ─────────────────────────────────────────────────────────────────────────
-    # Floor plan analysis already ran in step1 POST — we record it in the trace
-    # so the judge can see it happened, but we don't re-run it here.
-    room_source   = "AI floor plan analysis" if has_floor_plan else "housing type catalogue"
-    room_confidence = "high" if has_floor_plan else "medium"
+    # The rooms are the homeowner's own confirmed list, seeded from the housing
+    # type in step 1 without a model call. The floor plan is read below, as part
+    # of the single analysis pass, and can flag mismatches but never rewrites
+    # the list the homeowner already wrote requirements against.
     trace.append(_trace_entry(
-        step    = f"{'Analysed floor plan' if has_floor_plan else 'Inferred rooms from housing type'}",
-        action  = "analyse_floor_plan",
-        reason  = "Identify all spaces in the home before building the brief.",
+        step    = f"Working from {len(rooms)} confirmed spaces",
+        action  = "load_room_list",
+        reason  = "The homeowner confirmed the room list in step 2.",
         status  = "success",
-        summary = f"Identified {len(rooms)} spaces via {room_source}.",
-        confidence = room_confidence,
+        summary = (
+            f"{len(rooms)} spaces, seeded from the housing type catalogue"
+            + (" — the uploaded floor plan is read in the analysis below."
+               if has_floor_plan else " (no floor plan uploaded).")
+        ),
+        confidence = "medium",
     ))
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -181,15 +185,30 @@ def run_agent(
             else "No prior inspiration analysis found — running now."
         )
         try:
-            inspo_analysis = _app.analyse_inspiration(inspiration, rooms)
+            inspo_analysis = _app.analyse_inspiration(
+                inspiration, rooms, step1=step1, requirements=requirements,
+            )
+            read_plan = inspo_analysis.get("read_floor_plan")
             trace.append(_trace_entry(
-                step    = f"Analysed {total_images} inspiration image{'s' if total_images != 1 else ''}",
+                step    = (
+                    f"Analysed {'the floor plan and ' if read_plan else ''}"
+                    f"{total_images} inspiration image{'s' if total_images != 1 else ''}"
+                ),
                 action  = "analyse_inspiration",
                 reason  = reason,
                 status  = "success",
                 summary = inspo_analysis.get("summary", ""),
                 confidence = inspo_analysis.get("confidence"),
             ))
+            for mismatch in inspo_analysis.get("room_list_mismatches", []):
+                trace.append(_trace_entry(
+                    step    = "Floor plan differs from the confirmed room list",
+                    action  = "flag_room_mismatch",
+                    reason  = "The homeowner's room list stands — this is flagged, not applied.",
+                    status  = "success",
+                    summary = mismatch,
+                    confidence = inspo_analysis.get("confidence"),
+                ))
         except Exception as e:
             logger.warning(f"Inspiration analysis failed: {e}")
             inspo_analysis = _app._inspiration_analysis_fallback(
@@ -365,6 +384,7 @@ def run_agent(
             "key":      key,
             "label":    room["label"],
             "concept":  concept,
+            "direction": room_inspo_note if isinstance(room_inspo_note, dict) else {},
             "items":    requirements.get(f"{key}_items", []),
             "priority": requirements.get(f"{key}_priority", "medium"),
             "budget":   requirements.get(f"{key}_budget", ""),
