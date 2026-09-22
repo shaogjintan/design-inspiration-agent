@@ -366,6 +366,15 @@ def run_agent(
     for i, room in enumerate(rooms):
         key = room["key"]
         room_inspo_note = inspo_analysis.get("room_specific", {}).get(key, "")
+        # A room the homeowner gave references to but that came back without a
+        # direction means the analysis keyed it under a name we did not match.
+        # That used to fail silently and the concept fell back to the style label.
+        if not room_inspo_note and (inspiration.get("inspo_paths") or {}).get(key):
+            logger.warning(
+                "No direction for %s though it has its own references — "
+                "analysis returned keys %s",
+                key, list(inspo_analysis.get("room_specific", {}))
+            )
         try:
             concept = _app.generate_room_concept(
                 {**room, "items_selected": requirements.get(f"{key}_items", [])},

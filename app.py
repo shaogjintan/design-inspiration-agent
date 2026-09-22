@@ -394,8 +394,39 @@ def image_to_base64(path: str) -> tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM Gateway wrapper
 # ─────────────────────────────────────────────────────────────────────────────
+def strip_code_fence(text: str) -> str:
+    """Drop a markdown code fence the model wrapped its answer in.
+
+    Every caller asks for raw HTML or raw JSON and mostly gets it, but a
+    ```html or ```json wrapper slips through often enough that it was being
+    stripped by hand in six places — and not at all around the design brief,
+    where it rendered as literal backticks on the page.
+    """
+    text = (text or "").strip()
+    if not text.startswith("```"):
+        return text
+
+    parts = text.split("```")
+    body = parts[1] if len(parts) > 1 else text.lstrip("`")
+
+    stripped = body.lstrip()
+    for tag in ("html", "json", "css", "xml"):
+        if stripped.lower().startswith(tag):
+            body = stripped[len(tag):]
+            break
+    return body.strip()
+
+
+class VisionUnavailable(RuntimeError):
+    """The gateway accepted the request but dropped the attached images.
+
+    It answers anyway, inventing plausible content, so every image-based
+    feature has to detect this rather than trust the reply.
+    """
+
+
 def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60,
-             fallback_to_mock: bool = True) -> str:
+             fallback_to_mock: bool = True, images_sent: int = 0) -> str:
     """
     Call the team's LLM Gateway.
     Falls back to the existing mock response if the gateway is unavailable.
@@ -447,10 +478,30 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
+                prompt_tokens = result.get("prompt_eval_count")
                 app.logger.info(
-                    "LLM tokens: in=%s out=%s",
-                    result.get("prompt_eval_count"), result.get("eval_count"),
+                    "LLM tokens: in=%s out=%s", prompt_tokens, result.get("eval_count"),
                 )
+
+                # Images silently dropped? Every image is worth at least ~150
+                # tokens, so a count near the bare text length means the
+                # gateway discarded them and the reply is invented.
+                if images_sent and isinstance(prompt_tokens, int):
+                    text_estimate = sum(
+                        len(m.get("content", "")) for m in messages
+                        if isinstance(m.get("content"), str)
+                    ) // 4
+                    if prompt_tokens < text_estimate + 100 * images_sent:
+                        app.logger.error(
+                            "Gateway dropped %d image(s): prompt_eval_count=%s but "
+                            "text alone is ~%s tokens. Treating vision as unavailable.",
+                            images_sent, prompt_tokens, text_estimate,
+                        )
+                        raise VisionUnavailable(
+                            f"gateway returned {prompt_tokens} prompt tokens for "
+                            f"{images_sent} image(s)"
+                        )
+
                 return result["message"]["content"]
 
         except urllib.error.HTTPError as e:
@@ -469,6 +520,9 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
                 f"LLM Gateway HTTP error {e.code}: {error_body[:200]} — using mock response"
             )
             break
+
+        except VisionUnavailable:
+            raise           # never answer an image question with invented text
 
         except Exception as e:
             last_error = str(e)
@@ -960,12 +1014,7 @@ def summarise_confirmed_rooms(step1: dict, room_names: list[str],
                    timeout=FLOORPLAN_READ_TIMEOUT,
                    fallback_to_mock=False)
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip()
+    text = strip_code_fence(raw)
 
     data = _loads_salvaging_truncation(text)
     overview  = " ".join(str(data.get("rooms", "")).split())
@@ -1039,14 +1088,10 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
                           "never prose. You are honest when a plan is illegible.",
                    max_tokens=600,   # room for the label transcription
                    timeout=FLOORPLAN_READ_TIMEOUT,
-                   fallback_to_mock=False)
+                   fallback_to_mock=False,
+                   images_sent=1)
 
-    text = raw.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip()
+    text = strip_code_fence(raw)
 
     data = _loads_salvaging_truncation(text)
     rooms = [str(r).strip() for r in (data.get("rooms") or []) if str(r).strip()]
@@ -1097,12 +1142,7 @@ def generate_room_summary(housing_type, floor_size, notes,
     fallback_rooms = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
 
     # Strip markdown code fences — the model sometimes wraps JSON in ```json ... ```
-    raw_stripped = raw.strip()
-    if raw_stripped.startswith("```"):
-        raw_stripped = raw_stripped.split("```")[1]
-        if raw_stripped.startswith("json"):
-            raw_stripped = raw_stripped[4:]
-        raw_stripped = raw_stripped.strip()
+    raw_stripped = strip_code_fence(raw)
 
     try:
         data = json.loads(raw_stripped)
@@ -1250,25 +1290,33 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
         Write the brief an interior designer would actually hand over: dense,
         specific, nothing padded. Use <p> and <strong> tags.
 
-        LENGTH — this is a hard requirement, not a target. The homeowner reads
-        this on one screen without scrolling:
-        - EXACTLY 3 paragraphs, each 2-3 sentences. Around 120 words total.
-        - Paragraph 1: the design direction. Paragraph 2: materials and light.
-          Paragraph 3: the one thing to get right, and any real caveat.
+        Where a room's own references pull against the overall direction, say so
+        plainly and back the room's references — that tension is the most useful
+        thing you can tell them, and smoothing it over makes the brief useless.
+
+        LENGTH — around 250 words, and this is a ceiling as much as a target:
+        - FOUR paragraphs, each 3-4 sentences.
+        - Paragraph 1: the design direction and what their references add up to.
+        - Paragraph 2: materials, finishes and light, named specifically.
+        - Paragraph 3: the rooms that depart from the overall direction and how
+          to make that deliberate rather than accidental. If nothing departs,
+          use this paragraph for how the rooms relate to each other instead.
+        - Paragraph 4: what to get right first, and any real caveat.
         - Cut every sentence that restates their inputs back at them. They know
           what they chose; tell them what it means.
         - No preamble, no summary sentence at the end, no headings.
         Respond with ONLY the HTML content, no surrounding tags.
     """)
 
-    return call_llm(
+    return strip_code_fence(call_llm(
         [{"role": "user", "content": prompt}],
         system="You are a senior interior designer writing a premium design brief. "
                "You always explain WHY you recommend something, connecting it to "
                "the homeowner's stated requirements or visually observed preferences. "
-               "You write short. Length is a constraint you never exceed.",
-        max_tokens=400
-    )
+               "You write tight, specific prose and never pad to reach a length. "
+               "You reply with bare HTML and never wrap it in a markdown code fence.",
+        max_tokens=700
+    ))
 
 
 def format_room_direction(entry) -> str:
@@ -1294,18 +1342,31 @@ def generate_room_concept(room: dict, style: str, palette: str, prompt_text: str
     """Generate a short room concept paragraph, grounded in inspiration analysis."""
     ia = inspo_analysis or {}
     room_direction = format_room_direction(room_inspo_note)
+
+    # The room's own direction goes first and stands on its own. It used to be
+    # a bullet appended inside the whole-home block, which meant it was dropped
+    # entirely whenever that block was empty, and read as a footnote when it
+    # was not.
     ia_context = ""
-    if ia and ia.get("dominant_styles"):
-        ia_context = f"""
-Visual preferences observed across all inspiration images:
+    if room_direction:
+        ia_context += f"""
+THIS ROOM'S OWN REFERENCES — the homeowner uploaded these FOR {room['label']}:
+{room_direction}
+
+That is the brief for this room. It overrides the chosen style, the palette and
+the whole-home preferences below. Write the room those references describe.
+"""
+
+    if ia.get("dominant_styles"):
+        ia_context += f"""
+Whole-home preferences (background only — use these to fill gaps the references
+above do not cover, never to overrule them):
 - Styles: {', '.join(ia.get('dominant_styles', []))}
 - Colours: {', '.join(ia.get('colours', [])[:4])}
 - Materials: {', '.join(ia.get('materials', [])[:4])}
 - Lighting: {', '.join(ia.get('lighting', [])[:3])}
 - Forms: {', '.join(ia.get('forms', [])[:3])}
 """
-        if room_direction:
-            ia_context += f"- Direction for this specific room: {room_direction}"
 
     msg = textwrap.dedent(f"""
         Room: {room['label']}
@@ -1315,6 +1376,11 @@ Visual preferences observed across all inspiration images:
         Items needed: {', '.join(room.get('items_selected', [])) or 'not specified'}
         {ia_context}
 
+        Where a direction for this specific room is given above, it came from
+        references the homeowner uploaded for THIS room. It outranks the
+        whole-home preferences and the style label — follow it even if it
+        clashes with them, and never split the difference between the two.
+
         Write ONE paragraph of 30-40 words on the design concept for this room.
         That is roughly two sentences — a hard limit, not a target. The card this
         sits in is small and sits beside a dozen others.
@@ -1323,12 +1389,12 @@ Visual preferences observed across all inspiration images:
         for any other space. No opening throat-clearing, no closing flourish.
     """)
 
-    return call_llm(
+    return strip_code_fence(call_llm(
         [{"role": "user", "content": msg}],
         system="You are a senior interior designer crafting room concept descriptions. "
                "You write tight, concrete prose and never exceed the word limit given.",
         max_tokens=110
-    )
+    ))
 
 
 STYLE_PALETTES = {
@@ -2101,6 +2167,68 @@ def _loads_salvaging_truncation(text: str) -> dict:
     return json.loads(text[:cut + 1] + closers)
 
 
+def extract_room_style(room_label: str, image_paths: list[str],
+                       chosen_style: str = "", palette: str = "",
+                       vibe: str = "") -> dict:
+    """Read ONE room's own references, on their own, in their own call.
+
+    The batched analysis sends up to ten images at once and the room-level
+    reading suffers for it — a neon living room came back as "soft layered
+    classical" because its single image was competing with the rest of the
+    home. One room, its own images, nothing else to average against.
+    """
+    encoded = []
+    for path in image_paths[:3]:
+        try:
+            data, _media = image_to_base64(path)
+            encoded.append(data)
+        except Exception as e:
+            app.logger.warning(f"Could not encode {path}: {e}")
+    if not encoded:
+        raise ValueError("no usable images for this room")
+
+    prompt = textwrap.dedent(f"""
+        The attached image{'s are' if len(encoded) > 1 else ' is'} what the
+        homeowner chose for their {room_label}. This is the only thing you are
+        looking at, and it is the whole brief for this room.
+
+        Describe what is ACTUALLY IN THE IMAGE. Name the real palette, the real
+        materials, the real light. If it is a dark room lit by magenta and cyan
+        strips, say so — do not translate it into something calmer, warmer or
+        more conventional, and do not let the words below soften what you see.
+
+        For context only, and never to override the image:
+        - the style label they picked elsewhere: {chosen_style or 'none'}
+        - the palette they picked elsewhere: {palette or 'none'}
+        {f'- what they said about this room: "{vibe}"' if vibe else ''}
+
+        If the image contradicts those labels, the image wins and you should say
+        plainly in "note" that it departs from them.
+
+        Reply with ONLY this JSON. Each list has EXACTLY 2 entries of 1-3 words.
+        "style_interpretation" is one sentence, 20 words maximum. "note" is one
+        short sentence:
+        {{"style_interpretation": "...", "colours": ["...", "..."],
+          "materials": ["...", "..."], "lighting": ["...", "..."],
+          "forms": ["...", "..."], "note": "..."}}
+    """).strip()
+
+    raw = call_llm([{"role": "user", "content": prompt, "images": encoded}],
+                   system="You read interior reference images literally and "
+                          "describe exactly what is in them. You reply with JSON only.",
+                   max_tokens=400,
+                   timeout=45,
+                   fallback_to_mock=False,
+                   images_sent=len(encoded))
+
+    text = strip_code_fence(raw)
+
+    data = _loads_salvaging_truncation(text)
+    if not isinstance(data, dict) or not data.get("style_interpretation"):
+        raise ValueError("no usable room style returned")
+    return data
+
+
 def analyse_inspiration(inspiration: dict, rooms: list[dict],
                         step1: dict | None = None,
                         requirements: dict | None = None) -> dict:
@@ -2204,7 +2332,10 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
 
         Total inspiration images: {image_count}{f" (of which {overall_images} are whole-home references that apply to every space)" if overall_images else ""}
 
-        {"The inspiration images are attached after the floor plan." if (image_count and has_plan) else "The inspiration images are attached. Analyse ALL of them together." if image_count else "No inspiration images were uploaded — base the visual analysis on the text cues alone."}
+        {"WHICH IMAGE IS WHICH — this mapping is the most important thing in this prompt:" if image_count else "No inspiration images were uploaded — base the visual analysis on the text cues alone."}
+{{IMAGE_MANIFEST}}
+
+        {"A reference attached to a specific room is that homeowner telling you what they want in that room. Deconstruct each one on its own terms before you think about the home as a whole: name its palette, its materials, its light, its era or genre, and the mood it is going for. Read it literally — a neon-lit room is a neon room, not a warm neutral room with an accent light. Then build that room's direction out of what you just deconstructed, and only fill the gaps from the whole-home references and the style label. A room whose reference contradicts the overall theme keeps its reference; the contradiction is information, not noise." if image_count else ""}
 
         Your task:
         1. Identify what this homeowner is visually drawn to — be specific about:
@@ -2236,6 +2367,29 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
         - floor_plan_observations: at most 4 entries, one short sentence each.
         - room_list_mismatches: only genuine differences, at most 3, one short
           sentence each. An empty list is the right answer when it all matches.
+        - THE ROOM'S OWN IMAGES WIN, and they outrank every other input here —
+          the style label, the palette, the whole-home references, and what the
+          other rooms are doing. A homeowner who attached neon references to the
+          living room wants a neon living room; one who attached dark industrial
+          references to the kitchen wants a dark industrial kitchen. Their
+          room_specific entry must read as though that reference were the only
+          brief for that room. Concretely: its colours, materials and lighting
+          come from THAT image, not from the overall palette. Do not average the
+          two, do not "balance" them, do not reach for the overall theme because
+          it would tie the home together. Record the clash in that room's "note"
+          and in possible_outliers so they can see it, then give them the room
+          they asked for.
+        - For a room that has its own reference, DO NOT NAME THE OVERALL STYLE in
+          its style_interpretation. Not as a base, not as a backdrop, not as
+          something the reference "interrupts" or "punctuates". Writing
+          "a serene Japandi backdrop with neon accents" is the failure this rule
+          exists to prevent — the room is neon, full stop. Describe only what
+          that room's own image shows, in its own vocabulary.
+        - That room's colours, materials and lighting must be read off its own
+          image. Do not carry entries over from the overall palette unless they
+          genuinely appear in that image too.
+        - If a room's direction ends up looking like every other room's, you have
+          ignored its reference. Go back and read that image again.
         - A room with no images of its own still gets a direction — derive it from
           the whole-home references and the chosen style, and say so in its "note".
         - HARD LIMITS inside room_specific, applied to every room. Exceeding them
@@ -2287,21 +2441,49 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
     # floor plan goes first and is never dropped — the prompt refers to it as
     # "IMAGE 1" — and the inspiration images are sampled evenly across rooms so
     # every space stays represented.
-    MAX_INSPO_IMAGES = 6
+    MAX_INSPO_IMAGES = 9
     encoded_images: list = [encoded_plan] if encoded_plan else []
 
-    if all_paths:
-        step = max(1, len(all_paths) // MAX_INSPO_IMAGES)
-        selected = all_paths[::step][:MAX_INSPO_IMAGES]
-        for path in selected:
-            try:
-                img_data, _media_type = image_to_base64(path)
-                encoded_images.append(img_data)
-            except Exception as e:
-                app.logger.warning(f"Could not encode inspiration image {path}: {e}")
+    # Every room that has references gets a slot before any room gets a second.
+    # Sampling the flat list evenly used to drop a room's only image, which is
+    # exactly the reference that matters most — the one room that breaks from
+    # the overall theme.
+    remaining = {k: list(v) for k, v in room_image_map.items()}
+    picked: list[tuple[str, str]] = []
+    depth = 0
+    while len(picked) < MAX_INSPO_IMAGES and any(len(v) > depth for v in remaining.values()):
+        for key, paths in remaining.items():
+            if depth < len(paths) and len(picked) < MAX_INSPO_IMAGES:
+                picked.append((key, paths[depth]))
+        depth += 1
+
+    # The model sees a flat array of images, so the prompt has to say which
+    # image belongs to which room or it cannot attribute anything.
+    label_for = {r["key"]: r["label"] for r in rooms}
+    manifest: list[str] = []
+    if encoded_plan:
+        manifest.append("  IMAGE 1: the floor plan of this home (not an inspiration reference)")
+
+    for key, path in picked:
+        try:
+            img_data, _media_type = image_to_base64(path)
+        except Exception as e:
+            app.logger.warning(f"Could not encode inspiration image {path}: {e}")
+            continue
+        encoded_images.append(img_data)
+        n = len(encoded_images)
+        where = ("a whole-home reference, applies to every space"
+                 if key == "overall"
+                 else f'a reference the homeowner chose FOR {label_for.get(key, key)}')
+        manifest.append(f"  IMAGE {n}: {where}")
 
     if encoded_images:
         message["images"] = encoded_images
+
+    manifest_block = "\n".join(manifest) or "  (no images attached)"
+    # The f-string above collapses {{...}} to {...}, so match the single braces.
+    prompt = prompt.replace("{IMAGE_MANIFEST}", manifest_block)
+    message["content"] = prompt
 
     messages = [message]
 
@@ -2318,18 +2500,21 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
         # time out into mock data that looks real.
         raw = call_llm(messages, system=INSPIRATION_ANALYSIS_SYSTEM,
                        max_tokens=min(4096, 800 + 200 * len(rooms)),
-                       timeout=min(300, 120 + 10 * len(rooms) + (60 if encoded_images else 0)))
+                       timeout=min(300, 120 + 10 * len(rooms) + (60 if encoded_images else 0)),
+                       images_sent=len(encoded_images))
         # Strip markdown code fences if the model wraps its JSON
-        raw_stripped = raw.strip()
-        if raw_stripped.startswith("```"):
-            raw_stripped = raw_stripped.split("```")[1]
-            if raw_stripped.startswith("json"):
-                raw_stripped = raw_stripped[4:]
-            raw_stripped = raw_stripped.strip()
+        raw_stripped = strip_code_fence(raw)
         data = _loads_salvaging_truncation(raw_stripped)
         if not isinstance(data, dict):
             raise ValueError("Expected a JSON object")
     except Exception as e:
+        if isinstance(e, VisionUnavailable):
+            app.logger.error("Inspiration analysis: gateway dropped the images — "
+                             "reporting a text-only result rather than inventing one")
+            return _inspiration_analysis_fallback(
+                style_text, palette_text, custom_colour, vibes, image_count,
+                images_unreadable=True,
+            )
         app.logger.warning(f"Inspiration analysis failed ({e}) — using fallback")
         return fallback
 
@@ -2338,6 +2523,19 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
             return [str(x).strip() for x in val if str(x).strip()]
         return []
 
+    # Whatever the model calls a room, map it back onto our key. It is asked for
+    # "living_room" but will sometimes answer "Living Room", and the lookup that
+    # feeds the room concept is exact — a mismatch silently drops the room's
+    # direction and the concept falls back to the style label.
+    key_aliases = {}
+    for r in rooms:
+        for alias in (r["key"], r["label"], room_key(r["label"])):
+            key_aliases[str(alias).strip().lower().replace(" ", "_").replace("/", "_")] = r["key"]
+
+    def resolve_room_key(raw):
+        probe = str(raw).strip().lower().replace(" ", "_").replace("/", "_")
+        return key_aliases.get(probe, str(raw).strip())
+
     def clean_room_specific(val):
         """Normalise to {room_key: {...}}. Older saved briefs — and a model that
         ignores the schema — give a plain string per room, so accept both."""
@@ -2345,6 +2543,7 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
             return {}
         out = {}
         for key, entry in val.items():
+            key = resolve_room_key(key)
             if isinstance(entry, str):
                 entry = {"style_interpretation": entry.strip()}
             if not isinstance(entry, dict):
@@ -2384,12 +2583,43 @@ def analyse_inspiration(inspiration: dict, rooms: list[dict],
     if not has_content:
         return fallback
 
+    # Re-read every room that has its own references, one room per call. The
+    # batched pass above has to weigh ten images at once and reliably flattens
+    # a room that breaks from the rest of the home; read on its own, it does
+    # not. This overrides whatever the batch said about that room.
+    for room in rooms:
+        key = room["key"]
+        own = [p for p in (inspo_paths.get(key) or []) if p and Path(p).exists()]
+        if not own:
+            continue
+        try:
+            focused = extract_room_style(
+                room["label"], own,
+                chosen_style = style_text,
+                palette      = palette_text,
+                vibe         = vibes.get(key, ""),
+            )
+        except Exception as e:
+            app.logger.warning(f"Focused read failed for {room['label']}: {e}")
+            continue
+
+        cleaned = clean_room_specific({key: focused}).get(key)
+        if cleaned:
+            result["room_specific"][key] = cleaned
+            app.logger.info("Focused read for %s: %s", key,
+                            cleaned.get("style_interpretation", "")[:80])
+
     return result
 
 
 def _inspiration_analysis_fallback(style: str, palette: str, custom_colour: str,
-                                    vibes: dict, image_count: int) -> dict:
-    """Text-only fallback used when LLM call fails or no images are available."""
+                                    vibes: dict, image_count: int,
+                                    images_unreadable: bool = False) -> dict:
+    """Text-only fallback used when LLM call fails or no images are available.
+
+    images_unreadable says the uploads exist but the gateway would not read
+    them. Claiming they were analysed would be a lie the homeowner acts on.
+    """
     vibe_list = [v for v in vibes.values() if v]
     styles = [style] if style else ["not specified"]
     colours = []
@@ -2406,6 +2636,9 @@ def _inspiration_analysis_fallback(style: str, palette: str, custom_colour: str,
     )
     if image_count == 0:
         summary += "no inspiration images were provided — this analysis is based on your text selections only."
+    elif images_unreadable:
+        summary += (f"your {image_count} uploaded image(s) could not be read this time, "
+                    "so this is based on your text selections only. Try again shortly.")
     else:
         summary += f"analysis was based on {image_count} uploaded image(s)."
 
@@ -2992,12 +3225,7 @@ def refine():
             max_tokens=512,
         )
         # Strip markdown fences if present
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
+        raw = strip_code_fence(raw)
         proposal = json.loads(raw)
         if not isinstance(proposal, dict):
             raise ValueError("Expected dict")

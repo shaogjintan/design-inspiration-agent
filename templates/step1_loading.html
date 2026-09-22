@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_mover.html" import mover %}
 {% set current_step = 1 %}
 {% block title %}FORMA — Reading your floor plan{% endblock %}
 {% block content %}
 
-<div class="step-wrap mo">
+<div class="step-wrap">
   <div class="mo-stage" id="mo-stage" role="status" aria-live="polite">
 
     <svg class="mo-plan" viewBox="0 0 320 196" role="img"
@@ -24,7 +25,7 @@
     <h2 class="mo-title">Reading your plan</h2>
     <p class="mo-sub" id="mo-sub">Finding the rooms in {{ housing_label }}.</p>
 
-    <div class="mo-bar" aria-hidden="true"><span class="mo-bar__fill"></span></div>
+    {{ mover() }}
   </div>
 
   <div class="mo-stage mo-stage--error" id="mo-error" hidden>

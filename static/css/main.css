@@ -1100,10 +1100,17 @@ em { font-style: italic; color: var(--gold); }
 .plan-observations li { margin-bottom: .25rem; }
 
 .room-direction {
+  display: flex;
+  flex-direction: column;
+  /* Groups had no separation at all — only the label-to-tags gap inside each
+     one — so MATERIALS landed directly against the colour tags above it. */
+  gap: .8rem;
   border-top: 1px solid var(--stone);
-  padding-top: .75rem;
+  padding-top: .85rem;
   margin-bottom: .75rem;
 }
+
+.room-direction .inspo-tag-group__label { margin-bottom: -.15rem; }
 
 .room-direction__text {
   font-size: .8rem;
@@ -1334,7 +1341,10 @@ em { font-style: italic; color: var(--gold); }
 .inspo-analysis__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+  /* Row gap well above the column gap: once a group's tags wrap to two lines
+     the next row's label would otherwise sit right on top of them. */
+  gap: 1.6rem 1rem;
+  align-items: start;
 }
 
 .inspo-tag-group {
@@ -1984,28 +1994,16 @@ em { font-style: italic; color: var(--gold); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MOVING OUT — loading screens only
-   A deliberate break from FORMA's cream/serif world, scoped entirely to .mo so
-   it cannot leak. Flat saturated blocks, heavy outlines, chunky motion. The
-   block shadow and the overshoot are idiomatic to this look, not reflexes.
+   LOADING SCENES
+   The waits between steps. Same cream/gold world as the rest of FORMA — the
+   character carrying a box is the only playful note, and it earns its place by
+   being the progress indicator rather than decoration beside one.
    ═══════════════════════════════════════════════════════════════════════════════ */
-.mo {
-  --mo-navy:   #241B4B;
-  --mo-ink:    #17102E;
-  --mo-pink:   #FF3D7F;
-  --mo-cyan:   #21D1D1;
-  --mo-yellow: #FFC93C;
-  --mo-orange: #FF7A3D;
-  --mo-green:  #5BD97D;
-  --mo-cream:  #FFF4E3;
-  --mo-soft:   #C5B9EE;   /* secondary text on navy — 7.4:1 */
-}
-
 .mo-stage {
-  background: var(--mo-navy);
-  border: 3px solid var(--mo-ink);
-  border-radius: 22px;
-  box-shadow: 8px 8px 0 var(--mo-ink);
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   padding: 2.75rem 2rem 2.25rem;
   text-align: center;
   max-width: 520px;
@@ -2014,7 +2012,7 @@ em { font-style: italic; color: var(--gold); }
 
 .mo-plan {
   width: 100%;
-  max-width: 320px;
+  max-width: 300px;
   height: auto;
   margin: 0 auto 1.75rem;
   display: block;
@@ -2023,161 +2021,159 @@ em { font-style: italic; color: var(--gold); }
 
 .mo-plan__shell {
   fill: none;
-  stroke: var(--mo-cream);
-  stroke-width: 3;
-  opacity: .35;
+  stroke: var(--stone);
+  stroke-width: 2;
   stroke-dasharray: 9 7;
 }
 
 .mo-room {
-  stroke: var(--mo-ink);
-  stroke-width: 3;
+  stroke: var(--white);
+  stroke-width: 2;
   transform-box: fill-box;
   transform-origin: center;
-  animation: mo-pop 2.6s cubic-bezier(.2, .9, .3, 1.3) infinite;
+  animation: mo-pop 2.6s cubic-bezier(.16, 1, .3, 1) infinite;
 }
 
-.mo-room--1 { fill: var(--mo-pink);   animation-delay: 0s; }
-.mo-room--2 { fill: var(--mo-cyan);   animation-delay: .12s; }
-.mo-room--3 { fill: var(--mo-yellow); animation-delay: .24s; }
-.mo-room--4 { fill: var(--mo-orange); animation-delay: .36s; }
-.mo-room--5 { fill: var(--mo-green);  animation-delay: .48s; }
-.mo-room--6 { fill: var(--mo-cyan);   animation-delay: .60s; }
+/* The app's own room tints, so the scene matches the floor plan on page 4. */
+.mo-room--1 { fill: #C9D4E0; animation-delay: 0s; }
+.mo-room--2 { fill: #D4C5B0; animation-delay: .12s; }
+.mo-room--3 { fill: #B8D4C8; animation-delay: .24s; }
+.mo-room--4 { fill: #E8D5C4; animation-delay: .36s; }
+.mo-room--5 { fill: #D5C9E0; animation-delay: .48s; }
+.mo-room--6 { fill: #C8D4B8; animation-delay: .60s; }
 
 @keyframes mo-pop {
-  0%, 4%   { transform: scale(.3);  opacity: 0; }
-  14%      { transform: scale(1.07); opacity: 1; }
+  0%, 4%   { transform: scale(.4);  opacity: 0; }
+  16%      { transform: scale(1);   opacity: 1; }
   20%, 86% { transform: scale(1);   opacity: 1; }
-  96%,100% { transform: scale(.3);  opacity: 0; }
+  96%,100% { transform: scale(.4);  opacity: 0; }
 }
 
-/* Arrived: every room settles and stays put. */
 .mo-stage.is-done .mo-room {
-  animation: mo-land .32s cubic-bezier(.2, .9, .3, 1.3) both;
-}
-
-@keyframes mo-land {
-  0%   { transform: scale(.9); opacity: .6; }
-  60%  { transform: scale(1.05); }
-  100% { transform: scale(1); opacity: 1; }
+  animation: none;
+  opacity: 1;
+  transform: none;
 }
 
 .mo-title {
-  font-family: var(--font-sans);
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -.02em;
-  color: var(--mo-cream);
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+  color: var(--ink);
   margin-bottom: .5rem;
 }
 
 .mo-sub {
   font-size: .875rem;
-  color: var(--mo-soft);
+  color: var(--ink-muted);
   line-height: 1.6;
   margin: 0 auto;
-  max-width: 34ch;
-}
-
-.mo-bar {
-  margin-top: 1.75rem;
-  height: 12px;
-  border: 3px solid var(--mo-ink);
-  border-radius: 99px;
-  background: rgba(255, 244, 227, .12);
-  overflow: hidden;
-}
-
-/* Full width, scaled down — so the sweep and the fill-up are both transforms
-   and neither touches layout. */
-.mo-bar__fill {
-  display: block;
-  height: 100%;
-  width: 100%;
-  border-radius: 99px;
-  background: var(--mo-yellow);
-  transform-origin: left center;
-  transform: translateX(-45%) scaleX(.4);
-  animation: mo-slide 1.5s cubic-bezier(.65, 0, .35, 1) infinite;
-}
-
-@keyframes mo-slide {
-  0%   { transform: translateX(-45%) scaleX(.4); }
-  100% { transform: translateX(105%) scaleX(.4); }
-}
-
-.mo-stage.is-done .mo-bar__fill {
-  animation: none;
-  background: var(--mo-green);
-  transform: none;
-  transition: transform .35s cubic-bezier(.16, 1, .3, 1),
-              background-color .2s linear;
+  max-width: 36ch;
 }
 
 .mo-stage--error { padding-bottom: 2rem; }
 .mo-stage--error .btn { margin-top: 1.25rem; }
 
-/* ── Step 4's working list, in the same world ─────────────────────────────── */
-.mo .working {
-  background: var(--mo-navy);
-  border: 3px solid var(--mo-ink);
-  border-radius: 22px;
-  box-shadow: 8px 8px 0 var(--mo-ink);
-  padding: 2.25rem 2rem 1.75rem;
+/* ── The mover ────────────────────────────────────────────────────────────────
+   A figure carrying a box along the track. Where it stands IS the progress, so
+   the walk and the trail share one duration.
+   ───────────────────────────────────────────────────────────────────────────── */
+.mover {
+  position: relative;
+  margin-top: 2.25rem;
 }
 
-.mo .working__step:not(:last-child)::before { background: rgba(255, 244, 227, .22); }
-.mo .working__step.is-done:not(:last-child)::before { background: var(--mo-green); }
-
-.mo .working__marker {
-  border-width: 3px;
-  border-color: rgba(255, 244, 227, .4);
-  background: transparent;
-  width: 22px;
-  height: 22px;
+.mover__track {
+  position: relative;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--cream-dark);
+  overflow: hidden;
 }
 
-.mo .working__step.is-active .working__marker { border-color: var(--mo-yellow); }
-.mo .working__step.is-active .working__marker::after { border-color: var(--mo-yellow); border-width: 3px; }
-
-.mo .working__step.is-done .working__marker {
-  border-color: var(--mo-green);
-  background: var(--mo-green);
-  color: var(--mo-ink);
+.mover__fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 99px;
+  background: var(--gold);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: mover-fill 2.8s cubic-bezier(.37, 0, .63, 1) infinite;
 }
 
-.mo .working__step:not(:last-child)::before { left: 10px; }
-
-.mo .working__title { color: var(--mo-soft); font-weight: 500; }
-.mo .working__step.is-active .working__title { color: var(--mo-cream); font-weight: 800; }
-.mo .working__step.is-done .working__title { color: var(--mo-soft); }
-.mo .working__detail { color: var(--mo-soft); }
-
-.mo .working__foot {
-  border-top-color: rgba(255, 244, 227, .18);
-  color: var(--mo-soft);
+@keyframes mover-fill {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
 }
 
-.mo .working-error {
-  background: var(--mo-navy);
-  border: 3px solid var(--mo-ink);
-  border-radius: 22px;
-  box-shadow: 8px 8px 0 var(--mo-ink);
+.mover__walker {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  width: 100%;
+  margin-bottom: -1px;
+  animation: mover-walk 2.8s cubic-bezier(.37, 0, .63, 1) infinite;
 }
 
-.mo .working-error__msg { color: var(--mo-cream); }
+@keyframes mover-walk {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(calc(100% - 44px)); }
+}
 
-.mo .step-header__tag { color: var(--mo-yellow); }
+.mover__figure {
+  width: 44px;
+  height: 36px;
+  display: block;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mover__box {
+  fill: var(--gold-light);
+  stroke: var(--ink);
+}
+
+/* A two-frame walk cycle — cheaper and more legible at this size than rotation. */
+.mover__legs { animation: mover-step .34s steps(1) infinite; }
+.mover__legs--b { animation-delay: .17s; }
+
+@keyframes mover-step {
+  0%,   49.9% { opacity: 1; }
+  50%, 100%   { opacity: 0; }
+}
+
+/* No bob: the walk moves the legs only. The figure's height changes when it
+   jumps and at no other time, so the jump reads as a jump. */
+
+/* Arrived: the walker parks at the end and the trail completes. */
+.mo-stage.is-done .mover__walker,
+.mo-stage.is-done .mover__fill {
+  animation-play-state: paused;
+}
+
+.mo-stage.is-done .mover__fill {
+  animation: none;
+  transform: scaleX(1);
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.mo-stage.is-done .mover__legs--b { animation: none; }
+
+.mo-stage.is-done .mover__legs--a { animation: none; opacity: 1; }
 
 @media (max-width: 640px) {
-  .mo-stage { padding: 2rem 1.25rem 1.75rem; box-shadow: 5px 5px 0 var(--mo-ink); }
-  .mo .working { padding: 1.75rem 1.25rem 1.4rem; box-shadow: 5px 5px 0 var(--mo-ink); }
+  .mo-stage { padding: 2rem 1.25rem 1.75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Rooms stay put and visible; the bar stops travelling. */
   .mo-room { animation: none; opacity: 1; transform: none; }
-  .mo-bar__fill { animation: none; transform: none; }
+  .mover__walker { animation: none; }
+  .mover__fill { animation: mover-fill 2.8s linear infinite; }
+  .mover__legs--b { animation: none; }
 }
 
 /* ── Busy submit ──────────────────────────────────────────────────────────────
@@ -2332,4 +2328,96 @@ em { font-style: italic; color: var(--gold); }
   border-top: 1px solid var(--cream-dark);
   color: var(--ink-muted);
   font-size: .85rem;
+}
+
+/* ── Iris transition ──────────────────────────────────────────────────────────
+   Starting a project cuts hard to black, then the next page opens out of a
+   point at the centre. The reveal eases IN — it creeps open and then rushes.
+   ───────────────────────────────────────────────────────────────────────────── */
+.iris-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  /* The site's own ink, warmed with a faint gold bloom at the point the next
+     page opens from — so the blackout reads as FORMA rather than flat black. */
+  background:
+    radial-gradient(circle at 50% 50%,
+                    rgba(201, 169, 110, .16) 0%,
+                    rgba(201, 169, 110, .05) 28%,
+                    transparent 55%),
+    var(--ink);
+}
+
+/* Arriving: the page itself is the growing circle, over black. */
+html.is-opening { background: var(--ink); }   /* matches .iris-cover */
+
+html.is-opening body {
+  animation: iris-open .78s cubic-bezier(.45, 0, .85, .3) both;
+}
+
+@keyframes iris-open {
+  from { clip-path: circle(0% at 50% 50%); }
+  to   { clip-path: circle(75% at 50% 50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.is-opening body { animation: none; }
+}
+
+/* ── Mover, determinate ───────────────────────────────────────────────────────
+   On page 4 the same figure carries real progress: --mover-progress (0-1) is
+   set from the stage the agent is on, so where it stands is where the run is.
+   ───────────────────────────────────────────────────────────────────────────── */
+.mover--steps {
+  /* The walker is absolutely positioned at bottom:100% of this box, so padding
+     here would push the track away from the figure rather than the figure away
+     from the text. The clearance has to be margin, outside the box: 36px of
+     figure plus 13px of hop, then breathing room. */
+  margin-top: 8.5rem;
+  border-top: 1px solid var(--cream-dark);
+  padding-top: 0;
+}
+
+.mover--steps .mover__walker,
+.mover--steps .mover__fill {
+  animation: none;
+  transition: transform .8s cubic-bezier(.16, 1, .3, 1);
+}
+
+.mover--steps .mover__walker {
+  transform: translateX(calc((100% - 44px) * var(--mover-progress, 0)));
+}
+
+.mover--steps .mover__fill {
+  transform: scaleX(var(--mover-progress, 0));
+}
+
+/* The legs keep stepping while there is still work to do. */
+.mover--steps .mover__legs { animation-play-state: running; }
+.working.is-done .mover--steps .mover__legs--b { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mover--steps .mover__walker,
+  .mover--steps .mover__fill { transition: none; }
+}
+
+/* The jump fires on a click anywhere on the page, not on a timer. Its own
+   element, so it never fights the walker's horizontal travel. No scaling —
+   the figure keeps its shape and simply leaves the ground and lands. */
+.mover__figure.is-hopping {
+  animation: mover-hop .72s cubic-bezier(.33, 0, .3, 1) 1;
+}
+
+@keyframes mover-hop {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(-30px); }   /* up */
+  62%  { transform: translateY(0); }       /* land */
+  76%  { transform: translateY(-8px); }    /* bounce */
+  88%  { transform: translateY(0); }
+  94%  { transform: translateY(-2px); }    /* settle */
+  100% { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mover__figure.is-hopping { animation: none; }
 }

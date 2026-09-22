@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_mover.html" import mover %}
 {% set current_step = 4 %}
 {% block title %}FORMA — Reading your project{% endblock %}
 {% block content %}
 
-<div class="step-wrap step-wrap--wide mo">
+<div class="step-wrap step-wrap--wide">
   <div class="step-header">
     <div class="step-header__tag">Step 04</div>
     <h2 class="step-header__title">Your Design Vision</h2>
@@ -59,6 +60,10 @@
       {% endfor %}
     </ol>
 
+    {# Same mover as pages 2 and 3, but here it carries real progress: its
+       position along the track is which stage the agent is on. #}
+    {{ mover(determinate=true) }}
+
     <p class="working__foot" id="working-foot">Leave this page open — it updates on its own.</p>
   </div>
 
@@ -73,6 +78,12 @@
 <script>
 (function () {
   const stepEls = Array.from(document.querySelectorAll('.working__step'));
+  const moverEl = document.querySelector('.mover--steps');
+
+  // The figure's position on the track is which stage we are on.
+  function setProgress(fraction) {
+    if (moverEl) moverEl.style.setProperty('--mover-progress', fraction.toFixed(3));
+  }
   const foot    = document.getElementById('working-foot');
   const errBox  = document.getElementById('working-error');
   const errMsg  = document.getElementById('working-error-msg');
@@ -91,6 +102,9 @@
       el.classList.toggle('is-done',   n < i);
       el.classList.toggle('is-active', n === i);
     });
+    // Sit just short of the end while working — the last step of the walk
+    // belongs to the response actually landing.
+    setProgress(stepEls.length ? Math.min(i / stepEls.length, 0.92) : 0);
   }
 
   let timer = null;
@@ -106,6 +120,8 @@
       el.classList.remove('is-active');
       el.classList.add('is-done');
     });
+    setProgress(1);
+    working.classList.add('is-done');
     foot.textContent = 'Done — opening your brief.';
   }
 
