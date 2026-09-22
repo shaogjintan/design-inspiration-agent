@@ -1433,6 +1433,12 @@ _ITEM_GLYPHS = [
     (("refrigerator", "fridge", "wine chiller"),        "Fridge",      "fridge",      0.16, 0.20),
     (("oven", "hob", "hood", "microwave", "stove"),     "Cooktop",     "cooktop",     0.22, 0.16),
     (("dishwasher", "washing machine", "washer", "dryer"), "Appliance","appliance",   0.16, 0.16),
+    # Laundry and utility fittings had no entry, so a service yard fell through
+    # to the generic "Furniture" blob below.
+    (("utility sink", "laundry sink", "sink"),          "Sink",        "vanity",      0.18, 0.14),
+    (("laundry rack", "drying rack", "ironing"),        "Drying rack", "storage",     0.26, 0.10),
+    (("water heater", "boiler", "ventilation", "ev charger"), "Services", "appliance", 0.14, 0.14),
+    (("bicycle", "bike rack"),                          "Bike rack",   "storage",     0.22, 0.12),
     (("pantry", "cabinet", "storage", "sideboard", "buffet", "shelv", "bookshelf", "display"), "Storage", "storage", 0.34, 0.14),
     (("wardrobe", "closet", "walk-in"),                 "Wardrobe",    "wardrobe",    0.30, 0.16),
     (("dresser", "vanity table"),                       "Dresser",     "dresser",     0.26, 0.14),
@@ -1490,7 +1496,17 @@ def _items_to_glyphs(items: list, room_name: str) -> list[dict]:
         return [spec("Sofa", "sofa", 0.48, 0.22), spec("Coffee table", "coffee", 0.30, 0.18)]
     if "balcony" in n or "garden" in n or "outdoor" in n or "alfresco" in n:
         return [spec("Plant", "plant", 0.18, 0.18)]
-    return [spec("Furniture", "storage", 0.34, 0.14)]
+    if "yard" in n or "utility" in n or "laundry" in n:
+        return [spec("Appliance", "appliance", 0.16, 0.16),
+                spec("Drying rack", "storage", 0.26, 0.10)]
+    if "shelter" in n or "store" in n or "storage" in n:
+        return [spec("Storage", "storage", 0.34, 0.14)]
+    if "garage" in n or "carport" in n:
+        return [spec("Storage", "storage", 0.34, 0.14)]
+
+    # Nothing sensible to draw. An empty room reads better than a box labelled
+    # "Furniture", which says nothing and looks like a mistake.
+    return []
 
 
 # ── 2D top-down furniture icon drawers ───────────────────────────────────────
@@ -1719,8 +1735,10 @@ def generate_room_concept_visual(room_label: str, style: str,
     # out in a grid so each one is big enough to read.
     glyphs = _items_to_glyphs(items, room_label)
     n = len(glyphs)
-    cols = 1 if n == 1 else (2 if n <= 4 else 3)
-    rows = -(-n // cols)  # ceil
+    # An empty plate is correct for a space with nothing to furnish; the swatch
+    # still carries the room's palette and material tag.
+    cols = 1 if n <= 1 else (2 if n <= 4 else 3)
+    rows = max(1, -(-n // cols))  # ceil, never zero
 
     inner_w = room_right - room_left
     inner_h = room_bottom - room_top
@@ -1784,6 +1802,8 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
     system the room concept visuals use — so both views show the homeowner's
     actual selected items, black-outlined and labelled, and stay consistent."""
     glyphs = _items_to_glyphs(items, room_name)
+    if not glyphs:
+        return ""      # a room with nothing to furnish draws nothing
     parts: list[str] = []
     # Grid-place the glyphs inside the room cell so labels don't collide.
     n = len(glyphs)
