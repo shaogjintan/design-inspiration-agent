@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}FORMA — Interior Design Studio{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <!-- NAV -->
+  <header class="nav">
+    <a href="{{ url_for('index') }}" class="nav__logo">FORMA</a>
+    <div class="nav__tagline">Design Intelligence Studio</div>
+    <div class="nav__steps">
+      {% set steps = [('Step 1', 'Space'), ('Step 2', 'Requirements'), ('Step 3', 'Inspiration'), ('Step 4', 'Vision')] %}
+      {% for label, name in steps %}
+        {% set i = loop.index %}
+        <div class="nav__step {% if current_step == i %}nav__step--active{% elif current_step > i %}nav__step--done{% endif %}">
+          <span class="nav__step-num">{{ i }}</span>
+          <span class="nav__step-name">{{ name }}</span>
+        </div>
+        {% if not loop.last %}<div class="nav__step-line {% if current_step > i %}nav__step-line--done{% endif %}"></div>{% endif %}
+      {% endfor %}
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrap">
+          {% for category, message in messages %}
+            <div class="flash flash--{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span>FORMA &copy; 2026</span>
+    <span class="footer__sep">·</span>
+    <span>Powered by AWS Bedrock &amp; Claude Sonnet 4.5</span>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

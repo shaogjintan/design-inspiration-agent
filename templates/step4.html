@@ -1,0 +1,606 @@
+{% extends "base.html" %}
+{% set current_step = 4 %}
+{% block title %}FORMA — Your Vision{% endblock %}
+{% block content %}
+
+<div class="step-wrap step-wrap--wide">
+  <div class="step-header">
+    <div class="step-header__tag">Step 04</div>
+    <h2 class="step-header__title">Your Design Vision</h2>
+    <p class="step-header__desc">AI-generated suggestions based on your inputs. Share this brief with your interior designer.</p>
+  </div>
+
+  <!-- Project Summary Card -->
+  <div class="summary-bar">
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Housing</span>
+      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Style</span>
+      <span class="summary-bar__val">{{ project.design_style }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Palette</span>
+      <span class="summary-bar__val">
+        {% if project.colour_hex %}
+        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
+        {% endif %}
+        {{ project.colour_name }}
+      </span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Rooms</span>
+      <span class="summary-bar__val">{{ project.rooms | length }}</span>
+    </div>
+  </div>
+
+  <!-- FORMA Inspiration Analysis -->
+  {% if inspo_analysis %}
+  <div class="result-section">
+    <h3 class="result-section__title">◉ What FORMA Noticed</h3>
+    <div class="inspo-analysis-card">
+
+      <div class="inspo-analysis__summary">
+        <div class="inspo-analysis__summary-icon">◈</div>
+        <p class="inspo-analysis__summary-text">{{ inspo_analysis.summary }}</p>
+        <div class="inspo-analysis__meta">
+          {% if inspo_analysis.image_count > 0 %}
+            Analysed {{ inspo_analysis.image_count }} inspiration image{{ 's' if inspo_analysis.image_count != 1 else '' }}
+          {% else %}
+            Based on style &amp; palette selections (no images uploaded)
+          {% endif %}
+          · Confidence:
+          <span class="confidence-badge confidence-badge--{{ inspo_analysis.confidence }}">
+            {{ inspo_analysis.confidence }}
+          </span>
+        </div>
+      </div>
+
+      <div class="inspo-analysis__grid">
+        {% if inspo_analysis.dominant_styles %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Styles</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.dominant_styles %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if inspo_analysis.colours %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Colours</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.colours %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if inspo_analysis.materials %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Materials</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.materials %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if inspo_analysis.lighting %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Lighting</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.lighting %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if inspo_analysis.forms %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Forms</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.forms %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if inspo_analysis.common_patterns %}
+        <div class="inspo-tag-group">
+          <div class="inspo-tag-group__label">Patterns</div>
+          <div class="inspo-tag-group__tags">
+            {% for item in inspo_analysis.common_patterns %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if inspo_analysis.possible_outliers %}
+      <div class="inspo-analysis__outliers">
+        <div class="inspo-analysis__outlier-icon">!</div>
+        <div>
+          <strong>FORMA noticed something:</strong>
+          Some of your references differ from the overall direction —
+          {% for o in inspo_analysis.possible_outliers %}{{ o }}{% if not loop.last %}, {% endif %}{% endfor %}.
+          You can address this in the refinement section below.
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- FORMA Conflict Checkpoints -->
+  {% if open_conflicts %}
+  <div class="result-section" id="conflicts-section">
+    <h3 class="result-section__title">⚑ FORMA needs your input</h3>
+    <p class="result-section__desc">Answer these questions so FORMA can give you a more accurate design direction.</p>
+
+    {% for conflict in open_conflicts %}
+    <div class="conflict-card conflict-card--{{ conflict.severity }}" id="conflict-{{ conflict.id }}" data-conflict-id="{{ conflict.id }}">
+      <div class="conflict-card__header">
+        <span class="conflict-card__type-badge conflict-card__type-badge--{{ conflict.type }}">{{ conflict.type }}</span>
+        <strong class="conflict-card__title">{{ conflict.title }}</strong>
+      </div>
+      <p class="conflict-card__desc">{{ conflict.description }}</p>
+      <p class="conflict-card__question">{{ conflict.question }}</p>
+      <div class="conflict-card__options">
+        {% for opt in conflict.options %}
+        <button type="button"
+                class="conflict-option-btn"
+                data-conflict-id="{{ conflict.id }}"
+                data-decision="{{ opt }}">
+          {{ opt }}
+        </button>
+        {% endfor %}
+      </div>
+      <div class="conflict-card__resolved" style="display:none;">
+        <span class="conflict-resolved-icon">✓</span>
+        <span class="conflict-resolved-text"></span>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="conflicts-cta" id="conflicts-cta" style="display:none;">
+      <p>All questions answered. Regenerate to apply your decisions to the brief.</p>
+      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
+        <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if closed_conflicts %}
+  <div class="result-section">
+    <h3 class="result-section__title">✓ Decisions recorded</h3>
+    <p class="result-section__desc">These answers have been applied to your design brief below. FORMA won't ask them again.</p>
+    <div class="decisions-list">
+      {% for conflict in closed_conflicts %}
+      <div class="decision-item">
+        <div class="decision-item__q">{{ conflict.question or conflict.title }}</div>
+        <div class="decision-item__a"><span class="decision-item__check">✓</span> You chose: <strong>{{ conflict.decision }}</strong></div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- AI Design Brief -->
+  <div class="result-section">
+    <h3 class="result-section__title">◈ AI Design Brief</h3>
+    <div class="brief-card">
+      <div class="brief-card__body">{{ ai_brief | safe }}</div>
+    </div>
+  </div>
+
+  <!-- Room Suggestions -->
+  <div class="result-section">
+    <h3 class="result-section__title">◉ Room-by-Room Suggestions</h3>
+
+    <div class="room-results">
+      {% for room in room_results %}
+      <div class="room-result-card">
+        <div class="room-result-card__header">
+          <div class="room-result-card__name">{{ room.label }}</div>
+          {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
+        </div>
+
+        <!-- Data-driven concept visual (stylised, not a photoreal render) -->
+        <div class="room-concept-visual">
+          {% if room.visual %}
+            {{ room.visual | safe }}
+          {% else %}
+          <div class="render-placeholder">
+            <div class="render-placeholder__inner">
+              <div class="render-placeholder__icon">◫</div>
+              <div class="render-placeholder__text">{{ room.label }}</div>
+            </div>
+          </div>
+          {% endif %}
+          <div class="room-concept-visual__tag">Concept impression</div>
+        </div>
+
+        <div class="room-result-card__desc">
+          <div class="room-result-card__prompt-label">AI Concept</div>
+          <p class="room-result-card__concept">{{ room.concept }}</p>
+
+          {% if room["items"] %}
+          <div class="room-result-card__items">
+            <span class="room-result-card__items-label">Key items:</span>
+            {% for item in room["items"] %}
+            <span class="tag">{{ item }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- 2D Floor Plan -->
+  <div class="result-section">
+    <h3 class="result-section__title">◰ Space &amp; Furniture Overview</h3>
+    <p class="result-section__desc">A schematic of your detected rooms with indicative furniture placement based on your selections. Not a scaled reconstruction of your uploaded plan.</p>
+    <div class="floorplan-card">
+      <div class="floorplan-render" id="floorplan-svg">
+        {{ floor_plan_svg | safe }}
+      </div>
+      <div class="floorplan-legend">
+        {% for room in room_results %}
+        <div class="legend-item">
+          <span class="legend-dot" style="background:{{ room.colour }};"></span>
+          <span class="legend-label">{{ room.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Designer Brief Export -->
+  <div class="result-section">
+    <h3 class="result-section__title">📋 Designer Brief</h3>
+    <div class="brief-export">
+      <p class="brief-export__desc">A complete brief ready to share with your interior designer, including all preferences, requirements, and AI suggestions.</p>
+      <div class="brief-export__actions">
+        <button class="btn btn--outline" onclick="window.print()">Print / Save PDF</button>
+        <a href="{{ url_for('export_brief') }}" class="btn btn--outline">Download Brief (.txt)</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Refine with FORMA ────────────────────────────────────────────────── -->
+  <div class="result-section" id="refine-section">
+    <h3 class="result-section__title">✦ Refine with FORMA</h3>
+    <p class="result-section__desc">
+      Tell FORMA what you'd like to change — in plain language.
+      FORMA will propose a targeted update and ask you to approve before applying it.
+    </p>
+
+    {% if refinements %}
+    <div class="refinements-history">
+      <div class="refinements-history__label">Applied refinements</div>
+      {% for r in refinements %}
+      <div class="refinements-history__item">
+        <span class="refinements-history__req">"{{ r.request }}"</span>
+        {% if r.proposal and r.proposal.summary %}
+        <span class="refinements-history__result">→ {{ r.proposal.summary }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="refine-input-row">
+      <textarea id="refine-input"
+                class="form-input form-textarea refine-textarea"
+                rows="2"
+                maxlength="1000"
+                placeholder='e.g. "The living room feels too plain — add some colour but keep it calming."'></textarea>
+      <button type="button" id="refine-submit-btn" class="btn btn--primary">
+        Ask FORMA →
+      </button>
+    </div>
+    <div class="refine-char-count"><span id="refine-char-num">0</span> / 1000</div>
+
+    <!-- Proposal box (hidden until agent responds) -->
+    <div id="refine-proposal-box" class="refine-proposal-box" style="display:none;">
+      <div class="refine-proposal-box__header">
+        <span class="refine-proposal-box__icon">◈</span>
+        <strong class="refine-proposal-box__title" id="refine-proposal-title"></strong>
+      </div>
+      <div class="refine-feasibility" id="refine-feasibility" style="display:none;">
+        <span class="refine-feasibility__badge" id="refine-feasibility-badge"></span>
+        <span class="refine-feasibility__note" id="refine-feasibility-note"></span>
+      </div>
+      <p class="refine-proposal-box__text" id="refine-proposal-text"></p>
+      <div class="refine-proposal-box__changes" id="refine-proposal-changes"></div>
+      <div class="refine-proposal-box__affected" id="refine-proposal-affected"></div>
+      <div class="refine-proposal-box__reasoning" id="refine-proposal-reasoning"></div>
+      <div class="refine-proposal-box__actions">
+        <button type="button" id="refine-apply-btn" class="btn btn--primary btn--sm">Apply changes</button>
+        <button type="button" id="refine-cancel-btn" class="btn btn--ghost btn--sm">Cancel</button>
+      </div>
+      <div id="refine-applied-msg" class="refine-applied-msg" style="display:none;">
+        ✓ Applied. Regenerating vision…
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Agent Activity ───────────────────────────────────────────────────── -->
+  {% if agent_trace %}
+  <div class="result-section">
+    <h3 class="result-section__title">
+      ◉ Agent Activity
+      {% if overall_confidence %}
+      <span class="confidence-badge confidence-badge--{{ overall_confidence }}" style="margin-left:.6rem;vertical-align:middle;">
+        overall confidence: {{ overall_confidence }}
+      </span>
+      {% endif %}
+      <button type="button" class="trace-toggle-btn" id="trace-toggle" aria-expanded="false">
+        Show
+      </button>
+    </h3>
+    <p class="result-section__desc">Every action FORMA took to produce this brief, each with a confidence signal.</p>
+
+    <div class="agent-trace" id="agent-trace" style="display:none;">
+      {% for entry in agent_trace %}
+      <div class="trace-entry trace-entry--{{ entry.status }}">
+        <div class="trace-entry__icon">
+          {% if entry.status == 'success' %}✓
+          {% elif entry.status == 'needs_input' %}→
+          {% elif entry.status == 'failed' %}✗
+          {% elif entry.status == 'skipped' %}↷
+          {% else %}·
+          {% endif %}
+        </div>
+        <div class="trace-entry__body">
+          <div class="trace-entry__step">{{ entry.step }}</div>
+          {% if entry.summary %}
+          <div class="trace-entry__summary">{{ entry.summary }}</div>
+          {% endif %}
+          {% if entry.confidence %}
+          <span class="confidence-badge confidence-badge--{{ entry.confidence }}">{{ entry.confidence }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Iterate bar -->
+  <div class="iterate-bar">
+    <div class="iterate-bar__text">
+      <strong>Happy with the direction?</strong> Download your brief and share it with your designer.
+    </div>
+    <div class="iterate-bar__actions">
+      <a href="{{ url_for('step1') }}" class="btn btn--ghost btn--sm">Start Over</a>
+      <a href="{{ url_for('step2') }}" class="btn btn--ghost btn--sm">← Edit Requirements</a>
+      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
+        <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  // ── Animate room cards in ─────────────────────────────────────────────────
+  const cards = document.querySelectorAll('.room-result-card');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        setTimeout(() => e.target.classList.add('room-result-card--visible'), i * 80);
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  cards.forEach(c => observer.observe(c));
+
+  // ── Agent trace toggle ────────────────────────────────────────────────────
+  const traceToggle = document.getElementById('trace-toggle');
+  const tracePanel  = document.getElementById('agent-trace');
+  if (traceToggle && tracePanel) {
+    traceToggle.addEventListener('click', () => {
+      const open = tracePanel.style.display !== 'none';
+      tracePanel.style.display = open ? 'none' : 'block';
+      traceToggle.textContent  = open ? 'Show' : 'Hide';
+      traceToggle.setAttribute('aria-expanded', String(!open));
+    });
+  }
+
+  // ── Conflict resolution ───────────────────────────────────────────────────
+  document.querySelectorAll('.conflict-option-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const conflictId = btn.dataset.conflictId;
+      const decision   = btn.dataset.decision;
+      const card       = document.getElementById('conflict-' + conflictId);
+      if (!card) return;
+
+      card.querySelectorAll('.conflict-option-btn').forEach(b => b.disabled = true);
+
+      try {
+        const res = await fetch('/resolve-conflict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conflict_id: conflictId, decision: decision }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          card.querySelector('.conflict-card__options').style.display = 'none';
+          const resolvedEl = card.querySelector('.conflict-card__resolved');
+          resolvedEl.querySelector('.conflict-resolved-text').textContent = decision;
+          resolvedEl.style.display = 'flex';
+          card.classList.add('conflict-card--resolved');
+
+          const remaining = document.querySelectorAll('.conflict-card:not(.conflict-card--resolved)');
+          if (remaining.length === 0) {
+            const cta = document.getElementById('conflicts-cta');
+            if (cta) cta.style.display = 'block';
+          }
+        } else {
+          card.querySelectorAll('.conflict-option-btn').forEach(b => b.disabled = false);
+          alert('Could not save your answer. Please try again.');
+        }
+      } catch (err) {
+        card.querySelectorAll('.conflict-option-btn').forEach(b => b.disabled = false);
+        alert('Network error. Please try again.');
+      }
+    });
+  });
+
+  // ── Refine with FORMA ─────────────────────────────────────────────────────
+  const refineInput      = document.getElementById('refine-input');
+  const refineSubmitBtn  = document.getElementById('refine-submit-btn');
+  const refineProposalBox = document.getElementById('refine-proposal-box');
+  const refineApplyBtn   = document.getElementById('refine-apply-btn');
+  const refineCancelBtn  = document.getElementById('refine-cancel-btn');
+  const refineAppliedMsg = document.getElementById('refine-applied-msg');
+  const refineCharNum    = document.getElementById('refine-char-num');
+
+  let currentProposal = null;
+  let currentRequest  = '';
+
+  if (refineInput) {
+    refineInput.addEventListener('input', () => {
+      if (refineCharNum) refineCharNum.textContent = refineInput.value.length;
+    });
+  }
+
+  if (refineSubmitBtn) {
+    refineSubmitBtn.addEventListener('click', async () => {
+      const req = (refineInput?.value || '').trim();
+      if (!req) { refineInput?.focus(); return; }
+
+      refineSubmitBtn.disabled = true;
+      refineSubmitBtn.textContent = 'FORMA is thinking…';
+      refineProposalBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/refine', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request: req }),
+        });
+        const data = await res.json();
+
+        if (data.ok && data.proposal) {
+          currentProposal = data.proposal;
+          currentRequest  = req;
+
+          document.getElementById('refine-proposal-title').textContent =
+            data.proposal.summary || 'Proposed change';
+          document.getElementById('refine-proposal-text').textContent =
+            data.proposal.raw_text || '';
+
+          // Feasibility verdict
+          const feasEl   = document.getElementById('refine-feasibility');
+          const feasBadge = document.getElementById('refine-feasibility-badge');
+          const feasNote = document.getElementById('refine-feasibility-note');
+          const feas = data.proposal.feasibility || 'feasible';
+          const feasMap = {
+            'feasible':                { label: '✓ Feasible',            cls: 'feasible' },
+            'feasible_with_tradeoffs': { label: '~ Feasible with trade-offs', cls: 'tradeoffs' },
+            'not_feasible':            { label: '✗ Not feasible as-is',  cls: 'notfeasible' },
+          };
+          const fm = feasMap[feas] || feasMap['feasible'];
+          feasBadge.textContent = fm.label;
+          feasBadge.className = 'refine-feasibility__badge refine-feasibility__badge--' + fm.cls;
+          feasNote.textContent = data.proposal.feasibility_note || '';
+          feasEl.style.display = 'flex';
+
+          // If not feasible, reframe the Apply button (still allowed, but muted)
+          if (feas === 'not_feasible') {
+            refineApplyBtn.textContent = 'Apply anyway';
+          } else {
+            refineApplyBtn.textContent = 'Apply changes';
+          }
+
+          const changesEl = document.getElementById('refine-proposal-changes');
+          changesEl.innerHTML = '';
+          (data.proposal.changes || []).forEach(c => {
+            const li = document.createElement('div');
+            li.className = 'refine-change-item';
+            li.textContent = c;
+            changesEl.appendChild(li);
+          });
+
+          const affectedEl = document.getElementById('refine-proposal-affected');
+          if (data.proposal.affected_areas && data.proposal.affected_areas.length) {
+            affectedEl.innerHTML = '<span class="refine-label">Affects:</span> '
+              + data.proposal.affected_areas.map(a =>
+                  `<span class="inspo-tag">${a}</span>`).join(' ');
+            affectedEl.style.display = 'flex';
+          } else {
+            affectedEl.style.display = 'none';
+          }
+
+          document.getElementById('refine-proposal-reasoning').textContent =
+            data.proposal.reasoning || '';
+
+          refineAppliedMsg.style.display = 'none';
+          refineApplyBtn.style.display   = 'inline-block';
+          refineCancelBtn.style.display  = 'inline-block';
+          refineApplyBtn.disabled        = false;
+          refineProposalBox.style.display = 'block';
+          refineProposalBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+          alert(data.error || 'FORMA could not generate a proposal. Please try again.');
+        }
+      } catch (err) {
+        alert('Network error. Please try again.');
+      } finally {
+        refineSubmitBtn.disabled = false;
+        refineSubmitBtn.textContent = 'Ask FORMA →';
+      }
+    });
+  }
+
+  if (refineApplyBtn) {
+    refineApplyBtn.addEventListener('click', async () => {
+      if (!currentProposal) return;
+      refineApplyBtn.disabled = true;
+
+      try {
+        const res = await fetch('/apply-refinement', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request: currentRequest, proposal: currentProposal }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          refineApplyBtn.style.display  = 'none';
+          refineCancelBtn.style.display = 'none';
+          refineAppliedMsg.style.display = 'block';
+          if (refineInput) refineInput.value = '';
+          if (refineCharNum) refineCharNum.textContent = '0';
+          // Auto-regenerate after short delay so homeowner sees the message
+          setTimeout(() => {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/regenerate';
+            document.body.appendChild(form);
+            form.submit();
+          }, 1500);
+        } else {
+          refineApplyBtn.disabled = false;
+          alert('Could not apply refinement. Please try again.');
+        }
+      } catch (err) {
+        refineApplyBtn.disabled = false;
+        alert('Network error. Please try again.');
+      }
+    });
+  }
+
+  if (refineCancelBtn) {
+    refineCancelBtn.addEventListener('click', () => {
+      refineProposalBox.style.display = 'none';
+      currentProposal = null;
+      currentRequest  = '';
+    });
+  }
+</script>
+{% endblock %}
