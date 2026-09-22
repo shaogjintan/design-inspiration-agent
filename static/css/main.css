@@ -769,7 +769,13 @@ em { font-style: italic; color: var(--gold); }
 
 .check-tile:hover { border-color: var(--stone-dark); color: var(--ink); }
 
-.check-tile--checked {
+/* The real input is visually hidden, so the tile's whole appearance came from
+   a class applied by a change listener — which never fires for boxes the
+   server rendered as checked. They looked unselected on every revisit, and
+   clicking one to "restore" it actually cleared it. :has() reads the input
+   directly; the class stays for anything that cannot do :has(). */
+.check-tile--checked,
+.check-tile:has(input:checked) {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--white);
@@ -2433,4 +2439,13 @@ html.is-opening body {
   border: 1.5px solid var(--gold);
   border-radius: inherit;
   pointer-events: none;
+}
+
+/* Autosave indicator — quiet by default, so it reassures without nagging. */
+.autosave-status {
+  margin-right: auto;
+  font-size: .75rem;
+  color: var(--ink-muted);
+  align-self: center;
+  min-height: 1em;
 }

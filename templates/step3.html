@@ -23,7 +23,7 @@
     </div>
   </div>
 
-  <form method="POST" action="{{ url_for('step3') }}" enctype="multipart/form-data" class="form-card">
+  <form method="POST" action="{{ url_for('step3') }}" data-autosave="step3" enctype="multipart/form-data" class="form-card">
 
     <!-- Overall Theme -->
     <div class="form-section">
@@ -139,6 +139,7 @@
     </div>
 
     <div class="form-actions">
+      <span class="autosave-status" id="autosave-status" aria-live="polite"></span>
       <a href="{{ url_for('step2') }}" class="btn btn--ghost">← Back</a>
       <button type="submit" class="btn btn--primary" data-busy-label="Uploading your references…">Continue to Vision →</button>
     </div>

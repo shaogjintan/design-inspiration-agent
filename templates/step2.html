@@ -27,7 +27,7 @@
   </div>
   {% endif %}
 
-  <form method="POST" action="{{ url_for('step2') }}" class="form-card">
+  <form method="POST" action="{{ url_for('step2') }}" data-autosave="step2" class="form-card">
 
     <div class="rooms-bar">
       <p class="rooms-hint" id="rooms-hint"></p>
@@ -134,6 +134,7 @@
     </div>
 
     <div class="form-actions">
+      <span class="autosave-status" id="autosave-status" aria-live="polite"></span>
       <a href="{{ url_for('step1') }}" class="btn btn--ghost">← Back</a>
       <button type="submit" class="btn btn--primary" id="next-btn" data-busy-label="Saving…">Next: Inspiration →</button>
     </div>

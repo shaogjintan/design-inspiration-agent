@@ -2862,9 +2862,13 @@ def step1():
             flash("Please select a housing type.", "error")
             return redirect(url_for("step1"))
 
-        floor_plan_path = None
-        if "floor_plan" in request.files:
-            floor_plan_path = save_upload(request.files["floor_plan"], "floorplans")
+        # A file input is empty on re-submit, so taking the form's word for it
+        # wiped a plan the homeowner had already uploaded. Keep the previous one
+        # unless they actually pick a new file.
+        previous_plan = (project_get("step1") or {}).get("floor_plan_path")
+        floor_plan_path = save_upload(request.files.get("floor_plan"), "floorplans")
+        if not floor_plan_path and previous_plan and Path(previous_plan).exists():
+            floor_plan_path = previous_plan
 
         # Seed from the housing-type catalogue so there is always a usable room
         # list. When a plan was uploaded the next screen reads it and replaces
@@ -2969,6 +2973,87 @@ def step1_read_plan():
     return jsonify({"ok": True, "read": True, "rooms": len(data["rooms"])})
 
 
+def save_step2_form(housing_type: str) -> None:
+    """Persist the step-2 form. Shared by the Continue button and by autosave,
+    so leaving the page mid-edit keeps exactly what submitting would have."""
+    # Each room card carries a hidden "kept_rooms" input holding its current
+    # label, so removed cards vanish from this list and renamed/added ones
+    # arrive with their new names. Order is DOM order.
+    kept = [r.strip() for r in request.form.getlist("kept_rooms") if r.strip()]
+    rooms = get_rooms_for_type(housing_type)
+    if kept:
+        seen, unique = set(), []
+        for label in kept:                      # guard against duplicates
+            if label.lower() not in seen:
+                seen.add(label.lower())
+                unique.append(label)
+        apply_room_list(unique)
+        rooms = get_rooms_for_type(housing_type)
+
+    req_data = {}
+    for room in rooms:
+        key = room["key"]
+        req_data[f"{key}_prompt"]      = request.form.get(f"{key}_prompt", "")
+        req_data[f"{key}_items"]       = request.form.getlist(f"{key}_items")
+        req_data[f"{key}_budget"]      = request.form.get(f"{key}_budget", "")
+        req_data[f"{key}_priority"]    = request.form.get(f"{key}_priority", "medium")
+        req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
+
+    req_data["project_notes"] = request.form.get("project_notes", "")
+    project_set(requirements=req_data)
+    # Rooms or requirements just changed — the brief and the step-1 room
+    # summary both describe the old list now.
+    project_clear("agent_result", "rooms_summarised")
+
+
+def save_step3_form() -> None:
+    """Persist step 3's choices. Files are deliberately excluded — a file input
+    cannot be re-read by script, so uploads only travel on a real submit."""
+    style   = request.form.get("design_style", "")
+    palette = request.form.get("colour_palette", "")
+    colour_hex, colour_name = (palette.split("|") + ["", ""])[:2]
+    rooms = get_rooms_for_type(project_get("step1", {}).get("housing_type", ""))
+    prev = project_get("inspiration") or {}
+
+    project_set(inspiration={
+        **prev,
+        "design_style":   style,
+        "colour_palette": palette,
+        "colour_hex":     colour_hex.strip(),
+        "colour_name":    colour_name.strip() or "Custom",
+        "custom_colour":  request.form.get("custom_colour", ""),
+        "inspo_paths":    prev.get("inspo_paths", {}),
+        "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "")
+                           for r in rooms},
+    })
+    project_clear("agent_result")
+
+
+@app.route("/autosave/<step>", methods=["POST"])
+def autosave(step):
+    """Save in-progress edits without navigating.
+
+    The step pages are plain forms, so leaving one by its Back link used to
+    discard everything typed since the page loaded. The page posts here as you
+    work; uploads still need a real submit, since script cannot read a file
+    input back.
+    """
+    s1 = project_get("step1")
+    if not s1:
+        return jsonify({"ok": False, "error": "no project"}), 400
+    try:
+        if step == "step2":
+            save_step2_form(s1["housing_type"])
+        elif step == "step3":
+            save_step3_form()
+        else:
+            return jsonify({"ok": False, "error": "unknown step"}), 400
+    except Exception as e:
+        app.logger.warning(f"Autosave for {step} failed: {e}")
+        return jsonify({"ok": False}), 500
+    return jsonify({"ok": True})
+
+
 # ── Step 2: Inspiration ───────────────────────────────────────────────────────
 @app.route("/step2", methods=["GET", "POST"])
 def step2():
@@ -2981,33 +3066,7 @@ def step2():
     rooms = get_rooms_for_type(housing_type)
 
     if request.method == "POST":
-        # Each room card carries a hidden "kept_rooms" input holding its current
-        # label, so removed cards vanish from this list and renamed/added ones
-        # arrive with their new names. Order is DOM order.
-        kept = [r.strip() for r in request.form.getlist("kept_rooms") if r.strip()]
-        if kept:
-            seen, unique = set(), []
-            for label in kept:                      # guard against duplicates
-                if label.lower() not in seen:
-                    seen.add(label.lower())
-                    unique.append(label)
-            apply_room_list(unique)
-            rooms = get_rooms_for_type(housing_type)
-
-        req_data = {}
-        for room in rooms:
-            key = room["key"]
-            req_data[f"{key}_prompt"]      = request.form.get(f"{key}_prompt", "")
-            req_data[f"{key}_items"]       = request.form.getlist(f"{key}_items")
-            req_data[f"{key}_budget"]      = request.form.get(f"{key}_budget", "")
-            req_data[f"{key}_priority"]    = request.form.get(f"{key}_priority", "medium")
-            req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
-
-        req_data["project_notes"] = request.form.get("project_notes", "")
-        project_set(requirements=req_data)
-        # Rooms or requirements just changed — the brief and the step-1 room
-        # summary both describe the old list now.
-        project_clear("agent_result", "rooms_summarised")
+        save_step2_form(housing_type)
         return redirect(url_for("step2_reviewing"))
 
     plan_mismatch = None
@@ -3092,15 +3151,9 @@ def step3():
         kept_overall = [p for p in prev_inspo.get("overall", []) if p and Path(p).exists()]
         saved_inspo["overall"] = kept_overall + [p for p in new_overall if p]
 
-        project_set(inspiration={
-            "design_style":   style,
-            "colour_palette": palette,
-            "colour_hex":     colour_hex.strip(),
-            "colour_name":    colour_name.strip() or "Custom",
-            "custom_colour":  request.form.get("custom_colour", ""),
-            "inspo_paths":    saved_inspo,
-            "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "") for r in rooms},
-        })
+        save_step3_form()                       # style, palette, vibes
+        project_set(inspiration={**(project_get("inspiration") or {}),
+                                 "inspo_paths": saved_inspo})
         # The analysis itself runs in step 4, where the agent has the full
         # project to reason over. Drop any earlier result so it can't be
         # reused against the images and style just submitted.
