@@ -4,6 +4,7 @@ Flask backend with AWS Bedrock (Claude Sonnet 4.5) stub.
 """
 
 import os
+import re
 import json
 import uuid
 import base64
@@ -167,6 +168,86 @@ def save_upload(file_obj, subfolder: str = "") -> str | None:
     return None
 
 
+def match_catalogue_room(label: str) -> str:
+    """Map a floor plan's own wording onto a catalogue room name.
+
+    The model reads labels straight off the plan — "Master Bath", "Yard",
+    "Living/Dining" — which rarely match the catalogue's spelling. Without this
+    the fixture checklist comes up empty for rooms that obviously have fixtures.
+    Returns "" when nothing sensible matches.
+    """
+    if label in ROOM_ITEMS:
+        return label
+
+    text = re.sub(r"[^a-z0-9 ]+", " ", label.lower())
+    def has(*words):
+        return any(w in text for w in words)
+
+    if has("bath", "toilet", "shower", "ensuite", "wc"):
+        return "Master Bathroom" if has("master", "ensuite", "main", "primary") else "Common Bathroom"
+    if has("bed"):
+        if has("master", "main", "primary"):
+            return "Master Bedroom"
+        digit = re.search(r"\d", text)
+        if digit and f"Bedroom {digit.group()}" in ROOM_ITEMS:
+            return f"Bedroom {digit.group()}"
+        return "Bedroom"
+    if has("kitchen"):              return "Kitchen"
+    if has("living", "lounge"):     return "Living Room"
+    if has("dining"):               return "Dining Room"
+    if has("yard", "utility", "laundry"):   return "Service Yard"
+    if has("shelter", "bomb"):      return "Household Shelter"
+    if has("balcony", "patio", "terrace"):  return "Balcony"
+    if has("study", "office"):      return "Study"
+    if has("garage", "carport"):    return "Garage"
+    if has("garden", "outdoor", "lawn"):    return "Garden / Outdoor"
+    return ""
+
+
+def items_for_room(label: str) -> list[str]:
+    """Fixtures for a room, resolved through the plan's own wording.
+
+    A combined space named on the plan ("Living/Dining") gets both rooms'
+    fixtures, since that is genuinely what the homeowner has to furnish.
+    """
+    if label in ROOM_ITEMS:
+        return ROOM_ITEMS[label]
+
+    text = label.lower()
+    if "living" in text and "dining" in text:
+        merged = list(ROOM_ITEMS["Living Room"])
+        merged += [i for i in ROOM_ITEMS["Dining Room"] if i not in merged]
+        return merged
+
+    return ROOM_ITEMS.get(match_catalogue_room(label), [])
+
+
+def _count_room_kind(room_names, kind: str) -> int:
+    return sum(1 for n in room_names if kind in match_catalogue_room(n))
+
+
+def room_list_vs_housing_type(housing_type: str, room_names) -> dict | None:
+    """Describe how a plan-derived room list differs from the housing type.
+
+    The plan is the better source and wins, but a homeowner who picked
+    "3-Room HDB" and uploaded a 4-room plan should be told why they are looking
+    at three bedrooms — not left to assume the app is broken.
+    """
+    expected = ROOM_CATALOGUE.get(housing_type)
+    if not expected:
+        return None
+
+    diffs = []
+    for kind, word in (("Bedroom", "bedroom"), ("Bathroom", "bathroom")):
+        got, want = _count_room_kind(room_names, kind), _count_room_kind(expected, kind)
+        if got != want:
+            diffs.append(f"{got} {word}{'' if got == 1 else 's'} rather than the usual {want}")
+
+    if not diffs:
+        return None
+    return {"label": HOUSING_LABELS.get(housing_type, housing_type), "diffs": diffs}
+
+
 def get_rooms_for_type(housing_type: str) -> list[dict]:
     """Return list of {key, label, items, hint} dicts for the given housing type."""
     # Prefer the homeowner's confirmed room list; fall back to the static
@@ -177,18 +258,20 @@ def get_rooms_for_type(housing_type: str) -> list[dict]:
     # A plain "Bathroom" means different things depending on its company: on its
     # own it is the only one, but alongside a master ensuite it is the common one.
     # Older saved projects still use the plain name, so decide per room list.
-    has_master_bath = any("Master Bathroom" in n for n in room_names)
+    has_master_bath = any(match_catalogue_room(n) == "Master Bathroom" for n in room_names)
 
     rooms = []
     for name in room_names:
         key = name.lower().replace(" ", "_").replace("/", "_")
-        hint = ROOM_HINTS.get(name, "")
+        # Hints resolve through the same matcher, so a plan that says
+        # "Master Bath" still gets the ensuite hint.
+        hint = ROOM_HINTS.get(name) or ROOM_HINTS.get(match_catalogue_room(name), "")
         if name == "Bathroom" and has_master_bath:
             hint = ROOM_HINTS["Common Bathroom"]
         rooms.append({
             "key":   key,
             "label": name,
-            "items": ROOM_ITEMS.get(name, []),
+            "items": items_for_room(name),
             "hint":  hint,
         })
     return rooms
@@ -208,13 +291,20 @@ def image_to_base64(path: str) -> tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM Gateway wrapper
 # ─────────────────────────────────────────────────────────────────────────────
-def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60) -> str:
+def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60,
+             fallback_to_mock: bool = True) -> str:
     """
     Call the team's LLM Gateway.
     Falls back to the existing mock response if the gateway is unavailable.
+
+    Pass fallback_to_mock=False to raise instead. The mock answers a room
+    request with a plausible-looking room list, so any caller that must not
+    pass off invented rooms as a real floor-plan read needs the exception.
     """
 
     if not LLM_GATEWAY_URL or not LLM_GATEWAY_API_KEY or not LLM_MODEL:
+        if not fallback_to_mock:
+            raise RuntimeError("LLM Gateway is not configured")
         app.logger.warning(
             "LLM Gateway configuration missing — using mock response"
         )
@@ -284,6 +374,8 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
             )
             break
 
+    if not fallback_to_mock:
+        raise RuntimeError(last_error or "LLM Gateway call failed")
     return _mock_bedrock_response(messages)
 
 
@@ -584,6 +676,156 @@ def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
         "observations": observations,
         "source":       "housing_type_only",
         "confidence":   "low",
+    }
+
+
+# Wall-clock ceiling for the step-1 read. The gateway generates around 40
+# tokens/sec, and this prompt asks for roughly 100, so a healthy call lands
+# near 3s. Past this we stop waiting and use the catalogue instead.
+FLOORPLAN_READ_TIMEOUT = 7
+
+
+def canonicalise_plan_rooms(rooms: list[str]) -> list[str]:
+    """Rename a plan's bedrooms and bathrooms to the local convention.
+
+    Works on positions rather than names: a plan often prints "BATH / WC" twice,
+    and keying the renames by string would merge the two into one room.
+    """
+    def is_master(name):
+        return any(w in name.lower() for w in ("master", "main", "primary"))
+
+    # Plans print their labels in caps; the UI should not shout.
+    def tidy(name):
+        name = name.strip()
+        if name.isupper():
+            name = name.title().replace(" Wc", " WC").replace("/Wc", "/WC")
+        return name
+
+    out = [tidy(r) for r in rooms]
+    beds  = [i for i, r in enumerate(out) if "bed" in r.lower()]
+    baths = [i for i, r in enumerate(out)
+             if any(w in r.lower() for w in ("bath", "wc", "toilet"))]
+
+    master_bed = next((i for i in beds if is_master(out[i])), None)
+    others = [i for i in beds if i != master_bed]
+
+    if master_bed is not None:
+        out[master_bed] = "Master Bedroom"
+    for n, i in enumerate(others, start=2 if master_bed is not None else 1):
+        out[i] = (f"Bedroom {n}" if (len(others) > 1 or master_bed is not None)
+                  else "Bedroom")
+
+    if len(baths) == 1:
+        i = baths[0]
+        out[i] = "Master Bathroom" if is_master(out[i]) else "Bathroom"
+    elif baths:
+        # Plans rarely mark the ensuite, but a home with a master bedroom and
+        # two baths has one of each by convention.
+        master_bath = next((i for i in baths if is_master(out[i])), None)
+        if master_bath is None and master_bed is not None:
+            master_bath = baths[0]
+        rest = [i for i in baths if i != master_bath]
+        if master_bath is not None:
+            out[master_bath] = "Master Bathroom"
+            for n, i in enumerate(rest, start=1):
+                out[i] = "Common Bathroom" if n == 1 else f"Common Bathroom {n}"
+        else:
+            for n, i in enumerate(baths, start=1):
+                out[i] = "Bathroom" if n == 1 else f"Bathroom {n}"
+
+    final, seen = [], set()
+    for r in out:
+        if r.lower() not in seen:
+            seen.add(r.lower())
+            final.append(r)
+    return final
+
+
+def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
+                         num_floors="1", notes="") -> dict:
+    """Read just the room list off the floor plan, fast.
+
+    Deliberately narrow: no design opinion, no observations, no prose beyond a
+    single sentence. Those cost generation time, and this call sits between two
+    pages the homeowner is waiting on. Falls back to the housing-type catalogue
+    on any failure, and never reports a fallback as a real read.
+    """
+    expected = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
+    label = HOUSING_LABELS.get(housing_type, housing_type)
+
+    prompt = textwrap.dedent(f"""
+        The attached image is the floor plan of a {label}
+        {f'of about {floor_size} sqm' if floor_size else ''}
+        {f'over {num_floors} floors' if num_floors not in ('1', '') else ''}.
+        {f'The homeowner notes: {notes}' if notes else ''}
+
+        Work in two steps, and put both in your reply.
+
+        STEP 1 — "labels_read": transcribe every text label printed on the plan,
+        verbatim and in the plan's own spelling ("MAIN BEDROOM", "BATH / WC",
+        "HOUSEHOLD SHELTER"). Transcribe only what is actually printed there.
+        If a label appears twice, list it twice.
+
+        STEP 2 — "rooms": turn that transcription into the room list, in a
+        sensible order. Every entry must come from a label you transcribed —
+        adding a room you did not read is the one thing you must not do. A plan
+        with two bedroom labels has two bedrooms, whatever is typical.
+
+        For reference, this housing type usually has: {', '.join(expected)}.
+        That is background only. Never add a room to reach those counts.
+
+        Rules:
+        - Keep storage and service spaces the homeowner fits out: household
+          shelter, store, yard, utility, balcony. Skip only circulation and
+          non-spaces: corridors, ducts, planters, voids, air-con ledges.
+        - If the plan shows one combined space, name it once ("Living/Dining"),
+          do not split it.
+        - Keep each room's own wording from the plan. Do NOT number the rooms
+          and do not invent tidier names — "Bedroom", "Main Bedroom" and
+          "Bath / WC" are exactly what we want back. Numbering happens later.
+        - If the plan prints MAIN or MASTER on a bedroom, keep that word in the
+          room's name. It is how we tell which bedroom is the master.
+        - Before you answer, count the bedroom labels in labels_read. "rooms"
+          must contain that many bedrooms — not the number a flat of this type
+          usually has. Two bedroom labels means two bedrooms.
+        - If you genuinely cannot read the plan, return "readable": false and
+          an empty rooms array. Do not guess from the housing type.
+
+        Reply with ONLY this JSON and nothing else. The summary is ONE sentence,
+        maximum 25 words:
+        {{"readable": true, "labels_read": ["..."], "rooms": ["Living Room", "Kitchen"], "summary": "..."}}
+    """).strip()
+
+    message = {"role": "user", "content": prompt}
+    img_data, _media = image_to_base64(floor_plan_path)
+    message["images"] = [img_data]
+
+    raw = call_llm([message],
+                   system="You read residential floor plans. You reply with JSON only, "
+                          "never prose. You are honest when a plan is illegible.",
+                   max_tokens=600,   # room for the label transcription
+                   timeout=FLOORPLAN_READ_TIMEOUT,
+                   fallback_to_mock=False)
+
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+
+    data = _loads_salvaging_truncation(text)
+    rooms = [str(r).strip() for r in (data.get("rooms") or []) if str(r).strip()]
+
+    if not data.get("readable", True) or not rooms:
+        raise ValueError("floor plan was not readable")
+
+    return {
+        "rooms":        canonicalise_plan_rooms(rooms[:16]),
+        "summary":      str(data.get("summary", "")).strip(),
+        "observations": [],
+        "source":       "floorplan",
+        "confidence":   "high",
     }
 
 
@@ -1627,9 +1869,9 @@ def step1():
         if "floor_plan" in request.files:
             floor_plan_path = save_upload(request.files["floor_plan"], "floorplans")
 
-        # No model call here — the room list comes straight from the housing
-        # type so this step is instant. The floor plan is read later, in the
-        # single step-4 analysis that sees it alongside every other choice.
+        # Seed from the housing-type catalogue so there is always a usable room
+        # list. When a plan was uploaded the next screen reads it and replaces
+        # this; if that read fails, these stand.
         room_data = stub_read_floorplan(
             housing_type,
             request.form.get("floor_size", ""),
@@ -1652,10 +1894,81 @@ def step1():
             ai_room_source     = room_data.get("source", "housing_type_only"),
             ai_room_confidence = room_data.get("confidence", "medium"),
         )
+        # The room list just changed, so anything derived from it is stale.
+        project_clear("agent_result", "inspiration_analysis", "agent_trace")
+
+        if floor_plan_path:
+            return redirect(url_for("step1_reading"))
         return redirect(url_for("step2"))
 
     return render_template("step1.html", current_step=1,
                            form_data=project_get("step1"))
+
+
+@app.route("/step2/use-standard", methods=["POST"])
+def step2_use_standard():
+    """Discard the plan-derived rooms in favour of the housing type's usual
+    layout. Offered when the two disagree — the homeowner knows which is right."""
+    s1 = project_get("step1")
+    if not s1:
+        return redirect(url_for("step1"))
+
+    fallback = stub_read_floorplan(
+        s1["housing_type"], s1.get("floor_size", ""),
+        s1.get("num_floors", "1"), s1.get("space_notes", ""),
+    )
+    project_set(
+        ai_rooms           = fallback["rooms"],
+        ai_room_summary    = fallback["summary"],
+        ai_room_source     = "housing_type_only",
+        ai_room_confidence = fallback["confidence"],
+    )
+    project_clear("agent_result")
+    return redirect(url_for("step2"))
+
+
+@app.route("/step1/reading")
+def step1_reading():
+    """Holding screen while the floor plan is read. Only ever shown when there
+    is a plan to read and we have not already read it."""
+    s1 = project_get("step1")
+    if not s1:
+        return redirect(url_for("step1"))
+    if not s1.get("floor_plan_path") or project_get("ai_room_source") == "floorplan":
+        return redirect(url_for("step2"))
+    return render_template("step1_loading.html", current_step=1,
+                           housing_label=s1.get("housing_type_label", "your home"))
+
+
+@app.route("/step1/read-plan", methods=["POST"])
+def step1_read_plan():
+    s1 = project_get("step1") or {}
+    plan = s1.get("floor_plan_path")
+    if not plan:
+        return jsonify({"ok": False, "error": "No floor plan to read"}), 400
+    if project_get("ai_room_source") == "floorplan":
+        return jsonify({"ok": True, "read": True, "cached": True})
+
+    try:
+        data = read_floorplan_rooms(
+            s1["housing_type"], plan,
+            floor_size = s1.get("floor_size", ""),
+            num_floors = s1.get("num_floors", "1"),
+            notes      = s1.get("space_notes", ""),
+        )
+    except Exception as e:
+        # The catalogue rooms from step 1 still stand, so the homeowner is not
+        # blocked — they just edit the list themselves on the next screen.
+        app.logger.warning(f"Floor-plan read failed ({e}) — keeping catalogue rooms")
+        return jsonify({"ok": True, "read": False})
+
+    project_set(
+        ai_rooms           = data["rooms"],
+        ai_room_summary    = data["summary"],
+        ai_room_source     = "floorplan",
+        ai_room_confidence = data["confidence"],
+    )
+    return jsonify({"ok": True, "read": True, "rooms": len(data["rooms"])})
 
 
 # ── Step 2: Inspiration ───────────────────────────────────────────────────────
@@ -1698,8 +2011,16 @@ def step2():
         project_clear("agent_result")
         return redirect(url_for("step3"))
 
+    plan_mismatch = None
+    if project_get("ai_room_source") == "floorplan":
+        plan_mismatch = room_list_vs_housing_type(
+            housing_type, [r["label"] for r in rooms]
+        )
+
     return render_template("step2.html", current_step=2, rooms=rooms,
                            ai_room_summary=project_get("ai_room_summary", ""),
+                           plan_mismatch=plan_mismatch,
+                           housing_label=HOUSING_LABELS.get(housing_type, housing_type),
                            saved=project_get("requirements", {}))
 
 

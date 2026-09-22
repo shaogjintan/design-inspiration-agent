@@ -10,6 +10,23 @@
     <p class="step-header__desc">Confirm your rooms, then tell us what each one needs. This helps your designer understand must-haves vs nice-to-haves.</p>
   </div>
 
+  {% if plan_mismatch %}
+  <div class="plan-notice">
+    <div class="plan-notice__body">
+      <strong class="plan-notice__title">These rooms came from your floor plan</strong>
+      <p class="plan-notice__text">
+        Your plan shows {% for d in plan_mismatch.diffs %}{{ d }}{% if not loop.last %}, and {% endif %}{% endfor %}
+        for a {{ plan_mismatch.label }}. FORMA went with the plan. If you uploaded
+        the wrong one, or your flat really is a standard {{ plan_mismatch.label }},
+        switch back — otherwise carry on and edit any room below.
+      </p>
+    </div>
+    <form method="POST" action="{{ url_for('step2_use_standard') }}" class="plan-notice__action">
+      <button type="submit" class="btn btn--ghost btn--sm">Use the standard {{ plan_mismatch.label }} layout</button>
+    </form>
+  </div>
+  {% endif %}
+
   <form method="POST" action="{{ url_for('step2') }}" class="form-card">
 
     <div class="rooms-bar">
@@ -118,7 +135,7 @@
 
     <div class="form-actions">
       <a href="{{ url_for('step1') }}" class="btn btn--ghost">← Back</a>
-      <button type="submit" class="btn btn--primary" id="next-btn">Next: Inspiration →</button>
+      <button type="submit" class="btn btn--primary" id="next-btn" data-busy-label="Saving…">Next: Inspiration →</button>
     </div>
 
   </form>

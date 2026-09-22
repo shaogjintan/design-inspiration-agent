@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set current_step = 3 %}
 {% block title %}FORMA — Inspiration{% endblock %}
 {% block content %}
@@ -12,7 +13,7 @@
 
   <!-- AI Room Summary Banner -->
   <div class="ai-banner">
-    <div class="ai-banner__icon">◈</div>
+    <div class="ai-banner__icon">{{ icon("home") }}</div>
     <div class="ai-banner__body">
       <div class="ai-banner__label">AI Room Analysis</div>
       <div class="ai-banner__text">{{ ai_room_summary }}</div>
@@ -94,7 +95,7 @@
             <input type="file" name="inspo_{{ room.key }}" multiple accept="image/*"
                    class="multi-upload__input" id="input_{{ room.key }}">
             <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
+              <div class="multi-upload__icon">{{ icon("upload") }}</div>
               <div class="multi-upload__text">Drop images for <strong>{{ room.label }}</strong> or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Up to 5 images</div>
             </div>
@@ -114,7 +115,7 @@
             <input type="file" name="inspo_overall" multiple accept="image/*"
                    class="multi-upload__input" id="input_overall">
             <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
+              <div class="multi-upload__icon">{{ icon("upload") }}</div>
               <div class="multi-upload__text">Drop overall inspiration images or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Mood boards, magazine cuts, etc.</div>
             </div>
@@ -126,7 +127,7 @@
 
     <div class="form-actions">
       <a href="{{ url_for('step2') }}" class="btn btn--ghost">← Back</a>
-      <button type="submit" class="btn btn--primary">Continue to Vision →</button>
+      <button type="submit" class="btn btn--primary" data-busy-label="Uploading your references…">Continue to Vision →</button>
     </div>
 
   </form>

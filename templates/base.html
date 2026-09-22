@@ -6,8 +6,12 @@
   <title>{% block title %}FORMA — Interior Design Studio{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  {# Entrance animations hide their content until JS reveals it, so they are
+     only armed once we know JS is running. Without this a script error leaves
+     the room concepts permanently invisible. #}
+  <script>document.documentElement.classList.add('js');</script>
   {% block extra_head %}{% endblock %}
 </head>
 <body>

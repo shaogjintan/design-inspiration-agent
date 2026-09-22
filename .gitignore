@@ -11,6 +11,7 @@ _env.local
 
 # Tooling
 .claude/
+.impeccable/
 .ipynb_checkpoints/
 
 # Runtime user uploads and generated output
