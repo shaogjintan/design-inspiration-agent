@@ -28,13 +28,18 @@ brief + room concepts + visuals. The homeowner can then refine in plain language
 | Uploads | Local filesystem (`uploads/`) |
 
 ```bash
-python -m venv venv && source venv/bin/activate     # or use the existing .venv
+python -m venv venv
+source venv/bin/activate      # macOS/Linux
+venv\Scripts\Activate.ps1     # Windows PowerShell
 pip install -r requirements.txt
-# credentials live in _env.local (gitignored) — see section 9
+# credentials live in .env.local (gitignored) — copy .env.example, see section 9
 python app.py                 # http://localhost:5000
 python test_api.py            # verify the gateway (text + JSON + vision)
 python evals/run_evals.py     # 7-case evaluation suite (should be 7/7)
 ```
+
+On Windows, set `$env:PYTHONIOENCODING="utf-8"` before running the evals, or the
+✓/✗ symbols crash the console with a `UnicodeEncodeError`.
 
 Without gateway credentials the app still runs — every LLM call falls back to
 `_mock_bedrock_response()` so you can develop/demo offline.
@@ -55,7 +60,8 @@ templates/        base, index, start, step1..step4 (Jinja).
 static/css/main.css, static/js/main.js
 uploads/          floorplans/ and inspo/<roomkey>/ images (gitignored).
 data.json         Saved clients + briefs (gitignored).
-_env.local        Gateway URL/key/model + FLASK_SECRET_KEY (gitignored, DO NOT COMMIT).
+.env.local        Gateway URL/key/model (+ FLASK_SECRET_KEY for deploy). Gitignored, DO NOT COMMIT.
+                  app.py also accepts _env.local or .env.
 ```
 
 **Important architectural note:** despite the `tools/` folder, the real implementations of
@@ -92,7 +98,8 @@ The keys that persist are in **`BRIEF_KEYS`** (app.py). Currently:
 
 ```
 step1, ai_rooms, ai_room_summary, ai_room_source, ai_room_confidence,
-requirements, inspiration, inspiration_analysis, conflicts, agent_trace, refinements
+requirements, inspiration, inspiration_analysis, conflicts, agent_trace, refinements,
+floor_layout
 ```
 
 **RULE:** if you add a new piece of state that must survive "continue my brief",
@@ -107,6 +114,10 @@ Shapes (roughly):
 - `conflicts`: list of `{id, type, severity, title, description, question, options, resolved, decision}`
 - `agent_trace`: list of `{timestamp, step, action, reason, status, summary, confidence}`
 - `refinements`: list of `{request, proposal, applied_at}`
+- `floor_layout`: cache of the AI room-position trace — `{plan, rooms:[labels], layout}` where
+  `layout` is `{boxes:[{label, floor, x, y, w, h}], floor_labels, aspect, confidence, placed, total}`
+  (x/y/w/h are % of the plan image) or `None` if the trace wasn't usable. Reused while the
+  plan path and room list are unchanged; `/regenerate` clears it to force a re-trace.
 
 A room's **slug** is `label.lower().replace(" ","_").replace("/","_")` — see `get_rooms_for_type()`.
 
@@ -121,8 +132,10 @@ Called once per `/step4` load. It is the "OBSERVE → REASON → ACT → EVALUAT
 3. **Inspiration analysis** — calls `analyse_inspiration()` if new images/none cached.
 4. **Conflict detection** — `detect_conflicts()`; merges with prior resolved decisions.
 5. **EVALUATE** — `needs_input = any open conflict`.
-6. **ACT** — `generate_design_brief()`, per-room `generate_room_concept()` + `generate_room_concept_visual()`, `generate_floor_plan_svg()`.
-7. Returns a dict: `inspiration_analysis, conflicts, ai_brief, room_results, floor_plan_svg, agent_trace, needs_input, overall_confidence`.
+6. **ACT** — `generate_design_brief()`, per-room `generate_room_concept()` + `generate_room_concept_visual()`.
+7. **Room positions** — only if a floor plan was uploaded: `read_floor_plan_layout()` (cached, see
+   `floor_layout`), then `generate_floor_plan_svg(rooms, layout)`. No plan / bad trace → schematic.
+8. Returns a dict: `inspiration_analysis, conflicts, ai_brief, room_results, floor_plan_svg, floor_layout, agent_trace, needs_input, overall_confidence`.
 
 Key behaviours that were bug-fixed and MUST be preserved:
 - **Trace is rebuilt fresh each run** (`trace = []`). Do NOT re-introduce carrying
@@ -150,7 +163,8 @@ Key behaviours that were bug-fixed and MUST be preserved:
 | Design brief | `generate_design_brief()` |
 | Per-room concept text | `generate_room_concept()` |
 | Per-room concept **visual** (2D SVG) | `generate_room_concept_visual()` |
-| Floor-plan **overview** (2D SVG) | `generate_floor_plan_svg()` + `_room_weight()` + `_furniture_markers()` |
+| Floor-plan **overview** (2D SVG) | `generate_floor_plan_svg()` → `_traced_floor_plan_svg()` (AI layout) or `_schematic_rows_svg()` + `_room_weight()` (rules); both draw rooms via `_room_cell_svg()` + `_furniture_markers()` |
+| Room-position trace (vision) | `build_layout_request()` + `read_floor_plan_layout()` — Claude returns a % bounding box per confirmed room; validated (≥60% of rooms placed, no heavy overlaps, confidence not low) or `None` |
 | Refinement feasibility + proposal | route `/refine` |
 
 ### Furniture icon system (shared by BOTH visuals)
@@ -180,7 +194,7 @@ drawer, register it in `_ICON_DRAWERS`. Both views pick it up automatically.
 | Refinement feasibility | **Real** — Claude judges feasible/tradeoffs/not |
 | Agent trace / confidence | **Real** — recorded per step |
 | Room concept "visuals" | **Generated SVG diagrams**, NOT photoreal renders. The gateway has **no image-generation model** (confirmed). They are honest 2D top-down layouts driven by selected items + style palette. |
-| 2D floor plan | **Schematic** "Space & Furniture Overview" — NOT a scaled CAD reconstruction of the uploaded plan. Labelled as such in the UI. |
+| 2D floor plan | With an uploaded image plan: **approximate AI trace** — Claude places each room as a rectangle roughly where it is on the plan; Python draws it. Not to scale, no walls/doors. Otherwise the rule-based **schematic**. The UI label switches between the two (`floor_plan_traced`). Neither is a CAD reconstruction. |
 | Email login | Prototype identity only, **not** secure auth. |
 
 Do not describe the SVG visuals as AI-generated photorealistic renders, and do not describe
@@ -190,8 +204,8 @@ the floor plan as a true reconstruction. Both are clearly labelled in the UI; ke
 
 ## 9. Security / safety rules (do not regress)
 
-- `_env.local` and `data.json` are **gitignored**. Never commit credentials. The live key
-  currently sits in `_env.local`.
+- `.env.local` and `data.json` are **gitignored**. Never commit credentials. The live key
+  currently sits in `.env.local`.
 - `FLASK_SECRET_KEY` should be set via env for deploy; app warns if missing.
 - User content (notes, prompts, refinement text) is treated as **data, not instructions** —
   prompts explicitly tell the model to ignore embedded "ignore previous instructions" attempts.
@@ -251,5 +265,6 @@ for speed/determinism). Run it after any agent/tool change — target is **7/7**
   DynamoDB and uploads to S3 (the load/save seam already isolates this).
 - PDF export of the designer brief (currently .txt).
 - Real image generation IF a vision-gen endpoint becomes available (today: none).
-- True floor-plan geometry extraction (currently schematic only) — large effort, low priority.
+- True floor-plan geometry extraction (walls, doors, real dimensions) — today rooms are traced as
+  approximate rectangles only. Large effort, low priority.
 - Let inspiration images *suggest* furniture (today furniture comes only from Step 2 checkboxes).

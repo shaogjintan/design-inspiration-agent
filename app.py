@@ -8,6 +8,7 @@ import json
 import uuid
 import base64
 import textwrap
+from html import escape
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -1375,79 +1376,338 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
     return parts
 
 
-def generate_floor_plan_svg(rooms: list[dict]) -> str:
-    """Generate a schematic 'space + furniture overview'.
+# ─────────────────────────────────────────────────────────────────────────────
+# AI-traced layout — WHERE each room sits on the uploaded plan.
+#
+# The vision model returns a rough bounding box per confirmed room (as % of the
+# image). Python still does all the drawing. This is an approximate trace, NOT
+# a scaled CAD reconstruction: boxes are rectangles, walls/doors are not read.
+# Anything unusable returns None and the rule-based schematic is drawn instead.
+# ─────────────────────────────────────────────────────────────────────────────
+LAYOUT_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
-    NOTE: This is a schematic derived from the DETECTED ROOMS and the
-    homeowner's selected furniture — it is not a scaled reconstruction of the
-    uploaded plan (that needs CAD geometry extraction, which is out of scope).
-    Rooms are sized by typical footprint and annotated with furniture markers.
+
+def _image_aspect(path: str) -> float | None:
+    """Width / height of a PNG, GIF or JPEG, read from its header (no Pillow).
+    Returns None for anything else, and the caller assumes a square image."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(26)
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                w, h = int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+            elif head[:6] in (b"GIF87a", b"GIF89a"):
+                w, h = int.from_bytes(head[6:8], "little"), int.from_bytes(head[8:10], "little")
+            elif head[:2] == b"\xff\xd8":
+                # Walk the JPEG markers until a start-of-frame (SOFn) segment.
+                f.seek(2)
+                while True:
+                    marker = f.read(2)
+                    if len(marker) < 2 or marker[0] != 0xFF:
+                        return None
+                    seg_len = int.from_bytes(f.read(2), "big")
+                    if marker[1] in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                                     0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                        f.read(1)  # sample precision
+                        h = int.from_bytes(f.read(2), "big")
+                        w = int.from_bytes(f.read(2), "big")
+                        break
+                    f.seek(seg_len - 2, 1)
+            else:
+                return None
+        return (w / h) if w > 0 and h > 0 else None
+    except (OSError, ValueError):
+        return None
+
+
+def _norm_room(name: str) -> str:
+    return " ".join(str(name).lower().split())
+
+
+def build_layout_request(floor_plan_path: str, room_labels: list[str],
+                         num_floors: str = "1") -> tuple[list, str]:
+    """Build the (messages, system) pair for the layout trace. No API call."""
+    room_list = "\n".join(f"- {label}" for label in room_labels)
+    prompt = textwrap.dedent("""
+        You are looking at a FLOOR PLAN IMAGE of a home. The homeowner has
+        already confirmed this list of rooms (use these names EXACTLY):
+        {room_list}
+
+        The homeowner says the home has {num_floors} floor(s). If the image
+        shows several floor plans side by side or stacked, number them 1, 2, ...
+        in the order a person would read them (ground floor first).
+
+        Task: for EACH room above, give a rectangle that roughly covers where
+        that room is drawn in the image. Coordinates are PERCENTAGES of the whole
+        image, origin at the TOP-LEFT corner:
+          x, w = % of image width    y, h = % of image height
+        So a room in the top-left quarter might be x=0, y=0, w=50, h=50.
+
+        RULES:
+        - Only place a room you can actually find in the plan. If a room on the
+          list is not visible (or you are unsure where it is), leave it out.
+          Never guess a position.
+        - One rectangle per room. For an open-plan space such as
+          "Living/Dining", cover the whole combined area.
+        - Rooms that share a wall should have edges that touch; rooms must not
+          overlap much.
+        - Ignore corridors, stairs, dimension text, title blocks and scale bars.
+        - Do not invent measurements. This is positional only.
+        - If the image is too blurry or cropped to place rooms, set
+          "confidence": "low".
+
+        Respond with ONLY valid JSON, no prose before or after:
+        {{"floors": [{{"floor": 1, "label": "Ground floor"}}],
+          "rooms": [{{"name": "Kitchen", "floor": 1, "x": 5, "y": 10, "w": 30, "h": 25}}],
+          "confidence": "high"}}
+    """).strip().format(room_list=room_list, num_floors=num_floors or "1")
+
+    # Ollama format: plain-string content, raw base64 in "images".
+    message = {"role": "user", "content": prompt}
+    data, _media_type = image_to_base64(floor_plan_path)
+    message["images"] = [data]
+    return [message], SPACE_ANALYSIS_SYSTEM
+
+
+def read_floor_plan_layout(floor_plan_path: str | None, room_labels: list[str],
+                           num_floors: str = "1") -> dict | None:
+    """Ask the vision model where each confirmed room sits on the uploaded plan.
+
+    Returns
+      {"boxes": [{"label", "floor", "x", "y", "w", "h"}, ...],   # % of image
+       "floor_labels": {"1": "Ground floor", ...},   # str keys: JSON-safe
+       "aspect": image width / height,
+       "confidence": "high" | "medium",
+       "placed": int, "total": int}
+    or None when there is nothing usable (no plan, PDF, offline, bad JSON, too
+    few rooms located, overlapping nonsense, or the model says "low").
     """
-    n = len(rooms)
-    if n == 0:
-        return '<svg viewBox="0 0 600 200"></svg>'
+    if not floor_plan_path or not room_labels:
+        return None
+    if Path(floor_plan_path).suffix.lower() not in LAYOUT_IMAGE_EXTS:
+        return None   # e.g. a PDF plan — the gateway only takes images
+    if not Path(floor_plan_path).exists() or _floorplan_stub_enabled():
+        return None   # offline/mock mode can't see the image; don't pretend
 
-    # Row-pack rooms so each row's total weight is roughly balanced.
+    messages, system = build_layout_request(floor_plan_path, room_labels, num_floors)
+    raw = call_llm(messages, system=system, max_tokens=1500, timeout=120)
+
+    raw_stripped = raw.strip()
+    if raw_stripped.startswith("```"):
+        raw_stripped = raw_stripped.split("```")[1]
+        if raw_stripped.startswith("json"):
+            raw_stripped = raw_stripped[4:]
+        raw_stripped = raw_stripped.strip()
+
+    try:
+        data = json.loads(raw_stripped)
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        app.logger.warning(f"Layout trace: invalid JSON. Raw start: {raw[:120]!r}")
+        return None
+
+    if data.get("confidence") not in ("high", "medium"):
+        return None
+
+    # Match the model's names back to the confirmed room labels.
+    wanted = {_norm_room(label): label for label in room_labels}
+    boxes: list[dict] = []
+    seen: set[str] = set()
+    for entry in data.get("rooms") or []:
+        if not isinstance(entry, dict):
+            continue
+        label = wanted.get(_norm_room(entry.get("name", "")))
+        if not label or label in seen:
+            continue
+        try:
+            x, y = float(entry["x"]), float(entry["y"])
+            w, h = float(entry["w"]), float(entry["h"])
+            floor = int(entry.get("floor") or 1)
+        except (KeyError, TypeError, ValueError):
+            continue
+        # Clamp into the image; drop slivers the model couldn't really place.
+        x, y = max(0.0, min(x, 100.0)), max(0.0, min(y, 100.0))
+        w, h = min(w, 100.0 - x), min(h, 100.0 - y)
+        if w < 1 or h < 1:
+            continue
+        seen.add(label)
+        boxes.append({"label": label, "floor": max(1, floor),
+                      "x": x, "y": y, "w": w, "h": h})
+
+    # Need most of the rooms, or the trace isn't worth showing.
+    if len(boxes) < 2 or len(boxes) < 0.6 * len(room_labels):
+        app.logger.warning(f"Layout trace: only {len(boxes)}/{len(room_labels)} rooms placed.")
+        return None
+
+    # Two rooms mostly on top of each other means the model is guessing.
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            if a["floor"] != b["floor"]:
+                continue
+            ox = min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])
+            oy = min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"])
+            if ox > 0 and oy > 0 and ox * oy > 0.5 * min(a["w"] * a["h"], b["w"] * b["h"]):
+                app.logger.warning(
+                    f"Layout trace: {a['label']!r} and {b['label']!r} overlap heavily.")
+                return None
+
+    floor_labels: dict[str, str] = {}
+    for fl in data.get("floors") or []:
+        if isinstance(fl, dict) and fl.get("label"):
+            try:
+                floor_labels[str(int(fl.get("floor")))] = str(fl["label"])[:40]
+            except (TypeError, ValueError):
+                pass
+
+    return {
+        "boxes":        boxes,
+        "floor_labels": floor_labels,
+        "aspect":       _image_aspect(floor_plan_path) or 1.0,
+        "confidence":   data["confidence"],
+        "placed":       len(boxes),
+        "total":        len(room_labels),
+    }
+
+
+def _room_cell_svg(room: dict, x: float, y: float, cw: float, ch: float) -> list[str]:
+    """One wall-bounded room: tinted cell, furniture glyphs (when the cell is
+    big enough to read them) and the room name along the bottom."""
+    colour = room.get("colour", "#C9D4E0")
+    parts = [
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{cw:.1f}" height="{ch:.1f}" '
+        f'fill="{colour}" fill-opacity="0.55" stroke="#8A8580" '
+        f'stroke-width="1.5"/>'
+    ]
+    # Small traced rooms (a WC, a yard) can't fit readable furniture icons.
+    if cw >= 70 and ch >= 70:
+        parts += _furniture_markers(room["label"], room.get("items", []),
+                                    int(x), int(y), int(cw), int(ch), "#6E6A63")
+    font = 10.5 if cw >= 60 else 8
+    max_chars = max(4, min(18, int(cw / (font * 0.62))))
+    label = room["label"]
+    if len(label) > max_chars:
+        label = label[:max_chars - 2] + "…"
+    label_y = y + ch - 10 if ch >= 40 else y + ch / 2 + font / 3
+    parts.append(
+        f'<text x="{x + cw / 2:.1f}" y="{label_y:.1f}" text-anchor="middle" '
+        f'font-size="{font}" fill="#1C1B19" font-weight="500">{escape(label)}</text>'
+    )
+    return parts
+
+
+def _schematic_rows_svg(rooms: list[dict], top: float, w: int = 600,
+                        pad: int = 24, gutter: int = 8,
+                        row_h: int = 120) -> tuple[list[str], float]:
+    """Rule-based packing: rooms in rows of 2-3, widths by _room_weight().
+    Returns (svg parts, height used)."""
+    n = len(rooms)
     weights = [_room_weight(r["label"]) for r in rooms]
     max_per_row = 3 if n > 4 else 2
-    rows: list[list[int]] = []
-    row: list[int] = []
-    for i in range(n):
-        row.append(i)
-        if len(row) >= max_per_row:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
+    rows = [list(range(i, min(i + max_per_row, n))) for i in range(0, n, max_per_row)]
 
-    w = 600
-    pad, gutter = 24, 8
-    row_h = 120
-    h = pad * 2 + len(rows) * row_h + (len(rows) - 1) * gutter
-
-    svg = [
-        f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
-        f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
-        # outer wall
-        f'<rect x="6" y="6" width="{w-12}" height="{h-12}" fill="#FBF9F5" '
-        f'stroke="#4A4844" stroke-width="3" rx="4"/>',
-    ]
-
-    y = pad
-    for r_idx, r in enumerate(rows):
+    parts: list[str] = []
+    y = top
+    for r in rows:
         total_w = sum(weights[i] for i in r)
         avail = w - 2 * pad - gutter * (len(r) - 1)
         x = pad
         for i in r:
             cw = int(avail * (weights[i] / total_w))
-            ch = row_h
-            room = rooms[i]
-            colour = room.get("colour", "#C9D4E0")
-            accent = "#6E6A63"
-
-            # room cell (wall-bounded)
-            svg.append(
-                f'<rect x="{x}" y="{y}" width="{cw}" height="{ch}" '
-                f'fill="{colour}" fill-opacity="0.55" stroke="#8A8580" '
-                f'stroke-width="1.5"/>'
-            )
-            # furniture markers from selected items
-            svg += _furniture_markers(room["label"], room.get("items", []),
-                                      x, y, cw, ch, accent)
-            # label
-            label = room["label"]
-            if len(label) > 18:
-                label = label[:16] + "…"
-            svg.append(
-                f'<text x="{x + cw // 2}" y="{y + ch - 10}" text-anchor="middle" '
-                f'font-size="10.5" fill="#1C1B19" font-weight="500">{label}</text>'
-            )
+            parts += _room_cell_svg(rooms[i], x, y, cw, row_h)
             x += cw + gutter
         y += row_h + gutter
+    return parts, len(rows) * row_h + (len(rows) - 1) * gutter
 
-    svg.append("</svg>")
-    return "\n".join(svg)
 
+def _svg_frame(w: int, h: float, parts: list[str]) -> str:
+    return "\n".join([
+        f'<svg viewBox="0 0 {w} {h:.0f}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
+        # outer wall
+        f'<rect x="6" y="6" width="{w-12}" height="{h-12:.0f}" fill="#FBF9F5" '
+        f'stroke="#4A4844" stroke-width="3" rx="4"/>',
+        *parts,
+        "</svg>",
+    ])
+
+
+def _traced_floor_plan_svg(rooms: list[dict], layout: dict) -> str | None:
+    """Draw rooms where the AI trace placed them. Rooms it couldn't locate go
+    in a rule-based strip underneath, so nothing silently disappears."""
+    by_label = {_norm_room(b["label"]): b for b in layout.get("boxes") or []}
+    placed = [(r, by_label[_norm_room(r["label"])]) for r in rooms
+              if _norm_room(r["label"]) in by_label]
+    unplaced = [r for r in rooms if _norm_room(r["label"]) not in by_label]
+    if not placed:
+        return None
+
+    aspect = float(layout.get("aspect") or 1.0)
+    floor_labels = layout.get("floor_labels") or {}
+    floors = sorted({b["floor"] for _, b in placed})
+    w, pad, max_floor_h = 600, 24, 460
+
+    parts: list[str] = []
+    y = pad
+    for fl in floors:
+        cells = [(r, b) for r, b in placed if b["floor"] == fl]
+        if len(floors) > 1:
+            name = floor_labels.get(str(fl), f"Level {fl}")
+            parts.append(f'<text x="{pad}" y="{y + 10}" font-size="11" '
+                         f'fill="#4A4844" font-weight="600">{escape(name)}</text>')
+            y += 20
+        # Percentages -> one common unit, so squares stay square: x is scaled by
+        # the image's width/height ratio, y is left as-is. Then crop to this
+        # floor's rooms and fit the panel.
+        x0 = min(b["x"] for _, b in cells) * aspect
+        y0 = min(b["y"] for _, b in cells)
+        span_w = max((b["x"] + b["w"]) * aspect for _, b in cells) - x0
+        span_h = max(b["y"] + b["h"] for _, b in cells) - y0
+        scale = min((w - 2 * pad) / span_w, max_floor_h / span_h)
+        off_x = pad + ((w - 2 * pad) - span_w * scale) / 2
+        for r, b in cells:
+            parts += _room_cell_svg(
+                r,
+                off_x + (b["x"] * aspect - x0) * scale,
+                y + (b["y"] - y0) * scale,
+                b["w"] * aspect * scale,
+                b["h"] * scale,
+            )
+        y += span_h * scale + 16
+
+    if unplaced:
+        parts.append(f'<text x="{pad}" y="{y + 10}" font-size="11" fill="#4A4844" '
+                     f'font-weight="600">Not located on your plan</text>')
+        y += 20
+        extra, used = _schematic_rows_svg(unplaced, y, w=w, pad=pad)
+        parts += extra
+        y += used + 16
+
+    return _svg_frame(w, y - 16 + pad, parts)
+
+
+def generate_floor_plan_svg(rooms: list[dict], layout: dict | None = None) -> str:
+    """Generate the 'space + furniture overview'.
+
+    With a `layout` from read_floor_plan_layout(): rooms are drawn roughly
+    where the AI found them on the uploaded plan (approximate, not to scale).
+    Without one: a rule-based schematic — rooms packed in rows and sized by
+    typical footprint. Neither is a scaled CAD reconstruction of the plan.
+    Both annotate rooms with the homeowner's selected furniture.
+    """
+    if not rooms:
+        return '<svg viewBox="0 0 600 200"></svg>'
+
+    if layout:
+        try:
+            svg = _traced_floor_plan_svg(rooms, layout)
+            if svg:
+                return svg
+        except (KeyError, TypeError, ValueError, ZeroDivisionError) as e:
+            app.logger.warning(f"Traced floor plan failed, using schematic: {e}")
+
+    pad = 24
+    parts, used = _schematic_rows_svg(rooms, pad, pad=pad)
+    return _svg_frame(600, used + 2 * pad, parts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2018,7 +2278,8 @@ def _inspiration_analysis_fallback(style: str, palette: str, custom_colour: str,
 # ─────────────────────────────────────────────────────────────────────────────
 BRIEF_KEYS = ("step1", "ai_rooms", "ai_room_summary", "ai_room_source",
               "ai_room_confidence", "requirements", "inspiration",
-              "inspiration_analysis", "conflicts", "agent_trace", "refinements")
+              "inspiration_analysis", "conflicts", "agent_trace", "refinements",
+              "floor_layout")
 
 
 def persist_brief():
@@ -2291,12 +2552,15 @@ def step4():
         existing_conflicts            = session.get("conflicts"),
         existing_trace                = session.get("agent_trace"),
         force_reanalyse               = False,
+        existing_layout               = session.get("floor_layout"),
     )
 
     # ── Persist agent outputs back to session ────────────────────────────────
     session["inspiration_analysis"] = result["inspiration_analysis"]
     session["conflicts"]            = result["conflicts"]
     session["agent_trace"]          = result["agent_trace"]
+    if result.get("floor_layout") is not None:
+        session["floor_layout"]     = result["floor_layout"]
     session.modified = True
     persist_brief()
 
@@ -2314,6 +2578,7 @@ def step4():
                            ai_brief=result["ai_brief"],
                            room_results=result["room_results"],
                            floor_plan_svg=result["floor_plan_svg"],
+                           floor_plan_traced=bool((result.get("floor_layout") or {}).get("layout")),
                            inspo_analysis=result["inspiration_analysis"],
                            open_conflicts=open_conflicts,
                            closed_conflicts=closed_conflicts,
@@ -2326,7 +2591,10 @@ def step4():
 # ── Regenerate ────────────────────────────────────────────────────────────────
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
-    # Simply re-run step4 — session data is preserved
+    # Re-run step4 — session data is preserved, except the cached room trace,
+    # so "Regenerate" also retries reading room positions from the plan.
+    session.pop("floor_layout", None)
+    session.modified = True
     return redirect(url_for("step4"))
 
 

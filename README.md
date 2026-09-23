@@ -60,15 +60,15 @@ pip install -r requirements.txt
 Copy and edit the environment file:
 
 ```bash
-cp .env.example _env.local
-# Edit _env.local with your LLM gateway credentials
+cp .env.example .env.local
+# Edit .env.local with your LLM gateway credentials
 ```
 
 Required variables:
 ```
 LLM_GATEWAY_URL=https://...
 LLM_GATEWAY_API_KEY=...
-LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
+LLM_MODEL=sonnet4.5:latest
 FLASK_SECRET_KEY=a-long-random-string
 ```
 
@@ -85,6 +85,8 @@ Open [http://localhost:5000](http://localhost:5000)
 ---
 
 ## Run the evaluation suite
+
+On Windows, run `$env:PYTHONIOENCODING="utf-8"` first so the console can print the ✓/✗ symbols.
 
 ```bash
 python evals/run_evals.py              # all 7 cases
@@ -111,7 +113,7 @@ agent.py                # FORMA reasoning loop — run_agent() orchestrates all 
 clients.py              # Email identity + JSON persistence (easy to swap to DynamoDB)
 data.json               # Local project store (gitignored — created at runtime)
 requirements.txt
-_env.local              # Your credentials (gitignored — never commit)
+.env.local              # Your credentials (gitignored — never commit)
 .env.example            # Template for env vars
 
 templates/
@@ -152,7 +154,7 @@ uploads/                # User uploads (gitignored)
 
 ## Security notes
 
-- `_env.local` is gitignored — never commit credentials
+- `.env.local` is gitignored — never commit credentials
 - `FLASK_SECRET_KEY` must be set in production — app warns if missing
 - User content (prompts, notes, image descriptions) is treated as data, not instructions
 - File uploads are validated by extension and size (50 MB limit)

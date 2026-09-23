@@ -83,6 +83,7 @@ def run_agent(
     existing_conflicts: list[dict] | None,
     existing_trace: list[dict] | None,
     force_reanalyse: bool = False,
+    existing_layout: dict | None = None,
 ) -> dict:
     """
     Run the FORMA reasoning loop over the current project state.
@@ -102,6 +103,9 @@ def run_agent(
     force_reanalyse             : if True, re-run inspiration analysis even if a
                                   cached result exists (e.g. homeowner uploaded
                                   new images)
+    existing_layout             : session.get("floor_layout") — cached room
+                                  position trace, reused while the floor plan
+                                  and room list are unchanged
 
     Returns
     -------
@@ -111,6 +115,7 @@ def run_agent(
       "ai_brief":             str (HTML),
       "room_results":         list[dict],
       "floor_plan_svg":       str,
+      "floor_layout":         dict | None,   # cache entry for the room trace
       "agent_trace":          list[dict],
       "needs_input":          bool,   # True if open conflicts exist
     }
@@ -447,11 +452,57 @@ def run_agent(
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
-    # ACT: Floor plan schematic
+    # REASON + ACT: Trace room positions from the uploaded plan
+    #
+    # Only with a real plan — without one there is nothing to trace, and the
+    # rule-based schematic is the honest answer. The trace is cached against
+    # (plan, room list) so a /step4 reload doesn't pay for another vision call;
+    # editing rooms or uploading a new plan invalidates it.
     # ─────────────────────────────────────────────────────────────────────────
-    floor_plan_svg = _app.generate_floor_plan_svg(room_results)
+    room_labels = [r["label"] for r in room_results]
+    layout_cache = None
+    layout = None
+    if has_floor_plan:
+        cached = existing_layout or {}
+        if cached.get("plan") == floor_plan_path and cached.get("rooms") == room_labels:
+            layout_cache = cached
+            layout = cached.get("layout")
+            trace.append(_trace_entry(
+                step    = "Room positions (cached)",
+                action  = "read_floor_plan_layout",
+                reason  = "Floor plan and room list unchanged — reusing the earlier trace.",
+                status  = "skipped",
+                summary = (f"{layout['placed']}/{layout['total']} rooms placed from your plan."
+                           if layout else "Earlier trace was not usable — schematic layout."),
+                confidence = layout.get("confidence") if layout else "low",
+            ))
+        else:
+            try:
+                layout = _app.read_floor_plan_layout(
+                    floor_plan_path, room_labels, step1.get("num_floors", "1"))
+            except Exception as e:
+                logger.warning(f"Layout trace failed: {e}")
+                layout = None
+            layout_cache = {"plan": floor_plan_path, "rooms": room_labels, "layout": layout}
+            # A failed trace isn't a failed run — the schematic still draws —
+            # so report it as a low-confidence success, not "failed".
+            trace.append(_trace_entry(
+                step    = "Traced room positions from floor plan",
+                action  = "read_floor_plan_layout",
+                reason  = "Place each room roughly where it sits on the uploaded plan.",
+                status  = "success",
+                summary = (f"Placed {layout['placed']}/{layout['total']} rooms from your plan."
+                           if layout else "Couldn't place rooms reliably — using schematic layout."),
+                confidence = layout.get("confidence") if layout else "low",
+            ))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ACT: Floor plan overview (traced if we have a layout, else schematic)
+    # ─────────────────────────────────────────────────────────────────────────
+    floor_plan_svg = _app.generate_floor_plan_svg(room_results, layout)
     trace.append(_trace_entry(
-        step    = "Generated schematic space overview",
+        step    = ("Generated traced space overview" if layout
+                   else "Generated schematic space overview"),
         action  = "generate_floor_plan_svg",
         reason  = "Visual summary of the home's spaces.",
         status  = "success",
@@ -495,6 +546,7 @@ def run_agent(
         "ai_brief":             ai_brief,
         "room_results":         room_results,
         "floor_plan_svg":       floor_plan_svg,
+        "floor_layout":         layout_cache,
         "agent_trace":          trace,
         "needs_input":          needs_input,
         "overall_confidence":   overall_confidence,
