@@ -1763,3 +1763,50 @@ em { font-style: italic; color: var(--gold); }
   color: var(--ink-light);
   line-height: 1.4;
 }
+
+/* ── Loading overlay (forms with data-loading, see main.js) ─────────────── */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(248, 245, 240, .88);
+  backdrop-filter: blur(2px);
+}
+.loading-overlay__card {
+  max-width: 360px;
+  padding: 2rem 2.25rem;
+  text-align: center;
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.loading-overlay__spinner {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 1rem;
+  border: 3px solid var(--cream-dark);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: loading-spin .9s linear infinite;
+}
+.loading-overlay__msg {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.loading-overlay__time {
+  margin-top: .5rem;
+  font-size: .8rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .loading-overlay__spinner { animation-duration: 3s; }
+}

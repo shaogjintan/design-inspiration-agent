@@ -36,9 +36,14 @@ Agent trace format (each entry):
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on simultaneous gateway calls in one run (brief + room concepts).
+# A landed home has ~12 rooms; this keeps us polite to the gateway.
+MAX_PARALLEL_LLM_CALLS = 8
 
 
 def _now() -> str:
@@ -356,8 +361,32 @@ def run_agent(
     }
     project_for_brief.update(requirements)
 
+    # The brief and every room concept depend only on what's been gathered so
+    # far — not on each other — so fire them all at the gateway at once and
+    # collect the results below. Sequentially this was ~66s for a 6-room flat
+    # (20s brief + ~6s per room); in parallel it's roughly the slowest call.
+    # Exceptions surface at .result(), inside the same try/excepts as before.
+    def _room_concept(room: dict) -> str:
+        key = room["key"]
+        return _app.generate_room_concept(
+            {**room, "items_selected": requirements.get(f"{key}_items", [])},
+            style           = inspiration.get("design_style", ""),
+            palette         = inspiration.get("colour_name", ""),
+            prompt_text     = requirements.get(f"{key}_prompt", ""),
+            inspo_analysis  = inspo_analysis,
+            room_inspo_note = inspo_analysis.get("room_specific", {}).get(key, ""),
+            budget          = requirements.get(f"{key}_budget", ""),
+            priority        = requirements.get(f"{key}_priority", ""),
+            constraints     = requirements.get(f"{key}_constraints", ""),
+        )
+
+    pool = ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_LLM_CALLS, len(rooms) + 1))
+    brief_future = pool.submit(_app.generate_design_brief, project_for_brief)
+    concept_futures = [pool.submit(_room_concept, room) for room in rooms]
+    pool.shutdown(wait=False)   # queued calls still run; we just don't block here
+
     try:
-        ai_brief = _app.generate_design_brief(project_for_brief)
+        ai_brief = brief_future.result()
         trace.append(_trace_entry(
             step    = "Generated design brief",
             action  = "generate_design_direction",
@@ -389,19 +418,8 @@ def run_agent(
 
     for i, room in enumerate(rooms):
         key = room["key"]
-        room_inspo_note = inspo_analysis.get("room_specific", {}).get(key, "")
         try:
-            concept = _app.generate_room_concept(
-                {**room, "items_selected": requirements.get(f"{key}_items", [])},
-                style           = inspiration.get("design_style", ""),
-                palette         = inspiration.get("colour_name", ""),
-                prompt_text     = requirements.get(f"{key}_prompt", ""),
-                inspo_analysis  = inspo_analysis,
-                room_inspo_note = room_inspo_note,
-                budget          = requirements.get(f"{key}_budget", ""),
-                priority        = requirements.get(f"{key}_priority", ""),
-                constraints     = requirements.get(f"{key}_constraints", ""),
-            )
+            concept = concept_futures[i].result()
         except Exception as e:
             logger.warning(f"Room concept failed for {room['label']}: {e}")
             concept = f"Design concept for {room['label']} could not be generated. Please regenerate."
@@ -454,15 +472,16 @@ def run_agent(
     # ─────────────────────────────────────────────────────────────────────────
     # REASON + ACT: Trace room positions from the uploaded plan
     #
-    # Only with a real plan — without one there is nothing to trace, and the
-    # rule-based schematic is the honest answer. The trace is cached against
+    # Only with a real plan and AI_FLOOR_LAYOUT switched on (off by default —
+    # see app.AI_FLOOR_LAYOUT for why). Otherwise the rule-based schematic is
+    # the honest answer. The trace is cached against
     # (plan, room list) so a /step4 reload doesn't pay for another vision call;
     # editing rooms or uploading a new plan invalidates it.
     # ─────────────────────────────────────────────────────────────────────────
     room_labels = [r["label"] for r in room_results]
     layout_cache = None
     layout = None
-    if has_floor_plan:
+    if has_floor_plan and _app.AI_FLOOR_LAYOUT:
         cached = existing_layout or {}
         if cached.get("plan") == floor_plan_path and cached.get("rooms") == room_labels:
             layout_cache = cached

@@ -91,8 +91,11 @@ every tool live in `app.py`. `agent.py` does `import app as _app` and calls
 
 ## 5. Project state / memory (the single most important concept)
 
-State lives in the Flask **session**; only `client_id`/`email` sit in the cookie. Everything
-else is persisted to `data.json` through `persist_brief()` and reloaded by `hydrate_session()`.
+State lives in the Flask **session** and is persisted to `data.json` through `persist_brief()`
+and reloaded by `hydrate_session()`. Note: there is no server-side session store, so Flask's
+default applies — **the whole session is a signed browser cookie** (browsers cap it at ~4 KB).
+Keep large things (brief HTML, SVGs, agent results) out of the session; the Step 4 result
+cache lives in server memory for this reason (section 6).
 
 The keys that persist are in **`BRIEF_KEYS`** (app.py). Currently:
 
@@ -125,7 +128,11 @@ A room's **slug** is `label.lower().replace(" ","_").replace("/","_")` — see `
 
 ## 6. The agent loop (`agent.py::run_agent`)
 
-Called once per `/step4` load. It is the "OBSERVE → REASON → ACT → EVALUATE → RESPOND" loop:
+Called from `/step4` — but only when something changed. `/step4` keeps results in an in-memory
+cache (`_STEP4_CACHE`, keyed by `_step4_fingerprint()` over every input the agent reads plus
+resolved decisions). Refreshing reuses the last run; edited inputs, an answered question or an
+applied refinement miss the cache; `/regenerate` drops the entry. Cleared on server restart.
+It is the "OBSERVE → REASON → ACT → EVALUATE → RESPOND" loop:
 
 1. **OBSERVE** — read state, count images, check for floor plan.
 2. **Floor plan** — logs whether rooms came from the plan or housing type.
@@ -133,7 +140,10 @@ Called once per `/step4` load. It is the "OBSERVE → REASON → ACT → EVALUAT
 4. **Conflict detection** — `detect_conflicts()`; merges with prior resolved decisions.
 5. **EVALUATE** — `needs_input = any open conflict`.
 6. **ACT** — `generate_design_brief()`, per-room `generate_room_concept()` + `generate_room_concept_visual()`.
-7. **Room positions** — only if a floor plan was uploaded: `read_floor_plan_layout()` (cached, see
+   The brief and all room concepts run **in parallel** (`ThreadPoolExecutor`, max
+   `MAX_PARALLEL_LLM_CALLS = 8`) — a 6-room flat went from ~66s to ~31s; the ~20s brief is now the
+   floor. Tool functions called from these threads must not touch `session`/`request`.
+7. **Room positions** — only if a floor plan was uploaded AND `AI_FLOOR_LAYOUT=1` (off by default): `read_floor_plan_layout()` (cached, see
    `floor_layout`), then `generate_floor_plan_svg(rooms, layout)`. No plan / bad trace → schematic.
 8. Returns a dict: `inspiration_analysis, conflicts, ai_brief, room_results, floor_plan_svg, floor_layout, agent_trace, needs_input, overall_confidence`.
 
@@ -164,7 +174,7 @@ Key behaviours that were bug-fixed and MUST be preserved:
 | Per-room concept text | `generate_room_concept()` |
 | Per-room concept **visual** (2D SVG) | `generate_room_concept_visual()` |
 | Floor-plan **overview** (2D SVG) | `generate_floor_plan_svg()` → `_traced_floor_plan_svg()` (AI layout) or `_schematic_rows_svg()` + `_room_weight()` (rules); both draw rooms via `_room_cell_svg()` + `_furniture_markers()` |
-| Room-position trace (vision) | `build_layout_request()` + `read_floor_plan_layout()` — Claude returns a % bounding box per confirmed room; validated (≥60% of rooms placed, no heavy overlaps, confidence not low) or `None` |
+| Room-position trace (vision) | `build_layout_request()` + `read_floor_plan_layout()` — Claude returns a % bounding box per confirmed room; validated (≥60% of rooms placed, no heavy overlaps, confidence not low) or `None`. **Off by default** (`AI_FLOOR_LAYOUT`) — see section 8 |
 | Refinement feasibility + proposal | route `/refine` |
 
 ### Furniture icon system (shared by BOTH visuals)
@@ -194,7 +204,7 @@ drawer, register it in `_ICON_DRAWERS`. Both views pick it up automatically.
 | Refinement feasibility | **Real** — Claude judges feasible/tradeoffs/not |
 | Agent trace / confidence | **Real** — recorded per step |
 | Room concept "visuals" | **Generated SVG diagrams**, NOT photoreal renders. The gateway has **no image-generation model** (confirmed). They are honest 2D top-down layouts driven by selected items + style palette. |
-| 2D floor plan | With an uploaded image plan: **approximate AI trace** — Claude places each room as a rectangle roughly where it is on the plan; Python draws it. Not to scale, no walls/doors. Otherwise the rule-based **schematic**. The UI label switches between the two (`floor_plan_traced`). Neither is a CAD reconstruction. |
+| 2D floor plan | Rule-based **schematic** by default. An experimental **AI trace** (`AI_FLOOR_LAYOUT=1`) asks Claude where each room is on the plan; in live tests it placed rooms in the wrong positions, even with margins cropped and a numbered grid overlaid, and the wrong answers pass validation. Keep it off unless a better localisation approach is found. The UI label switches between the two (`floor_plan_traced`). Neither is a CAD reconstruction. |
 | Email login | Prototype identity only, **not** secure auth. |
 
 Do not describe the SVG visuals as AI-generated photorealistic renders, and do not describe
@@ -238,7 +248,12 @@ for speed/determinism). Run it after any agent/tool change — target is **7/7**
 - The model often wraps JSON in ```` ```json ... ``` ````. Every JSON-parsing path strips
   code fences before `json.loads`. Keep that when adding new structured-output calls.
 - `call_llm` retries 502/503/429 up to 3× with backoff, then falls back to the mock.
-- The correct model id is `sonnet4.5:latest` (the gateway maps it to the Bedrock model).
+- **Never ask for more than 1024 output tokens.** With `num_predict` > 1024 the gateway keeps
+  re-prompting the model to "continue", gluing duplicated text or `{"error": "no previous
+  context"}` junk onto the answer and taking 30–40s. Omitting `num_predict` is no better: the
+  default cuts answers at ~256 tokens. `call_llm` caps every request at `GATEWAY_MAX_TOKENS = 1024`.
+- Verified working model id (Sept 2026): `global.anthropic.claude-sonnet-4-5-20250929-v1:0`. The handover previously said
+  `sonnet4.5:latest`; that one is untested.
 
 ---
 

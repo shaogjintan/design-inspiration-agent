@@ -68,7 +68,7 @@ Required variables:
 ```
 LLM_GATEWAY_URL=https://...
 LLM_GATEWAY_API_KEY=...
-LLM_MODEL=sonnet4.5:latest
+LLM_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
 FLASK_SECRET_KEY=a-long-random-string
 ```
 

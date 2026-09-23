@@ -162,7 +162,8 @@
 
     <div class="conflicts-cta" id="conflicts-cta" style="display:none;">
       <p>All questions answered. Regenerate to apply your decisions to the brief.</p>
-      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
+      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;"
+            data-loading="Regenerating your design vision… (about 30 seconds)">
         <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
       </form>
     </div>
@@ -380,7 +381,8 @@
     <div class="iterate-bar__actions">
       <a href="{{ url_for('step1') }}" class="btn btn--ghost btn--sm">Start Over</a>
       <a href="{{ url_for('step2') }}" class="btn btn--ghost btn--sm">← Edit Requirements</a>
-      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
+      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;"
+            data-loading="Regenerating your design vision… (about 30 seconds)">
         <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
       </form>
     </div>
@@ -586,6 +588,7 @@
             form.method = 'POST';
             form.action = '/regenerate';
             document.body.appendChild(form);
+            showLoading('Applying your change and regenerating… (about 30 seconds)');
             form.submit();
           }, 1500);
         } else {

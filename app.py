@@ -6,6 +6,7 @@ Flask backend with AWS Bedrock (Claude Sonnet 4.5) stub.
 import os
 import json
 import uuid
+import hashlib
 import base64
 import textwrap
 from html import escape
@@ -258,6 +259,9 @@ def image_to_base64(path: str) -> tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM Gateway wrapper
 # ─────────────────────────────────────────────────────────────────────────────
+GATEWAY_MAX_TOKENS = 1024   # see the num_predict note in call_llm
+
+
 def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60) -> str:
     """
     Call the team's LLM Gateway.
@@ -285,7 +289,12 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
         "messages": gateway_messages,
         "stream": False,
         "options": {
-            "num_predict": max_tokens
+            # The gateway auto-"continues" any request with num_predict > 1024:
+            # it re-prompts the model until the budget is used, gluing repeated
+            # text / {"error": "no previous context"} junk onto the answer and
+            # taking 30-40s. Omitting num_predict is no fix either — the
+            # default cuts answers off at ~256 tokens. 1024 is clean.
+            "num_predict": min(max_tokens, GATEWAY_MAX_TOKENS)
         }
     }
 
@@ -1386,6 +1395,13 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
 # ─────────────────────────────────────────────────────────────────────────────
 LAYOUT_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
+# OFF by default. Tested live (Sept 2026): Sonnet 4.5 reads WHICH rooms a plan
+# has reliably, but not WHERE they are — boxes came back in the wrong places
+# even with margins cropped and a numbered grid overlaid, and the wrong answers
+# still pass validation (plausible, non-overlapping). A confidently wrong plan
+# is worse than the honest schematic. Set AI_FLOOR_LAYOUT=1 to experiment.
+AI_FLOOR_LAYOUT = os.environ.get("AI_FLOOR_LAYOUT", "0").lower() in ("1", "true", "yes", "on")
+
 
 def _image_aspect(path: str) -> float | None:
     """Width / height of a PNG, GIF or JPEG, read from its header (no Pillow).
@@ -1442,6 +1458,18 @@ def build_layout_request(floor_plan_path: str, room_labels: list[str],
           x, w = % of image width    y, h = % of image height
         So a room in the top-left quarter might be x=0, y=0, w=50, h=50.
 
+        Work in this order:
+        1. Find the drawing's outer walls. Plans often sit in the middle of a
+           large white margin, so the drawing may cover only part of the image
+           (e.g. x from 35 to 65). Report it as "drawing": {{x, y, w, h}}.
+        2. For each room, find its printed label (e.g. "KITCHEN", "BEDROOM",
+           "W.C.") and note where that text is. Rooms with no printed label are
+           placed by their fixtures (bed, toilet, stove).
+        3. Extend each room's rectangle from its label out to the walls around
+           it. Every rectangle must lie inside the drawing from step 1.
+        Several rooms may share a generic printed label (two "BEDROOM"s): match
+        the listed names to them sensibly (the larger one is the master).
+
         RULES:
         - Only place a room you can actually find in the plan. If a room on the
           list is not visible (or you are unsure where it is), leave it out.
@@ -1457,7 +1485,9 @@ def build_layout_request(floor_plan_path: str, room_labels: list[str],
 
         Respond with ONLY valid JSON, no prose before or after:
         {{"floors": [{{"floor": 1, "label": "Ground floor"}}],
-          "rooms": [{{"name": "Kitchen", "floor": 1, "x": 5, "y": 10, "w": 30, "h": 25}}],
+          "drawing": {{"x": 30, "y": 8, "w": 40, "h": 85}},
+          "rooms": [{{"name": "Kitchen", "floor": 1, "label_at": [52, 30],
+                      "x": 45, "y": 20, "w": 18, "h": 15}}],
           "confidence": "high"}}
     """).strip().format(room_list=room_list, num_floors=num_floors or "1")
 
@@ -1481,7 +1511,7 @@ def read_floor_plan_layout(floor_plan_path: str | None, room_labels: list[str],
     or None when there is nothing usable (no plan, PDF, offline, bad JSON, too
     few rooms located, overlapping nonsense, or the model says "low").
     """
-    if not floor_plan_path or not room_labels:
+    if not AI_FLOOR_LAYOUT or not floor_plan_path or not room_labels:
         return None
     if Path(floor_plan_path).suffix.lower() not in LAYOUT_IMAGE_EXTS:
         return None   # e.g. a PDF plan — the gateway only takes images
@@ -1489,7 +1519,7 @@ def read_floor_plan_layout(floor_plan_path: str | None, room_labels: list[str],
         return None   # offline/mock mode can't see the image; don't pretend
 
     messages, system = build_layout_request(floor_plan_path, room_labels, num_floors)
-    raw = call_llm(messages, system=system, max_tokens=1500, timeout=120)
+    raw = call_llm(messages, system=system, max_tokens=1024, timeout=120)
 
     raw_stripped = raw.strip()
     if raw_stripped.startswith("```"):
@@ -2529,6 +2559,34 @@ def step3():
 
 
 # ── Step 4: Results ────────────────────────────────────────────────────────────
+# ── Step 4 result cache ───────────────────────────────────────────────────────
+# A full agent run costs ~30s of gateway calls, and without this every refresh
+# or back-navigation to /step4 paid it again. Results are kept in server memory
+# (NOT the session: Flask's default session is the browser cookie, ~4 KB) and
+# keyed by a fingerprint of everything the agent reads, so any real change —
+# edited inputs, an answered question, an applied refinement — misses the cache
+# and re-runs. /regenerate drops the entry to force a fresh run. The cache is
+# per-process and cleared on restart, which is fine for this prototype.
+_STEP4_CACHE: dict[str, dict] = {}
+_STEP4_CACHE_MAX = 32
+
+
+def _step4_fingerprint() -> str:
+    decisions = {c["id"]: c.get("decision") for c in (session.get("conflicts") or [])
+                 if c.get("resolved")}
+    state = {
+        "step1":        session.get("step1"),
+        "rooms":        session.get("ai_rooms"),
+        "requirements": session.get("requirements"),
+        "inspiration":  session.get("inspiration"),
+        "analysis":     session.get("inspiration_analysis"),
+        "decisions":    decisions,
+        "layout":       session.get("floor_layout"),
+    }
+    blob = json.dumps(state, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
 @app.route("/step4")
 def step4():
     for step, route in (("step1", "step1"), ("requirements", "step2"),
@@ -2542,18 +2600,21 @@ def step4():
     housing_type = s1["housing_type"]
     rooms_base   = get_rooms_for_type(housing_type)
 
-    # ── Run the FORMA agent reasoning loop ───────────────────────────────────
-    result = forma_agent.run_agent(
-        step1                        = s1,
-        requirements                 = s3,
-        inspiration                  = s2,
-        rooms                        = rooms_base,
-        existing_inspiration_analysis = session.get("inspiration_analysis"),
-        existing_conflicts            = session.get("conflicts"),
-        existing_trace                = session.get("agent_trace"),
-        force_reanalyse               = False,
-        existing_layout               = session.get("floor_layout"),
-    )
+    # ── Run the FORMA agent reasoning loop (or reuse an identical run) ───────
+    result = _STEP4_CACHE.get(_step4_fingerprint())
+    fresh_run = result is None
+    if fresh_run:
+        result = forma_agent.run_agent(
+            step1                        = s1,
+            requirements                 = s3,
+            inspiration                  = s2,
+            rooms                        = rooms_base,
+            existing_inspiration_analysis = session.get("inspiration_analysis"),
+            existing_conflicts            = session.get("conflicts"),
+            existing_trace                = session.get("agent_trace"),
+            force_reanalyse               = False,
+            existing_layout               = session.get("floor_layout"),
+        )
 
     # ── Persist agent outputs back to session ────────────────────────────────
     session["inspiration_analysis"] = result["inspiration_analysis"]
@@ -2563,6 +2624,13 @@ def step4():
         session["floor_layout"]     = result["floor_layout"]
     session.modified = True
     persist_brief()
+
+    # Key the cache on the state AFTER saving the run's outputs (e.g. a
+    # first-time inspiration analysis) — that's what the next visit will see.
+    if fresh_run:
+        if len(_STEP4_CACHE) >= _STEP4_CACHE_MAX:
+            _STEP4_CACHE.pop(next(iter(_STEP4_CACHE)))   # drop the oldest
+        _STEP4_CACHE[_step4_fingerprint()] = result
 
     # ── Split conflicts for display ───────────────────────────────────────────
     open_conflicts   = [c for c in result["conflicts"] if not c.get("resolved")]
@@ -2591,8 +2659,10 @@ def step4():
 # ── Regenerate ────────────────────────────────────────────────────────────────
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
-    # Re-run step4 — session data is preserved, except the cached room trace,
-    # so "Regenerate" also retries reading room positions from the plan.
+    # Re-run step4 — session data is preserved, except the cached agent result
+    # and the cached room trace, so "Regenerate" really does run everything
+    # again (including retrying room positions from the plan).
+    _STEP4_CACHE.pop(_step4_fingerprint(), None)
     session.pop("floor_layout", None)
     session.modified = True
     return redirect(url_for("step4"))
