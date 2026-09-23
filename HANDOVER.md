@@ -171,11 +171,13 @@ Key behaviours that were bug-fixed and MUST be preserved:
 | Inspiration image analysis | `analyse_inspiration()` (multimodal; takes `memory={step1,requirements}`) |
 | Conflict detection (style/budget/spatial) | `detect_conflicts()` + `STYLE_CONFLICTS`, `BUDGET_WEIGHTS`, `LARGE_ITEMS` |
 | Design brief | `generate_design_brief()` |
-| Per-room concept text | `generate_room_concept()` |
+| Per-room concept text | `generate_room_concept()` — gets the room's typed description plus project notes, decisions and approved refinements (`project_context`), and ends with a `FURNITURE: a; b` line |
+| Furniture the diagrams draw | `split_concept_furniture()` strips that line; names come from `FURNITURE_VOCAB` (= `_ITEM_GLYPHS` labels). So typed additions/removals and refinements show up in both diagrams; no line (mock mode) → falls back to the Step 2 ticks |
 | Per-room concept **visual** (2D SVG) | `generate_room_concept_visual()` |
 | Floor-plan **overview** (2D SVG) | `generate_floor_plan_svg()` → `_traced_floor_plan_svg()` (AI layout) or `_schematic_rows_svg()` + `_room_weight()` (rules); both draw rooms via `_room_cell_svg()` + `_furniture_markers()` |
 | Room-position trace (vision) | `build_layout_request()` + `read_floor_plan_layout()` — Claude returns a % bounding box per confirmed room; validated (≥60% of rooms placed, no heavy overlaps, confidence not low) or `None`. **Off by default** (`AI_FLOOR_LAYOUT`) — see section 8 |
 | Refinement feasibility + proposal | route `/refine` |
+| Loading screen progress bars | `ProgressTracker` + `/progress/<token>` (app.py), `showLoading()` (main.js). Forms opt in with `data-loading="..."`; the token travels in the `forma_progress` cookie; `run_agent(progress=...)` reports each AI task. In-memory, 15-min expiry |
 
 ### Furniture icon system (shared by BOTH visuals)
 - `_ITEM_GLYPHS` — maps item keyword → `(label, icon, rel_w, rel_h)`. **More specific

@@ -163,7 +163,7 @@
     <div class="conflicts-cta" id="conflicts-cta" style="display:none;">
       <p>All questions answered. Regenerate to apply your decisions to the brief.</p>
       <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;"
-            data-loading="Regenerating your design vision… (about 30 seconds)">
+            data-loading="Regenerating your design vision">
         <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
       </form>
     </div>
@@ -244,11 +244,12 @@
     {% if floor_plan_traced %}
     <p class="result-section__desc">Rooms are placed roughly where FORMA found them on your uploaded plan, with indicative furniture based on your selections. An approximate trace, not to scale and not a reconstruction of your walls or doors.</p>
     {% else %}
-    <p class="result-section__desc">A schematic of your detected rooms with indicative furniture placement based on your selections. Not a scaled reconstruction of your uploaded plan.</p>
+    <p class="result-section__desc">A schematic of your rooms and the furniture planned for each, from your selections and requests. Rooms are arranged in rows and sized by type. It doesn't follow your home's real layout or shape, and it isn't to scale.</p>
     {% endif %}
     <div class="floorplan-card">
       <div class="floorplan-render" id="floorplan-svg">
         {{ floor_plan_svg | safe }}
+        <div class="room-concept-visual__tag">{{ 'Approximate trace' if floor_plan_traced else 'Schematic' }} · not to scale</div>
       </div>
       <div class="floorplan-legend">
         {% for room in room_results %}
@@ -382,7 +383,7 @@
       <a href="{{ url_for('step1') }}" class="btn btn--ghost btn--sm">Start Over</a>
       <a href="{{ url_for('step2') }}" class="btn btn--ghost btn--sm">← Edit Requirements</a>
       <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;"
-            data-loading="Regenerating your design vision… (about 30 seconds)">
+            data-loading="Regenerating your design vision">
         <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
       </form>
     </div>
@@ -588,7 +589,7 @@
             form.method = 'POST';
             form.action = '/regenerate';
             document.body.appendChild(form);
-            showLoading('Applying your change and regenerating… (about 30 seconds)');
+            showLoading('Applying your change');
             form.submit();
           }, 1500);
         } else {

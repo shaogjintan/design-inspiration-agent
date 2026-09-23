@@ -46,6 +46,13 @@ logger = logging.getLogger(__name__)
 MAX_PARALLEL_LLM_CALLS = 8
 
 
+class _NoProgress:
+    """Default progress sink: app.ProgressTracker has the same three methods."""
+    def plan(self, task_id, label, expected_s): pass
+    def start(self, task_id): pass
+    def finish(self, task_id, ok=True): pass
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -89,6 +96,7 @@ def run_agent(
     existing_trace: list[dict] | None,
     force_reanalyse: bool = False,
     existing_layout: dict | None = None,
+    progress=None,
 ) -> dict:
     """
     Run the FORMA reasoning loop over the current project state.
@@ -108,6 +116,8 @@ def run_agent(
     force_reanalyse             : if True, re-run inspiration analysis even if a
                                   cached result exists (e.g. homeowner uploaded
                                   new images)
+    progress                    : optional tracker (plan/start/finish) that
+                                  feeds the loading screen's progress bars
     existing_layout             : session.get("floor_layout") — cached room
                                   position trace, reused while the floor plan
                                   and room list are unchanged
@@ -134,6 +144,7 @@ def run_agent(
     # homeowner" lines around even after the homeowner had answered. We ignore
     # existing_trace on purpose.
     trace: list[dict] = []
+    progress = progress or _NoProgress()
 
     # ─────────────────────────────────────────────────────────────────────────
     # OBSERVE: What do we know about this project?
@@ -199,7 +210,15 @@ def run_agent(
         or images_added_since_cache
     )
 
+    # Announce every AI task up front so the loading screen knows the total.
     if should_analyse:
+        progress.plan("inspiration", "Analysing your inspiration", 10)
+    progress.plan("brief", "Writing your design brief", 20)
+    for room in rooms:
+        progress.plan(f"room:{room['key']}", f"{room['label']} concept", 7)
+
+    if should_analyse:
+        progress.start("inspiration")
         reason = (
             "New inspiration images uploaded — running visual analysis."
             if (has_images and (not inspo_analysis or force_reanalyse))
@@ -210,6 +229,7 @@ def run_agent(
                 inspiration, rooms,
                 memory={"step1": step1, "requirements": requirements},
             )
+            progress.finish("inspiration")
             trace.append(_trace_entry(
                 step    = f"Analysed {total_images} inspiration image{'s' if total_images != 1 else ''}",
                 action  = "analyse_inspiration",
@@ -219,6 +239,7 @@ def run_agent(
                 confidence = inspo_analysis.get("confidence"),
             ))
         except Exception as e:
+            progress.finish("inspiration", ok=False)
             logger.warning(f"Inspiration analysis failed: {e}")
             inspo_analysis = _app._inspiration_analysis_fallback(
                 inspiration.get("design_style", ""),
@@ -366,6 +387,24 @@ def run_agent(
     # collect the results below. Sequentially this was ~66s for a 6-room flat
     # (20s brief + ~6s per room); in parallel it's roughly the slowest call.
     # Exceptions surface at .result(), inside the same try/excepts as before.
+    # Project notes also carry approved refinements ("[Refinement] ..." lines,
+    # see /apply-refinement), so room concepts — and the furniture they list
+    # for the diagrams — see those changes too, not only the brief.
+    project_context = "\n".join(filter(None, [
+        requirements.get("project_notes", "").strip(),
+        decisions_text,
+    ]))
+
+    def _tracked(task_id: str, fn, *args):
+        progress.start(task_id)
+        try:
+            out = fn(*args)
+        except Exception:
+            progress.finish(task_id, ok=False)
+            raise
+        progress.finish(task_id)
+        return out
+
     def _room_concept(room: dict) -> str:
         key = room["key"]
         return _app.generate_room_concept(
@@ -378,11 +417,13 @@ def run_agent(
             budget          = requirements.get(f"{key}_budget", ""),
             priority        = requirements.get(f"{key}_priority", ""),
             constraints     = requirements.get(f"{key}_constraints", ""),
+            project_context = project_context,
         )
 
     pool = ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_LLM_CALLS, len(rooms) + 1))
-    brief_future = pool.submit(_app.generate_design_brief, project_for_brief)
-    concept_futures = [pool.submit(_room_concept, room) for room in rooms]
+    brief_future = pool.submit(_tracked, "brief", _app.generate_design_brief, project_for_brief)
+    concept_futures = [pool.submit(_tracked, f"room:{room['key']}", _room_concept, room)
+                       for room in rooms]
     pool.shutdown(wait=False)   # queued calls still run; we just don't block here
 
     try:
@@ -425,16 +466,22 @@ def run_agent(
             concept = f"Design concept for {room['label']} could not be generated. Please regenerate."
             room_errors += 1
 
+        # Furniture to DRAW: the concept's FURNITURE line (ticked items plus
+        # what the homeowner typed or approved), or the ticked items when the
+        # line is missing (mock mode / model omitted it).
+        selected_items = requirements.get(f"{key}_items", []) or []
+        concept, furniture = _app.split_concept_furniture(concept)
+        drawn_items = furniture if furniture is not None else selected_items
+
         # Build a data-driven concept visual for this room (SVG, no external
         # assets — the gateway has no image-generation model).
-        selected_items = requirements.get(f"{key}_items", []) or []
         try:
             visual = _app.generate_room_concept_visual(
                 room["label"],
                 style       = inspiration.get("design_style", ""),
                 palette_hex = inspiration.get("colour_hex", ""),
                 materials   = inspo_analysis.get("materials", []),
-                items       = selected_items,
+                items       = drawn_items,
             )
         except Exception as e:
             logger.warning(f"Concept visual failed for {room['label']}: {e}")
@@ -445,7 +492,8 @@ def run_agent(
             "label":    room["label"],
             "concept":  concept,
             "visual":   visual,
-            "items":    requirements.get(f"{key}_items", []),
+            "items":    drawn_items,      # what the diagrams draw
+            "selected_items": selected_items,   # raw Step 2 ticks
             "priority": requirements.get(f"{key}_priority", "medium"),
             "budget":   requirements.get(f"{key}_budget", ""),
             "colour":   _app.ROOM_COLOURS[i % len(_app.ROOM_COLOURS)],
@@ -496,10 +544,14 @@ def run_agent(
                 confidence = layout.get("confidence") if layout else "low",
             ))
         else:
+            progress.plan("layout", "Tracing room positions", 25)
+            progress.start("layout")
             try:
                 layout = _app.read_floor_plan_layout(
                     floor_plan_path, room_labels, step1.get("num_floors", "1"))
+                progress.finish("layout")
             except Exception as e:
+                progress.finish("layout", ok=False)
                 logger.warning(f"Layout trace failed: {e}")
                 layout = None
             layout_cache = {"plan": floor_plan_path, "rooms": room_labels, "layout": layout}
