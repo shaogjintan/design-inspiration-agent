@@ -8,7 +8,11 @@ import re
 import json
 import uuid
 import base64
+import hashlib
+import statistics
+from concurrent.futures import ThreadPoolExecutor
 import textwrap
+from html import escape as html_escape
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -17,8 +21,9 @@ from dotenv import load_dotenv
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify, send_file, has_request_context, g
+    url_for, session, flash, jsonify, send_file, has_request_context, g, Response
 )
+from datetime import datetime, timezone
 from werkzeug.utils import secure_filename
 
 import clients
@@ -505,7 +510,8 @@ def _sniff_image_type(b64: str) -> str:
     return "image/jpeg"
 
 
-def _soclaas_request(gateway_messages: list, max_tokens: int) -> urllib.request.Request:
+def _soclaas_request(gateway_messages: list, max_tokens: int,
+                     think: bool = False) -> urllib.request.Request:
     """Build an OpenAI-format request for SOCLAAS from Ollama-format messages
     (plain-string content, images in a separate "images" array)."""
     converted = []
@@ -526,8 +532,9 @@ def _soclaas_request(gateway_messages: list, max_tokens: int) -> urllib.request.
         "messages": converted,
         "max_tokens": max_tokens,
         # qwen3.8 thinks before answering by default, which burns the small
-        # token budgets the callers set and returns empty content.
-        "chat_template_kwargs": {"enable_thinking": False},
+        # token budgets the callers set and returns empty content. Only a
+        # caller that asked for it, with the budget to match, gets thinking.
+        "chat_template_kwargs": {"enable_thinking": bool(think)},
     }
     return urllib.request.Request(
         f"{SOCLAAS_BASE_URL.rstrip('/')}/chat/completions",
@@ -540,8 +547,12 @@ def _soclaas_request(gateway_messages: list, max_tokens: int) -> urllib.request.
     )
 
 
+BRITISH_ENGLISH = ("Write all prose in British English: colour, organise, centre, "
+                   "prioritise, analyse, favourite, grey, metre.")
+
+
 def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60,
-             fallback_to_mock: bool = True, images_sent: int = 0) -> str:
+             fallback_to_mock: bool = True, images_sent: int = 0, think: bool = False) -> str:
     """
     Call the team's LLM Gateway.
     Falls back to the existing mock response if the gateway is unavailable.
@@ -561,16 +572,19 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
 
     gateway_messages = []
 
-    if system:
-        gateway_messages.append({
-            "role": "system",
-            "content": system
-        })
+    # FORMA writes British English. Said once here rather than in each prompt,
+    # so no model-written text on the page slips into American spelling.
+    system = ((system + "\n\n") if system else "") + BRITISH_ENGLISH
+
+    gateway_messages.append({
+        "role": "system",
+        "content": system
+    })
 
     gateway_messages.extend(messages)
 
     if USE_SOCLAAS:
-        req = _soclaas_request(gateway_messages, max_tokens)
+        req = _soclaas_request(gateway_messages, max_tokens, think=think)
     else:
         payload = {
             "model": LLM_MODEL,
@@ -1441,7 +1455,6 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
           based on limited information.
         - Cut every sentence that restates their inputs back at them. They know
           what they chose; tell them what it means.
-        - British spelling (colour, prioritise, analyse).
 
         FORMAT — exactly these five sections, in this order, each an <h4>
         heading followed by ONE <p> of 2-4 sentences. Use <strong> to mark the
@@ -1597,7 +1610,8 @@ _ITEM_GLYPHS = [
     (("bicycle", "bike rack"),                          "Bike rack",   "storage",     0.22, 0.12),
     (("pantry", "cabinet", "storage", "sideboard", "buffet", "shelv", "bookshelf", "display"), "Storage", "storage", 0.34, 0.14),
     (("wardrobe", "closet", "walk-in"),                 "Wardrobe",    "wardrobe",    0.30, 0.16),
-    (("dresser", "vanity table"),                       "Dresser",     "dresser",     0.26, 0.14),
+    (("dresser", "dressing table", "vanity table"),     "Dresser",     "dresser",     0.26, 0.14),
+    (("toilet", "wc", "water closet"),                  "Toilet",      "toilet",      0.12, 0.18),
     (("desk", "study desk", "workbench"),               "Desk",        "desk",        0.30, 0.16),
     (("freestanding bathtub", "bathtub", "tub"),        "Bathtub",     "bathtub",     0.28, 0.18),
     (("rainfall shower", "shower"),                     "Shower",      "shower",      0.18, 0.18),
@@ -1849,6 +1863,15 @@ def _icon_lamp(x, y, w, h, fill):
             f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{max(2, r*0.32):.1f}" fill="#FFF8E6" {_STK_THIN}/>')
 
 
+def _icon_toilet(x, y, w, h, fill):
+    """Toilet from above: cistern against the wall (top), bowl in front."""
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h*0.28:.1f}" rx="2" fill="{fill}" {_STK}/>'
+            f'<ellipse cx="{x + w/2:.1f}" cy="{y + h*0.62:.1f}" rx="{w*0.42:.1f}" ry="{h*0.34:.1f}" '
+            f'fill="{fill}" {_STK}/>'
+            f'<ellipse cx="{x + w/2:.1f}" cy="{y + h*0.64:.1f}" rx="{w*0.24:.1f}" ry="{h*0.2:.1f}" '
+            f'fill="#fff" {_STK_THIN}/>')
+
+
 def _icon_rug(x, y, w, h, fill):
     """Rug: soft rectangle with an inset border, drawn under everything else."""
     return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{fill}" {_STK_THIN}/>'
@@ -1886,6 +1909,7 @@ _ICON_DRAWERS = {
     "bathtub": _icon_bathtub, "shower": _icon_shower, "vanity": _icon_vanity,
     "mirror": _icon_mirror, "chairs": _icon_chairs, "plant": _icon_plant,
     "lamp": _icon_lamp, "rug": _icon_rug, "curtains": _icon_curtains, "fan": _icon_fan,
+    "toilet": _icon_toilet,
 }
 
 
@@ -1909,15 +1933,28 @@ def _draw_glyph(g: dict, cx: float, cy: float, box_w: float, box_h: float,
 
 def generate_room_concept_visual(room_label: str, style: str,
                                  palette_hex: str = "", materials: list | None = None,
-                                 items: list | None = None) -> str:
+                                 items: list | None = None,
+                                 geo: dict | None = None,
+                                 px_per_m: float | None = None,
+                                 layout: dict | None = None) -> str:
     """Produce a data-driven SVG 'concept visual' for one room.
 
     This is NOT a photoreal render (the gateway has no image model). It's an
-    honest, stylised concept swatch tinted by the chosen style + palette, that
-    lays out the homeowner's ACTUAL selected furniture (from Step 2) as
-    black-outlined, labelled shapes — so two rooms with different items look
-    different. Materials (from the inspiration analysis) tint the caption band.
+    honest, stylised concept swatch tinted by the chosen style + palette.
+
+    With a furniture layout (furniture_layout.place_room, in metres) the
+    homeowner's furniture is drawn to scale where the design rules put it; the
+    room is its traced shape, or a typical-size rectangle when there is no
+    plan. Without one, the selected items sit in a simple grid.
     """
+    typical = False
+    if layout and not geo:
+        # No plan: a typical room, measured in metres, with the one door the
+        # layout kept clear.
+        geo = {"x": 0.0, "y": 0.0, "w": layout["W"], "h": layout["D"],
+               "doors": layout.get("doors_drawn") or []}
+        px_per_m = 1.0
+        typical = not layout.get("measured")
     style_key = (style or "").lower().strip()
     base, accent, wall, floor = STYLE_PALETTES.get(
         style_key, STYLE_PALETTES["contemporary"])
@@ -1936,9 +1973,22 @@ def generate_room_concept_visual(room_label: str, style: str,
     room_top, room_bottom = pad, h - cap_h - pad
     room_left, room_right = pad, w - pad
 
-    # Clean 2D top-down room: flat floor + wall border. Furniture icons are laid
-    # out in a grid so each one is big enough to read.
-    glyphs = _items_to_glyphs(items, room_label)
+    # Traced from the plan: the room keeps its real shape and proportions.
+    # Furniture goes in its largest part.
+    shape = None
+    if geo:
+        avail_w, avail_h = room_right - room_left, room_bottom - room_top
+        s = min(avail_w / geo["w"], avail_h / geo["h"])
+        shape = _scale_room(geo, geo["x"], geo["y"], s,
+                            pad + (avail_w - geo["w"] * s) / 2,
+                            pad + (avail_h - geo["h"] * s) / 2)
+        main = _main_part(shape)
+        room_left, room_top = main["x"], main["y"]
+        room_right, room_bottom = main["x"] + main["w"], main["y"] + main["h"]
+
+    # Clean 2D top-down room: flat floor + wall border. Without a layout the
+    # furniture icons sit in a grid so each one is big enough to read.
+    glyphs = [] if layout else _items_to_glyphs(items, room_label)
     n = len(glyphs)
     # An empty plate is correct for a space with nothing to furnish; the swatch
     # still carries the room's palette and material tag.
@@ -1947,6 +1997,9 @@ def generate_room_concept_visual(room_label: str, style: str,
 
     inner_w = room_right - room_left
     inner_h = room_bottom - room_top
+    # A narrow traced room stacks its furniture instead of squeezing it.
+    if shape and inner_h > inner_w * 1.3:
+        cols, rows = rows, cols
     cell_w = inner_w / cols
     cell_h = inner_h / rows
 
@@ -1962,16 +2015,38 @@ def generate_room_concept_visual(room_label: str, style: str,
                                  fill=accent, label=True,
                                  label_size=9.5))
 
+    if shape and layout:
+        # The layout is measured from the room's top-left, across all its parts.
+        parts = _draw_layout(layout, shape["x"], shape["y"], shape["w"] / layout["W"],
+                             accent, font=9)
+        if layout.get("skipped"):
+            parts.append(f'<text x="{pad}" y="{pad - 3}" font-size="9" fill="#8A4B1F">'
+                         f'Did not fit: {html_escape(", ".join(layout["skipped"]))}</text>')
+
+    if shape:
+        room_svg = "".join(_room_shape_svg(shape, wall, 0.5, "#1C1B19", 3))
+        door_w = (door_width_m(room_label) / px_per_m * s if px_per_m
+                  else 0.25 * min(room_right - room_left, room_bottom - room_top))
+        room_svg += "".join(_door_svg(shape, "#F4F0E8", door_w))
+        dims = (f"≈ {layout['W']:.1f} × {layout['D']:.1f} m (typical size)" if typical
+                else _dims_text(geo, px_per_m))
+        if dims:
+            room_svg += (f'<text x="{w - pad}" y="{pad - 3}" font-size="9" fill="#4A4844" '
+                         f'text-anchor="end">{dims}</text>')
+    else:
+        # room walls (bold border) and a doorway gap on the bottom wall
+        room_svg = (f'<rect x="{room_left:.1f}" y="{room_top:.1f}" width="{inner_w:.1f}" '
+                    f'height="{inner_h:.1f}" fill="{wall}" fill-opacity="0.5" '
+                    f'stroke="#1C1B19" stroke-width="3" rx="4"/>'
+                    f'<rect x="{room_left + inner_w*0.42}" y="{room_bottom-2}" '
+                    f'width="{inner_w*0.16}" height="5" fill="{floor}"/>')
+
     return "\n".join([
         f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
         f'style="width:100%;height:100%;display:block;font-family:Inter,sans-serif;">',
         # floor (flat, top-down)
         f'<rect width="{w}" height="{h}" fill="{floor}" opacity="0.35"/>',
-        # room walls (bold border)
-        f'<rect x="{room_left}" y="{room_top}" width="{inner_w}" height="{inner_h}" '
-        f'fill="{wall}" fill-opacity="0.5" stroke="#1C1B19" stroke-width="3" rx="4"/>',
-        # a doorway gap on the bottom wall
-        f'<rect x="{room_left + inner_w*0.42}" y="{room_bottom-2}" width="{inner_w*0.16}" height="5" fill="{floor}"/>',
+        room_svg,
         # furniture icons (recognisable 2D top-down, labelled)
         "".join(parts),
         # materials caption band along the bottom (room name is in the card header)
@@ -2002,7 +2077,7 @@ def _room_weight(name: str) -> float:
 
 
 def _furniture_markers(room_name: str, items: list, x: int, y: int,
-                       cw: int, ch: int, accent: str) -> list[str]:
+                       cw: int, ch: int, accent: str, labels: bool = True) -> list[str]:
     """Furniture glyphs inside a room cell, drawn from the SAME shared glyph
     system the room concept visuals use — so both views show the homeowner's
     actual selected items, black-outlined and labelled, and stay consistent."""
@@ -2029,7 +2104,7 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
         cy = y + 8 + cell_h * (row + 0.5)
         parts.append(_draw_glyph(g, cx, cy,
                                  box_w=cell_w * 0.72, box_h=cell_h * 0.55,
-                                 fill=accent, label=True, label_size=7.0))
+                                 fill=accent, label=labels, label_size=7.0))
 
     # Say what was left out rather than silently truncating.
     if extra:
@@ -2040,17 +2115,22 @@ def _furniture_markers(room_name: str, items: list, x: int, y: int,
     return parts
 
 
-def generate_floor_plan_svg(rooms: list[dict]) -> str:
-    """Generate a schematic 'space + furniture overview'.
+def generate_floor_plan_svg(rooms: list[dict], geometry: dict | None = None) -> str:
+    """Generate the 'space + furniture overview'.
 
-    NOTE: This is a schematic derived from the DETECTED ROOMS and the
-    homeowner's selected furniture — it is not a scaled reconstruction of the
-    uploaded plan (that needs CAD geometry extraction, which is out of scope).
-    Rooms are sized by typical footprint and annotated with furniture markers.
+    With a plan trace (see read_plan_geometry) the rooms are drawn where the
+    plan puts them. Without one — no plan, or a trace that failed its checks —
+    this is a schematic: rooms sized by typical footprint, packed in rows.
     """
     n = len(rooms)
     if n == 0:
         return '<svg viewBox="0 0 600 200"></svg>'
+
+    if geometry and geometry.get("rooms"):
+        try:
+            return _floor_plan_svg_from_geometry(rooms, geometry)
+        except Exception:
+            app.logger.exception("Traced floor plan failed to draw — using the schematic")
 
     # Row-pack rooms so each row's total weight is roughly balanced.
     weights = [_room_weight(r["label"]) for r in rooms]
@@ -2113,6 +2193,1430 @@ def generate_floor_plan_svg(rooms: list[dict]) -> str:
     svg.append("</svg>")
     return "\n".join(svg)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plan geometry
+#
+# Where each confirmed room sits on the uploaded plan, so the drawings keep the
+# plan's layout and orientation instead of packing rooms into rows. The model
+# only ever returns numbers — room boxes and wall lines — never SVG: numbers can
+# be checked, and a drawing that fails the checks falls back to the schematic
+# rather than showing the homeowner a plan of a flat they do not live in.
+# ─────────────────────────────────────────────────────────────────────────────
+PLAN_GEOMETRY_TIMEOUT = 75      # the door rules make replies slower: ~40 s
+PLAN_TRACE_SAMPLES = 3
+# Let the model reason before it answers the trace. Measured on qwen3.8:27b:
+# it spent its whole 12,000-token budget thinking and answered nothing, after
+# more than two minutes — far past the page 4 wait. Off; the switch stays for
+# a model that reasons more briefly.
+PLAN_TRACE_THINK = False
+PLAN_TRACE_THINK_TOKENS = 12000
+# Tell the model each room's typical HDB size, so its boxes keep realistic
+# proportions to one another. Measured A/B on the same plan (9 replies without,
+# 6 with): overall match 0.41 vs 0.40, proportion error 5.1 vs 5.4 points —
+# no difference. The master bedroom matched better (0.60 vs 0.77) but not
+# reliably (p = 0.28), and the model then overshot its size. Off.
+PLAN_TRACE_SIZE_HINTS = False
+
+# Typical HDB flat sizes, used to put approximate metres on a traced plan when
+# the homeowner left floor size blank. Private housing varies too much to guess.
+TYPICAL_FLOOR_SQM = {
+    "hdb_2room": 45, "hdb_3room": 67, "hdb_4room": 92, "hdb_5room": 112,
+}
+
+# Rooms rarely cover the whole floor area — walls, corridors and ledges take
+# the rest — so the traced rooms are scaled to this share of it.
+_ROOM_COVERAGE = 0.88
+
+
+def image_size(path: str) -> tuple[int, int] | None:
+    """(width, height) of a PNG, JPEG, GIF or WebP from its header, or None.
+    Header parsing only, so no imaging library is needed."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(64 * 1024)
+    except OSError:
+        return None
+
+    if head[:8] == b"\x89PNG\r\n\x1a\n" and len(head) >= 24:
+        return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return int.from_bytes(head[6:8], "little"), int.from_bytes(head[8:10], "little")
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        chunk = head[12:16]
+        if chunk == b"VP8 " and len(head) >= 30:
+            return (int.from_bytes(head[26:28], "little") & 0x3FFF,
+                    int.from_bytes(head[28:30], "little") & 0x3FFF)
+        if chunk == b"VP8L" and len(head) >= 25:
+            b = head[21:25]
+            return (1 + (((b[1] & 0x3F) << 8) | b[0]),
+                    1 + (((b[3] & 0x0F) << 10) | (b[2] << 2) | ((b[1] & 0xC0) >> 6)))
+        if chunk == b"VP8X" and len(head) >= 30:
+            return (1 + int.from_bytes(head[24:27], "little"),
+                    1 + int.from_bytes(head[27:30], "little"))
+        return None
+    if head[:2] == b"\xff\xd8":
+        # Walk the segments to the frame header (SOF0-SOF15, bar DHT/JPG/DAC).
+        i = 2
+        while i + 9 < len(head):
+            if head[i] != 0xFF:
+                i += 1
+                continue
+            marker = head[i + 1]
+            if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+                i += 2
+                continue
+            length = int.from_bytes(head[i + 2:i + 4], "big")
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return (int.from_bytes(head[i + 7:i + 9], "big"),
+                        int.from_bytes(head[i + 5:i + 7], "big"))
+            i += 2 + length
+    return None
+
+
+# Bump when the trace or furniture pipeline changes what it produces, so
+# results saved by older code are redone rather than reused.
+PLAN_TRACE_VERSION = 5          # rooms, walkways, doors + conventions, scale
+FURNITURE_VERSION = 2           # project notes and refinements included
+
+
+def plan_geometry_key(floor_plan_path: str, room_labels: list[str]) -> str:
+    """Identifies a trace: the same plan file read for the same room list, by
+    the same version of the tracing. Changing any of them misses."""
+    h = hashlib.sha1(f"v{PLAN_TRACE_VERSION}".encode())
+    try:
+        with open(floor_plan_path, "rb") as f:
+            h.update(f.read())
+    except OSError:
+        h.update(str(floor_plan_path).encode())
+    h.update(json.dumps(list(room_labels)).encode())
+    return h.hexdigest()[:20]
+
+
+def _clean_boxes(entry: dict) -> list[list[float]]:
+    """A room's rectangles on the 0-1000 scale: one, or two or three touching
+    ones for an L- or T-shaped room. Edges the model left a hair apart are
+    snapped together so the parts join without a crack or a lip."""
+    raw = entry.get("boxes")
+    if not isinstance(raw, list) or not raw:
+        raw = [entry.get("box")]             # the single-box form
+    boxes = []
+    for box in raw[:3]:
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            continue
+        try:
+            x0, y0, x1, y1 = (min(max(float(v), 0.0), 1000.0) for v in box)
+        except (TypeError, ValueError):
+            continue
+        x0, x1 = sorted((x0, x1))
+        y0, y1 = sorted((y0, y1))
+        if x1 - x0 >= 15 and y1 - y0 >= 15:  # a sliver is not a room
+            boxes.append([x0, y0, x1, y1])
+
+    for axis in ((0, 2), (1, 3)):
+        seen: list[float] = []
+        for b in boxes:
+            for k in axis:
+                near = next((v for v in seen if abs(v - b[k]) <= 15), None)
+                if near is None:
+                    seen.append(b[k])
+                else:
+                    b[k] = near
+    return [b for b in boxes if b[2] > b[0] and b[3] > b[1]]
+
+
+def room_parts(geo: dict) -> list[dict]:
+    """The rectangles a room is made of. Traces saved before rooms could have
+    several parts are one rectangle — the room's own box."""
+    return geo.get("parts") or [{"x": geo["x"], "y": geo["y"], "w": geo["w"], "h": geo["h"]}]
+
+
+def _cells(parts: list[dict]):
+    """Cut the union of rectangles into grid cells: the x and y edges, and
+    which cells lie inside the room."""
+    xs = sorted({p["x"] for p in parts} | {p["x"] + p["w"] for p in parts})
+    ys = sorted({p["y"] for p in parts} | {p["y"] + p["h"] for p in parts})
+    covered = set()
+    for i in range(len(xs) - 1):
+        for j in range(len(ys) - 1):
+            cx, cy = (xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2
+            if any(p["x"] <= cx <= p["x"] + p["w"] and p["y"] <= cy <= p["y"] + p["h"]
+                   for p in parts):
+                covered.add((i, j))
+    return xs, ys, covered
+
+
+def union_area(parts: list[dict]) -> float:
+    xs, ys, covered = _cells(parts)
+    return sum((xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]) for i, j in covered)
+
+
+def union_outline(parts: list[dict]) -> str:
+    """SVG path data for the outside edge of the room. The seams between its
+    own rectangles are not walls, so they are not drawn."""
+    xs, ys, covered = _cells(parts)
+    segs = []
+    for i, j in sorted(covered):
+        x0, x1, y0, y1 = xs[i], xs[i + 1], ys[j], ys[j + 1]
+        if (i, j - 1) not in covered: segs.append((x0, y0, x1, y0))
+        if (i, j + 1) not in covered: segs.append((x0, y1, x1, y1))
+        if (i - 1, j) not in covered: segs.append((x0, y0, x0, y1))
+        if (i + 1, j) not in covered: segs.append((x1, y0, x1, y1))
+    return " ".join(f"M{a:.1f},{b:.1f}L{c:.1f},{d:.1f}" for a, b, c, d in segs)
+
+
+def split_into_rects(parts: list[dict], limit: int = 3, wide: float | None = None) -> list[dict]:
+    """A room's floor as its most usable rectangles, best first — however the
+    model happened to draw it. Furniture is laid out one rectangle at a time,
+    so an open-plan room traced as a strip plus side pieces still offers its
+    full width. A rectangle narrower than `wide` (3 m, in the parts' units)
+    counts for less than its area: a long corridor-like strip holds less
+    furniture than a squarer block of the same size. Pieces thinner than a
+    tenth of the room are left out."""
+    xs, ys, covered = _cells(parts)
+    free = set(covered)
+    out = []
+    span = max(xs[-1] - xs[0], ys[-1] - ys[0]) if xs and ys else 0
+    while free and len(out) < limit:
+        best = None
+        for i0 in range(len(xs) - 1):
+            for j0 in range(len(ys) - 1):
+                if (i0, j0) not in free:
+                    continue
+                for i1 in range(i0, len(xs) - 1):
+                    if (i1, j0) not in free:
+                        break
+                    for j1 in range(j0, len(ys) - 1):
+                        if any((i, j1) not in free for i in range(i0, i1 + 1)):
+                            break
+                        rw, rh = xs[i1 + 1] - xs[i0], ys[j1 + 1] - ys[j0]
+                        area = rw * rh * (min(1.0, min(rw, rh) / wide) if wide else 1.0)
+                        if best is None or area > best[0]:
+                            best = (area, i0, j0, i1, j1)
+        if not best:
+            break
+        _a, i0, j0, i1, j1 = best
+        rect = {"x": xs[i0], "y": ys[j0], "w": xs[i1 + 1] - xs[i0], "h": ys[j1 + 1] - ys[j0]}
+        free -= {(i, j) for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)}
+        if out and min(rect["w"], rect["h"]) < 0.1 * span:
+            continue
+        out.append(rect)
+    return out or [dict(p) for p in parts[:1]]
+
+
+def _main_part(geo: dict) -> dict:
+    return max(room_parts(geo), key=lambda p: p["w"] * p["h"])
+
+
+def _scale_room(geo: dict, min_x: float, min_y: float, s: float,
+                ox: float, oy: float) -> dict:
+    """The room moved into drawing coordinates: (min_x, min_y) lands on
+    (ox, oy) and every length is multiplied by s."""
+    def move(p):
+        return {"x": ox + (p["x"] - min_x) * s, "y": oy + (p["y"] - min_y) * s,
+                "w": p["w"] * s, "h": p["h"] * s}
+    return {**geo, **move(geo), "parts": [move(p) for p in room_parts(geo)]}
+
+
+PLAN_WALLS = ("top", "right", "bottom", "left")
+
+
+def _clean_doors(raw, n_parts: int) -> list[dict]:
+    """The model's doors for one room: which part's wall, which side, and how
+    far along it (0-1). Anything malformed is dropped."""
+    out = []
+    for o in (raw or [])[:4]:
+        if not isinstance(o, dict):
+            continue
+        wall = str(o.get("wall", "")).lower().strip()
+        try:
+            at = float(o.get("at", 500))
+            part = int(o.get("box", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if wall in PLAN_WALLS:
+            out.append({"wall": wall, "at": min(max(at, 0.0), 1000.0) / 1000,
+                        "part": part if 0 <= part < n_parts else 0})
+    return out
+
+
+def door_point(part: dict, door: dict) -> tuple[float, float]:
+    """Where a door's centre sits, in the part's own coordinates."""
+    x, y, w, h = part["x"], part["y"], part["w"], part["h"]
+    return {"top": (x + door["at"] * w, y), "bottom": (x + door["at"] * w, y + h),
+            "left": (x, y + door["at"] * h), "right": (x + w, y + door["at"] * h)}[door["wall"]]
+
+
+def _reattach_doors(doors: list[dict], old: list[dict], new: list[dict]) -> list[dict]:
+    """Move doors onto a room's new parts after it was reshaped: each keeps
+    its point on the plan and its wall side; one whose wall is gone is dropped."""
+    out = []
+    for o in doors:
+        px, py = door_point(old[o["part"]] if o["part"] < len(old) else old[0], o)
+        for i, p in enumerate(new):
+            wx, wy = door_point(p, {**o, "at": 0})
+            if o["wall"] in ("top", "bottom"):
+                if abs(py - wy) <= 2 and p["x"] - 1 <= px <= p["x"] + p["w"] + 1:
+                    out.append({**o, "part": i, "at": min(max((px - p["x"]) / p["w"], 0), 1)})
+                    break
+            elif abs(px - wx) <= 2 and p["y"] - 1 <= py <= p["y"] + p["h"] + 1:
+                out.append({**o, "part": i, "at": min(max((py - p["y"]) / p["h"], 0), 1)})
+                break
+    return out
+
+
+def _rect_minus(r: dict, cut: dict) -> list[dict]:
+    """r with cut removed, as up to four rectangles (above, below, left, right
+    of the cut)."""
+    rx1, ry1, cx1, cy1 = r["x"] + r["w"], r["y"] + r["h"], cut["x"] + cut["w"], cut["y"] + cut["h"]
+    if cut["x"] >= rx1 or cx1 <= r["x"] or cut["y"] >= ry1 or cy1 <= r["y"]:
+        return [r]
+    top, bottom = max(r["y"], cut["y"]), min(ry1, cy1)
+    pieces = [
+        {"x": r["x"], "y": r["y"], "w": r["w"], "h": cut["y"] - r["y"]},
+        {"x": r["x"], "y": cy1, "w": r["w"], "h": ry1 - cy1},
+        {"x": r["x"], "y": top, "w": cut["x"] - r["x"], "h": bottom - top},
+        {"x": cx1, "y": top, "w": rx1 - cx1, "h": bottom - top},
+    ]
+    return [p for p in pieces if p["w"] > 0 and p["h"] > 0]
+
+
+def _connected_to_largest(parts: list[dict]) -> list[dict]:
+    """The parts joined, edge to edge, to the largest one."""
+    if not parts:
+        return parts
+
+    def touch(a, b):
+        ix = min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])
+        iy = min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"])
+        return (ix > 0.5 and iy > -0.5) or (iy > 0.5 and ix > -0.5)
+
+    start = max(range(len(parts)), key=lambda i: parts[i]["w"] * parts[i]["h"])
+    keep, todo = {start}, [start]
+    while todo:
+        i = todo.pop()
+        for j in range(len(parts)):
+            if j not in keep and touch(parts[i], parts[j]):
+                keep.add(j)
+                todo.append(j)
+    return [p for i, p in enumerate(parts) if i in keep]
+
+
+def _carve_open_plan(rooms: dict) -> None:
+    """An open-plan living area is the space left between the other rooms,
+    and the model tends to give it one box over all of them. Rooms do not
+    overlap, so any smaller room reaching well into a larger one (15% of
+    itself) is cut out of it, and the larger becomes the open space it really
+    is. Pieces the cut strands away from the room's body are dropped, and a
+    room left with too little of itself was a bad box. Mutates rooms."""
+    by_area = sorted(rooms, key=lambda l: union_area(rooms[l]["parts"]), reverse=True)
+    for big in by_area:
+        if big not in rooms:
+            continue
+        geo = rooms[big]
+        before = union_area(geo["parts"])
+        parts = geo["parts"]
+        for other in by_area:
+            if other == big or other not in rooms:
+                continue
+            small = rooms[other]["parts"]
+            small_area = union_area(small)
+            if small_area >= before:
+                continue
+            inside = union_area(parts) + small_area - union_area(parts + small)
+            if inside > 0.15 * small_area:
+                for cut in small:
+                    parts = [piece for p in parts for piece in _rect_minus(p, cut)]
+        if parts is geo["parts"]:
+            continue
+        # Offcuts thinner than a wall are noise from the cut, not floor.
+        min_side = 0.012 * max(max(p["x"] + p["w"] for p in parts), 1)
+        parts = _connected_to_largest(
+            [p for p in parts if p["w"] >= min_side and p["h"] >= min_side])
+        if not parts or union_area(parts) < 0.25 * before:
+            del rooms[big]
+            continue
+        parts.sort(key=lambda p: p["w"] * p["h"], reverse=True)
+        x0, y0 = min(p["x"] for p in parts), min(p["y"] for p in parts)
+        rooms[big] = {
+            **geo,
+            "x": x0, "y": y0,
+            "w": max(p["x"] + p["w"] for p in parts) - x0,
+            "h": max(p["y"] + p["h"] for p in parts) - y0,
+            "parts":   parts,
+            "doors":   _reattach_doors(geo.get("doors") or [], geo["parts"], parts),
+        }
+
+
+def parse_plan_geometry(data: dict, room_labels: list[str],
+                        size: tuple[int, int]) -> dict:
+    """Validate the model's trace and convert it to image pixels.
+
+    Raises ValueError when the trace is not believable: too few rooms found,
+    or rooms piled on top of each other. Individual bad entries are dropped.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("trace is not an object")
+    img_w, img_h = size
+    by_name = {re.sub(r"\s+", " ", l).strip().lower(): l for l in room_labels}
+
+    rooms: dict[str, dict] = {}
+    for entry in data.get("rooms") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = re.sub(r"\s+", " ", str(entry.get("name", ""))).strip().lower()
+        label = by_name.get(name)
+        if not label or label in rooms:
+            continue
+        boxes = _clean_boxes(entry)
+        if not boxes:
+            continue
+        parts = [{"x": b[0] / 1000 * img_w, "y": b[1] / 1000 * img_h,
+                  "w": (b[2] - b[0]) / 1000 * img_w, "h": (b[3] - b[1]) / 1000 * img_h}
+                 for b in boxes]
+        x0 = min(p["x"] for p in parts)
+        y0 = min(p["y"] for p in parts)
+        rooms[label] = {
+            "x": x0, "y": y0,
+            "w": max(p["x"] + p["w"] for p in parts) - x0,
+            "h": max(p["y"] + p["h"] for p in parts) - y0,
+            "parts":   parts,
+            "doors":   _clean_doors(entry.get("doors"), len(parts)),
+        }
+
+    _carve_open_plan(rooms)
+
+    need = max(2, -(-len(room_labels) // 2))
+    if len(rooms) < need:
+        raise ValueError(f"only {len(rooms)} of {len(room_labels)} rooms located")
+
+    # Neighbours share walls, so small overlaps are tracing noise. Anything
+    # still largely overlapping after the carve is a failed read.
+    items = list(rooms.items())
+    areas = {label: union_area(geo["parts"]) for label, geo in items}
+    overlap = 0.0
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            (la, a), (lb, b) = items[i], items[j]
+            inter = 0.0
+            for pa in a["parts"]:
+                for pb in b["parts"]:
+                    ix = min(pa["x"] + pa["w"], pb["x"] + pb["w"]) - max(pa["x"], pb["x"])
+                    iy = min(pa["y"] + pa["h"], pb["y"] + pb["h"]) - max(pa["y"], pb["y"])
+                    if ix > 0 and iy > 0:
+                        inter += ix * iy
+            if inter > 0.6 * min(areas[la], areas[lb]):
+                raise ValueError(f"{la} and {lb} overlap")
+            overlap += inter
+    total_area = sum(areas.values())
+    if total_area and overlap / total_area > 0.2:
+        raise ValueError("rooms overlap too much to be a plan")
+
+    def px(b):
+        return {"x": b[0] / 1000 * img_w, "y": b[1] / 1000 * img_h,
+                "w": (b[2] - b[0]) / 1000 * img_w, "h": (b[3] - b[1]) / 1000 * img_h}
+
+    # Walkways are the floor between rooms: where one overlaps a room, the
+    # room wins. Offcuts thinner than a wall are noise.
+    room_rects = [p for g in rooms.values() for p in g["parts"]]
+    min_side = 0.015 * max(img_w, img_h)
+    walkways = []
+    for b in _trace_boxes(data, "walkways"):
+        b = [min(max(v, 0.0), 1000.0) for v in b]
+        if b[2] - b[0] <= 0 or b[3] - b[1] <= 0:
+            continue
+        pieces = [px(b)]
+        for cut in room_rects:
+            pieces = [q for p in pieces for q in _rect_minus(p, cut)]
+        walkways += [q for q in pieces if q["w"] >= min_side and q["h"] >= min_side]
+
+    refs = [{"type": r["type"], **px(r["box"])} for r in data.get("refs") or []
+            if isinstance(r, dict) and isinstance(r.get("box"), list)]
+    geometry = {
+        "image_w":  img_w,
+        "image_h":  img_h,
+        "rooms":    rooms,
+        "walkways": walkways,
+        "missing":  [l for l in room_labels if l not in rooms],
+    }
+    geometry["m_per_px_ref"] = _scale_from_furniture(refs, geometry)
+    _fold_open_floor(geometry)
+    _apply_door_conventions(geometry)
+    return geometry
+
+
+# Rooms that open from one particular room: (this room, the room it opens
+# from). An en suite opens from its bedroom, a service yard from the kitchen.
+_OPENS_FROM = [
+    (("master bath", "ensuite", "en suite", "en-suite"), ("master bed", "main bed")),
+    (("yard", "utility", "laundry"), ("kitchen",)),
+]
+
+
+def _shared_wall(a: dict, b: dict, tol: float) -> tuple | None:
+    """Where room a's wall meets room b: (a's part index, a's wall side, the
+    shared stretch's centre along that wall, 0-1). None if they do not touch."""
+    best = None
+    for i, p in enumerate(room_parts(a)):
+        for q in room_parts(b):
+            for side, gap, (lo, hi), (plo, pl) in (
+                ("top",    abs(p["y"] - (q["y"] + q["h"])), (max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])), (p["x"], p["w"])),
+                ("bottom", abs(p["y"] + p["h"] - q["y"]),   (max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])), (p["x"], p["w"])),
+                ("left",   abs(p["x"] - (q["x"] + q["w"])), (max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])), (p["y"], p["h"])),
+                ("right",  abs(p["x"] + p["w"] - q["x"]),   (max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])), (p["y"], p["h"])),
+            ):
+                if gap <= tol and hi - lo > 0 and (best is None or hi - lo > best[0]):
+                    best = (hi - lo, i, side, ((lo + hi) / 2 - plo) / pl)
+    return best[1:] if best else None
+
+
+def _apply_door_conventions(geometry: dict) -> None:
+    """Doors the layout of a flat implies, enforced where the trace missed
+    them: an en suite opens from its bedroom, a service yard from the kitchen.
+    If the room has no door on the wall it shares with that room, one goes at
+    the middle of the shared stretch — in both rooms, so the furniture in each
+    keeps it clear. Mutates geometry."""
+    rooms = geometry["rooms"]
+    tol = 0.02 * max(geometry.get("image_w", 1000), geometry.get("image_h", 1000))
+
+    def find(keys):
+        return next((l for l in rooms if any(k in l.lower() for k in keys)), None)
+
+    for child_keys, parent_keys in _OPENS_FROM:
+        child, parent = find(child_keys), find(parent_keys)
+        if not child or not parent:
+            continue
+        shared = _shared_wall(rooms[child], rooms[parent], tol)
+        if not shared:
+            continue
+        part, side, at = shared
+        if any(d["wall"] == side and d.get("part", 0) == part for d in rooms[child].get("doors") or []):
+            continue
+        rooms[child].setdefault("doors", []).append({"part": part, "wall": side, "at": at})
+        back = _shared_wall(rooms[parent], rooms[child], tol)
+        if back:
+            rooms[parent].setdefault("doors", []).append(
+                {"part": back[0], "wall": back[1], "at": back[2]})
+
+
+_OPEN_PLAN = ("living", "dining", "family", "lounge")
+_CORRIDOR_MAX_M = 1.4        # wider than this both ways is a room's floor, not a corridor
+
+
+def _fold_open_floor(geometry: dict) -> None:
+    """The model tends to call part of an open-plan living area "walkway". A
+    corridor is narrow; a "walkway" wider than one both ways that touches the
+    living or dining room is that room's floor, so it joins the room.
+    Mutates geometry."""
+    rooms = geometry["rooms"]
+    open_plan = [l for l in rooms if any(k in l.lower() for k in _OPEN_PLAN)]
+    if not open_plan or not geometry["walkways"]:
+        return
+    m = geometry.get("m_per_px_ref")
+    if m:
+        wide = _CORRIDOR_MAX_M / m
+    else:
+        # No scale yet: a corridor is about a tenth of a flat's width.
+        spaces = [p for g in rooms.values() for p in g["parts"]]
+        span = max(max(p["x"] + p["w"] for p in spaces) - min(p["x"] for p in spaces),
+                   max(p["y"] + p["h"] for p in spaces) - min(p["y"] for p in spaces))
+        wide = 0.14 * span
+
+    def touches(a, b):
+        ix = min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"])
+        iy = min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"])
+        return (ix > 1 and iy > -1.5) or (iy > 1 and ix > -1.5)
+
+    changed = True
+    while changed:                     # a merged piece can bring its neighbour in
+        changed = False
+        for w in list(geometry["walkways"]):
+            if min(w["w"], w["h"]) < wide:
+                continue
+            for label in open_plan:
+                if any(touches(w, p) for p in rooms[label]["parts"]):
+                    parts = rooms[label]["parts"] + [w]
+                    x0, y0 = min(p["x"] for p in parts), min(p["y"] for p in parts)
+                    rooms[label].update(
+                        parts=parts, x=x0, y=y0,
+                        w=max(p["x"] + p["w"] for p in parts) - x0,
+                        h=max(p["y"] + p["h"] for p in parts) - y0)
+                    geometry["walkways"].remove(w)
+                    changed = True
+                    break
+
+
+# Real sizes (short side, long side, in metres) of furniture a plan draws in a
+# standard size — enough to read the plan's scale off it.
+_REF_SIZES = {
+    "double bed": (1.52, 2.0), "queen bed": (1.52, 2.0), "king bed": (1.83, 2.0),
+    "single bed": (0.95, 1.9), "super single bed": (1.07, 1.9),
+    "sofa": (0.9, 2.0), "wc": (0.4, 0.7), "toilet": (0.4, 0.7),
+}
+
+
+def _scale_from_furniture(refs: list[dict], geometry: dict) -> float | None:
+    """Metres per pixel, read off the standard-size furniture drawn on the
+    plan. Beds count most: they are the most standard and the largest, so a
+    pixel of tracing error matters least. None when nothing usable was
+    measured, or when the answer would make the flat an implausible size."""
+    estimates = []
+    for r in refs:
+        real = _REF_SIZES.get(r.get("type", ""))
+        if not real or r["w"] <= 2 or r["h"] <= 2:
+            continue
+        short_px, long_px = sorted((r["w"], r["h"]))
+        e = (real[0] / short_px + real[1] / long_px) / 2
+        estimates += [e] * (3 if "bed" in r["type"] else 1)
+    if not estimates:
+        return None
+    m = statistics.median(estimates)
+    area = sum(union_area(g["parts"]) for g in geometry["rooms"].values()) * m * m
+    return m if 15 <= area <= 400 else None
+
+
+def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
+                       housing_label: str = "") -> dict:
+    """Trace where each confirmed room sits on the plan. One vision call.
+
+    Raises on any failure — unreadable image type, gateway down, images
+    dropped, or a trace that fails parse_plan_geometry — so the caller can
+    fall back to the schematic.
+    """
+    size = image_size(floor_plan_path)
+    if not size:
+        raise ValueError("plan is not a PNG, JPEG, GIF or WebP image")
+
+    img_w, img_h = size
+    img_data, _media = image_to_base64(floor_plan_path)
+    names = "\n".join(f"- {l}" for l in room_labels)
+    prompt = textwrap.dedent(f"""
+        The attached image is the floor plan of a {housing_label or 'home'},
+        {img_w} pixels wide and {img_h} pixels tall. Give every coordinate in
+        its pixels: x from 0 to {img_w}, y from 0 to {img_h}.
+
+        Find each of these rooms on it. The homeowner confirmed this list;
+        the plan usually prints each room's name inside it, though maybe in
+        different words (e.g. "Master Bathroom" may be printed "BATH / WC"
+        beside the main bedroom):
+        {{names}}
+
+        {{size_hints}}
+        Ignore windows and ledges.
+
+        Work walls first, then spaces:
+        1. "wall_x": the x position of every main vertical wall, left to right.
+           "wall_y": the y position of every main horizontal wall, top to
+           bottom.
+        2. "rooms": for every room you can find, "printed" — the label as the
+           plan prints it — and "boxes" — its floor area as rectangles
+           [x0, y0, x1, y1], with every edge taken from wall_x and wall_y so
+           rooms that share a wall share the exact number. Start from the
+           printed label and grow out to the walls around it.
+           A rectangular room is ONE box. An L- or T-shaped room is two or
+           three boxes that share an edge and do not overlap; largest first.
+           An open-plan living area is the floor left between the other
+           rooms — do not draw it over them.
+           "doors": every door into the room, as {{"box": index of the box
+           whose wall it is in, "wall": "top" | "right" | "bottom" | "left",
+           "at": 0-1000}} — "at" is the centre of the door's gap along that
+           box's wall, from its left end (top and bottom walls) or its top end
+           (left and right walls). Furniture is placed clear of every door.
+
+           Finding doors: a door is a GAP in the wall with a thin straight line
+           (the leaf) and a quarter-circle arc, often dotted or dashed, swinging
+           into the room it opens into — "at" is the gap's centre, not the
+           arc's. Every room has at least one. An en suite opens from its
+           master bedroom and a service yard from the kitchen; bedrooms and the
+           common bathroom open onto the corridor or the living area.
+        3. "walkways": the corridors, hallways and entrance foyer that join the
+           rooms but belong to none of them, as boxes the same way, so the
+           rooms and walkways together cover the whole flat.
+        4. "furniture_drawn": furniture printed on the plan that has a standard
+           size — every bed, sofa and WC — each as {{"type": "double bed" |
+           "single bed" | "sofa" | "wc", "box": [x0, y0, x1, y1]}} tight around
+           the drawn piece. These set the plan's scale, so trace them closely.
+
+        Rules:
+        - Use the room names exactly as listed. Never add a room that is not
+          on the list; put any you cannot find in "missing".
+        - Rooms and walkways fit together like a jigsaw: neighbours touch,
+          never overlap.
+        - Keep the plan's own orientation. Do not rotate or mirror it.
+
+        Reply with ONLY this JSON:
+        {{"wall_x": [70, 175, 280, 371], "wall_y": [93, 224, 233, 327, 355],
+          "rooms": [
+          {{"name": "Kitchen", "printed": "KITCHEN", "boxes": [[280, 224, 371, 355]],
+            "doors": [{{"box": 0, "wall": "left", "at": 300}}]}},
+          {{"name": "Living Room", "printed": "LIVING / DINING",
+            "boxes": [[70, 93, 280, 233], [70, 233, 175, 327]],
+            "doors": [{{"box": 1, "wall": "bottom", "at": 500}}]}}
+        ],
+          "walkways": [[175, 233, 280, 327]],
+          "furniture_drawn": [{{"type": "double bed", "box": [300, 110, 352, 178]}}],
+          "missing": []}}
+    """).strip().replace("{names}", names).replace(
+        "{size_hints}", _size_hints(room_labels, housing_label) if PLAN_TRACE_SIZE_HINTS else "")
+
+    walls = detect_plan_walls(floor_plan_path)
+
+    def trace_once():
+        raw = call_llm([{"role": "user", "content": prompt, "images": [img_data]}],
+                       system="You trace residential floor plans into coordinates. "
+                              "You reply with JSON only, and you leave out any room "
+                              "you cannot actually see rather than guess.",
+                       max_tokens=PLAN_TRACE_THINK_TOKENS if PLAN_TRACE_THINK else 2000,
+                       timeout=PLAN_GEOMETRY_TIMEOUT * (3 if PLAN_TRACE_THINK else 1),
+                       fallback_to_mock=False,
+                       images_sent=1,
+                       think=PLAN_TRACE_THINK)
+        data = _normalise_trace(_loads_salvaging_truncation(strip_code_fence(raw)))
+        if not (data and data["rooms"]):
+            return None
+        data = _pixels_to_permille(_snap_to_walls(data, size), size)
+        if walls:
+            data = align_to_walls(data, walls, size)
+        return _close_gaps(data)
+
+    # Single traces vary a lot run to run. Several in parallel, combined room
+    # by room, cost no extra wait and are far steadier (see _trace_consensus).
+    samples, errors = [], []
+    with ThreadPoolExecutor(max_workers=PLAN_TRACE_SAMPLES) as pool:
+        for fut in [pool.submit(trace_once) for _ in range(PLAN_TRACE_SAMPLES)]:
+            try:
+                samples.append(fut.result())
+            except Exception as e:           # one bad sample need not sink the rest
+                errors.append(e)
+    samples = [d for d in samples if d]
+
+    # Now and then every reply comes back with all rooms "missing" in about a
+    # second — the image did not reach the model, and it said so honestly.
+    # That is worth one more try; a trace that found some rooms is not.
+    if not samples and not errors:
+        app.logger.warning("Plan trace found no rooms — the image may not have "
+                           "reached the model; trying once more")
+        again = trace_once()
+        samples = [again] if again else []
+    if not samples:
+        if errors:
+            raise errors[0]
+        raise ValueError("the model could not see the plan")
+
+    # Candidates in order of preference: the traces combined room by room
+    # (most accurate on average), the single most typical trace (keeps every
+    # room consistent with its neighbours), then each trace alone. The first
+    # that passes the checks with the fewest rooms lost wins — combining can
+    # lose a room that one whole trace keeps.
+    candidates = []
+    if len(samples) > 1:
+        pooled = [r for d in samples for r in d.get("refs") or []]
+        candidates += [_trace_consensus(samples),
+                       {**_most_typical_trace(samples), "refs": pooled}]
+    candidates += samples
+    best, last = None, None
+    for data in candidates:
+        try:
+            g = parse_plan_geometry(json.loads(json.dumps(data)), room_labels, size)
+        except ValueError as e:
+            last = e
+            continue
+        if best is None or len(g["missing"]) < len(best["missing"]):
+            best = g
+        if not best["missing"]:
+            break
+    if best is None:
+        raise last
+    return best
+
+
+def _size_hints(room_labels: list[str], housing_label: str) -> str:
+    """Typical sizes of the confirmed rooms, as a proportion check for the
+    trace. Only for HDB flats, whose rooms are sized to a narrow standard."""
+    if "hdb" not in (housing_label or "").lower():
+        return ""
+    import furniture_layout
+    lines = []
+    for label in room_labels:
+        w, d = furniture_layout.typical_room_size(label)
+        lines.append(f"  - {label}: about {w:.1f} m x {d:.1f} m ({w * d:.0f} m²)")
+    return ("In an HDB flat these rooms are typically about this size. Your "
+            "boxes need not match these numbers, but they should keep the same "
+            "proportions to one another — a room about twice the area of another "
+            "here should be about twice its area on your trace:\n"
+            + "\n".join(lines) + "\n")
+
+
+def _most_typical_trace(samples: list[dict]) -> dict:
+    """The one trace whose rooms sit closest to the median of all traces —
+    every room from the same reply, so neighbours stay consistent."""
+    def key(e):
+        return re.sub(r"\s+", " ", str(e.get("name", ""))).strip().lower()
+
+    mains: dict[str, list] = {}
+    for data in samples:
+        for e in data.get("rooms") or []:
+            if isinstance(e, dict) and e.get("boxes"):
+                mains.setdefault(key(e), []).append(e["boxes"][0])
+    median = {k: [statistics.median(float(b[i]) for b in v) for i in range(4)]
+              for k, v in mains.items()}
+
+    def distance(data):
+        seen = {key(e): e["boxes"][0] for e in data.get("rooms") or []
+                if isinstance(e, dict) and e.get("boxes")}
+        return sum(sum(abs(float(seen[k][i]) - m[i]) for i in range(4)) if k in seen
+                   else 4000 for k, m in median.items())
+    return min(samples, key=distance)
+
+
+# Largest gap (0-1000 scale) between neighbouring rooms that is closed up —
+# a wall's thickness or a walkway the plan leaves between them.
+_GAP_CLOSE = 30
+
+
+def _close_gaps(data: dict) -> dict:
+    """Piece the plan together: where a room or walkway stops just short of a
+    neighbour, with nothing in between, extend it to meet that neighbour —
+    the gap is a wall's thickness, not floor."""
+    owned = [(("room", ri), b) for ri, e in enumerate(data.get("rooms") or [])
+             if isinstance(e, dict) for b in e.get("boxes") or []
+             if isinstance(b, list) and len(b) == 4]
+    owned += [(("walk", wi), b) for wi, b in enumerate(data.get("walkways") or [])
+              if isinstance(b, list) and len(b) == 4]
+
+    def overlap(a0, a1, b0, b1):
+        return min(a1, b1) - max(a0, b0)
+
+    for who, b in owned:
+        # (edge index, direction): right edge grows +x, left -x, bottom +y, top -y
+        for edge, sign, lo, hi in ((2, 1, 1, 3), (0, -1, 1, 3), (3, 1, 0, 2), (1, -1, 0, 2)):
+            best = None
+            for other, o in owned:
+                if other == who or overlap(b[lo], b[hi], o[lo], o[hi]) <= 0:
+                    continue
+                face = o[edge - 2] if sign > 0 else o[edge + 2]   # the facing edge
+                gap = (face - b[edge]) * sign
+                if 0 < gap <= _GAP_CLOSE and (best is None or gap < best[0]):
+                    best = (gap, face)
+            if best:
+                b[edge] = best[1]
+    return data
+
+
+def _trace_consensus(samples: list[dict]) -> dict:
+    """Combine several traces of one plan, room by room.
+
+    For each room found by most of the traces, take the median of each edge
+    of its main box, then keep the trace whose room is closest to that median
+    — whole, so an L-shape's parts stay together.
+    Measured on live replies, three traces combined this way match the plan
+    about as well as the best single trace, and the worst case improves most."""
+    by_room: dict[str, list[dict]] = {}
+    for data in samples:
+        seen = set()
+        for e in data.get("rooms") or []:
+            if not isinstance(e, dict) or not e.get("boxes"):
+                continue
+            key = re.sub(r"\s+", " ", str(e.get("name", ""))).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                by_room.setdefault(key, []).append(e)
+
+    rooms = []
+    for key, entries in by_room.items():
+        if len(entries) * 2 < len(samples):
+            continue                          # found by too few to trust
+        mains = [e["boxes"][0] for e in entries]
+        median = [statistics.median(float(b[i]) for b in mains) for i in range(4)]
+        rooms.append(min(entries, key=lambda e: sum(
+            abs(float(e["boxes"][0][i]) - median[i]) for i in range(4))))
+    # Walkways only make sense beside the rooms they were traced with, so take
+    # the most typical trace's; the furniture measurements pool, since every
+    # trace was fitted onto the same walls.
+    typical = _most_typical_trace(samples)
+    return {"rooms": rooms, "walkways": typical.get("walkways") or [],
+            "refs": [r for d in samples for r in d.get("refs") or []]}
+
+
+# How far (on the 0-1000 scale) a room edge may move to meet a detected wall,
+# and how far the layout's extent may sit off the outer walls before the whole
+# layout is refitted onto them. Tuned on live replies — see align_to_walls.
+_WALL_SNAP = 40
+_FIT_SLACK = 0.06
+
+
+def detect_plan_walls(floor_plan_path: str) -> dict | None:
+    """Find the plan's walls in the image itself: long straight runs of dark
+    pixels. Returns wall centre lines and the outer extent, in the image's
+    pixels, or None when Pillow is missing or no walls stand out.
+
+    The model is good at which room is where and poor at exactly where a wall
+    is; the pixels are the reverse. Text and furniture are dark too, but
+    never in runs this long."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        img = Image.open(floor_plan_path).convert("L")
+    except Exception:
+        return None
+    w0, h0 = img.size
+    k = min(1.0, 1000 / max(w0, h0))            # keep the scan quick on big scans
+    if k < 1:
+        img = img.resize((max(1, int(w0 * k)), max(1, int(h0 * k))))
+    w, h = img.size
+    data = img.point(lambda v: 1 if v < 70 else 0).tobytes()
+    min_run = max(20, int(0.05 * min(w, h)))
+
+    def longest(values):
+        best = cur = 0
+        for v in values:
+            cur = cur + 1 if v else 0
+            if cur > best:
+                best = cur
+        return best
+
+    col_hits = [x for x in range(w) if longest(data[x::w]) >= min_run]
+    row_hits = [y for y in range(h) if longest(data[y * w:(y + 1) * w]) >= min_run]
+
+    def centres(hits):
+        groups, run = [], []
+        for v in hits:
+            if run and v - run[-1] > 2:
+                groups.append(run)
+                run = []
+            run.append(v)
+        if run:
+            groups.append(run)
+        return [(g[0] + g[-1]) / 2 / k for g in groups]
+
+    xs, ys = centres(col_hits), centres(row_hits)
+    if len(xs) < 2 or len(ys) < 2:
+        return None
+    return {"x": xs, "y": ys, "extent": (xs[0], ys[0], xs[-1], ys[-1])}
+
+
+def align_to_walls(data: dict, walls: dict, size: tuple[int, int]) -> dict:
+    """Fit a trace (0-1000 scale) onto the walls found in the image.
+
+    First, if the spaces' overall extent is clearly off the plan's outer walls
+    — the model stretched or shifted the whole layout — map it onto them,
+    axis by axis; the furniture it measured moves with it. Then pull each room
+    and walkway edge onto the nearest wall line."""
+    img_w, img_h = size
+    boxes = _trace_boxes(data, "rooms", "walkways")
+    if not boxes:
+        return data
+    ex0, ey0, ex1, ey1 = walls["extent"]
+    target = (ex0 / img_w * 1000, ey0 / img_h * 1000, ex1 / img_w * 1000, ey1 / img_h * 1000)
+    have = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+            max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+    def fit(axis):                               # 0 for x, 1 for y
+        lo, hi = have[axis], have[axis + 2]
+        tlo, thi = target[axis], target[axis + 2]
+        span, tspan = hi - lo, thi - tlo
+        if span <= 0 or tspan <= 0:
+            return lambda v: v
+        off = abs(span - tspan) / tspan > _FIT_SLACK * 2 or abs(lo - tlo) / tspan > _FIT_SLACK \
+            or abs(hi - thi) / tspan > _FIT_SLACK
+        if not off:
+            return lambda v: v
+        return lambda v: tlo + (v - lo) * tspan / span
+
+    fx, fy = fit(0), fit(1)
+    wx = [v / img_w * 1000 for v in walls["x"]]
+    wy = [v / img_h * 1000 for v in walls["y"]]
+
+    def snap(v, lines):
+        near = min(lines, key=lambda l: abs(l - v), default=None)
+        return near if near is not None and abs(near - v) <= _WALL_SNAP else v
+
+    for b in _trace_boxes(data, "refs"):
+        b[:] = [fx(b[0]), fy(b[1]), fx(b[2]), fy(b[3])]
+    for b in boxes:
+        b[:] = [snap(fx(b[0]), wx), snap(fy(b[1]), wy), snap(fx(b[2]), wx), snap(fy(b[3]), wy)]
+    return data
+
+
+def _as_box(b) -> list[float] | None:
+    if not isinstance(b, (list, tuple)) or len(b) != 4:
+        return None
+    try:
+        return [float(v) for v in b]
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalise_trace(data) -> dict | None:
+    """One shape for every reply: rooms with a list of boxes, walkway boxes,
+    and the furniture the model measured on the plan. Malformed entries go."""
+    if not isinstance(data, dict):
+        return None
+    rooms = []
+    for e in data.get("rooms") or []:
+        if not isinstance(e, dict):
+            continue
+        raw = e.get("boxes") if isinstance(e.get("boxes"), list) else [e.get("box")]
+        boxes = [b for b in map(_as_box, raw) if b]
+        if boxes:
+            rooms.append({**{k: v for k, v in e.items() if k not in ("box", "boxes")},
+                          "boxes": boxes})
+    walkways = [b for b in map(_as_box, data.get("walkways") or []) if b]
+    refs = []
+    for r in data.get("furniture_drawn") or data.get("refs") or []:
+        if isinstance(r, dict) and _as_box(r.get("box")):
+            refs.append({"type": str(r.get("type", "")).lower().strip(),
+                         "box": _as_box(r.get("box"))})
+    return {**{k: data[k] for k in ("wall_x", "wall_y", "missing") if k in data},
+            "rooms": rooms, "walkways": walkways, "refs": refs}
+
+
+def _trace_boxes(data: dict, *kinds: str) -> list[list[float]]:
+    """The mutable [x0, y0, x1, y1] lists of a normalised trace, by kind:
+    "rooms", "walkways", "refs"."""
+    out = []
+    if not isinstance(data, dict):
+        return out
+    if "rooms" in kinds:
+        out += [b for e in data.get("rooms") or [] if isinstance(e, dict)
+                for b in e.get("boxes") or [] if isinstance(b, list) and len(b) == 4]
+    if "walkways" in kinds:
+        out += [b for b in data.get("walkways") or [] if isinstance(b, list) and len(b) == 4]
+    if "refs" in kinds:
+        out += [r["box"] for r in data.get("refs") or [] if isinstance(r, dict)
+                and isinstance(r.get("box"), list) and len(r["box"]) == 4]
+    return out
+
+
+def _snap_to_walls(data: dict, size: tuple[int, int]) -> dict:
+    """Pull each room and walkway edge onto the nearest wall line the model
+    listed, when it is within 2% of the image. The walls are read once and
+    shared, so spaces either side of a wall end up agreeing on where it is."""
+    if not isinstance(data, dict):
+        return data
+    img_w, img_h = size
+
+    def lines(key):
+        out = []
+        for v in data.get(key) or []:
+            try:
+                out.append(float(v))
+            except (TypeError, ValueError):
+                pass
+        return out
+
+    wall_x, wall_y = lines("wall_x"), lines("wall_y")
+    if not wall_x and not wall_y:
+        return data
+
+    def snap(v, walls, tol):
+        near = min(walls, key=lambda w: abs(w - v), default=None)
+        return near if near is not None and abs(near - v) <= tol else v
+
+    for b in _trace_boxes(data, "rooms", "walkways"):
+        b[:] = [snap(b[0], wall_x, img_w * 0.02), snap(b[1], wall_y, img_h * 0.02),
+                snap(b[2], wall_x, img_w * 0.02), snap(b[3], wall_y, img_h * 0.02)]
+    return data
+
+
+def _pixels_to_permille(data: dict, size: tuple[int, int]) -> dict:
+    """The model traces in pixels — the coordinates it locates best in. The
+    checks work on a 0-1000 scale, so boxes are converted before them.
+
+    It does not always follow the instruction: some replies come back on a
+    0-1000 scale anyway. A coordinate past the image's own edge gives that
+    away, and such a reply is passed through rather than converted twice."""
+    img_w, img_h = size
+    spaces = _trace_boxes(data, "rooms", "walkways")
+    if spaces and (max(max(b[0], b[2]) for b in spaces) > img_w * 1.02 or
+                   max(max(b[1], b[3]) for b in spaces) > img_h * 1.02):
+        app.logger.info("Plan trace came back on a 0-1000 scale, not pixels")
+        return data
+    for b in _trace_boxes(data, "rooms", "walkways", "refs"):
+        b[:] = [b[0] / img_w * 1000, b[1] / img_h * 1000,
+                b[2] / img_w * 1000, b[3] / img_h * 1000]
+    return data
+
+
+def plan_metres_per_px(geometry: dict, floor_sqm) -> float | None:
+    """Metres per image pixel, from the floor area the rooms should add up to.
+    Approximate by nature, so every dimension drawn from it is marked ≈."""
+    try:
+        sqm = float(floor_sqm)
+    except (TypeError, ValueError):
+        return None
+    area_px = sum(union_area(room_parts(r)) for r in (geometry.get("rooms") or {}).values())
+    walk_px = sum(w["w"] * w["h"] for w in geometry.get("walkways") or [])
+    if sqm <= 0 or area_px <= 0:
+        return None
+    # With the walkways traced, the spaces cover nearly all of the floor area;
+    # without them, only the rooms' share of it.
+    coverage = 0.95 if walk_px else _ROOM_COVERAGE
+    return (sqm * coverage / (area_px + walk_px)) ** 0.5
+
+
+# Door widths by room kind, in metres: bathrooms and stores take narrower doors.
+def door_width_m(label: str) -> float:
+    n = label.lower()
+    if any(k in n for k in ("bath", "wc", "toilet", "shelter", "store", "yard")):
+        return 0.75
+    return 0.85
+
+
+def _door_svg(room: dict, bg: str, width: float, stroke: str = "#1C1B19") -> list[str]:
+    """Each door as a gap in the wall with its leaf and swing arc, opening
+    into the room. `room` is in drawing coordinates; width in the same units."""
+    parts_ = room_parts(room)
+    out = []
+    for door in room.get("doors") or []:
+        p = parts_[door["part"]] if door.get("part", 0) < len(parts_) else parts_[0]
+        x, y, w, h = p["x"], p["y"], p["w"], p["h"]
+        (sx, sy), (ux, uy), (nx, ny), L = {
+            "top":    ((x, y),     (1, 0), (0, 1),  w),
+            "bottom": ((x, y + h), (1, 0), (0, -1), w),
+            "left":   ((x, y),     (0, 1), (1, 0),  h),
+            "right":  ((x + w, y), (0, 1), (-1, 0), h),
+        }[door["wall"]]
+        d = max(6.0, min(width, L * 0.6))
+        a = min(max(door["at"] * L - d / 2, 0), L - d)
+        hx, hy = sx + ux * a, sy + uy * a              # hinge
+        ex, ey = hx + ux * d, hy + uy * d              # latch side
+        lx, ly = hx + nx * d, hy + ny * d              # leaf, swung open
+        sweep = 1 if ux * ny - uy * nx > 0 else 0
+        out.append(f'<line x1="{hx:.1f}" y1="{hy:.1f}" x2="{ex:.1f}" y2="{ey:.1f}" '
+                   f'stroke="{bg}" stroke-width="4"/>')
+        out.append(f'<line x1="{hx:.1f}" y1="{hy:.1f}" x2="{lx:.1f}" y2="{ly:.1f}" '
+                   f'stroke="{stroke}" stroke-width="1"/>')
+        out.append(f'<path d="M{ex:.1f},{ey:.1f} A{d:.1f},{d:.1f} 0 0 {sweep} {lx:.1f},{ly:.1f}" '
+                   f'fill="none" stroke="{stroke}" stroke-width="0.7" stroke-dasharray="2 2"/>')
+    return out
+
+
+def _room_shape_svg(room: dict, fill: str, fill_opacity: float,
+                    wall: str, wall_w: float) -> list[str]:
+    """A traced room in drawing coordinates: its parts filled, then one wall
+    line round the outside of them all."""
+    # Opacity on the group, not each rect, so parts that overlap a little
+    # do not show as a darker patch.
+    out = [f'<g opacity="{fill_opacity}">' + "".join(
+        f'<rect x="{p["x"]:.1f}" y="{p["y"]:.1f}" width="{p["w"]:.1f}" '
+        f'height="{p["h"]:.1f}" fill="{fill}"/>' for p in room_parts(room)) + '</g>']
+    out.append(f'<path class="room-wall" d="{union_outline(room_parts(room))}" fill="none" '
+               f'stroke="{wall}" stroke-width="{wall_w}" stroke-linecap="square"/>')
+    return out
+
+
+# A pale outline behind label text, so a door swing or wall crossing it
+# never makes it unreadable.
+_HALO = 'paint-order="stroke" stroke="#FBF9F5" stroke-width="3" stroke-linejoin="round"'
+
+
+def _dims_text(room: dict, px_per_m: float | None) -> str:
+    """≈ width × depth for a rectangle; ≈ area for an L or T shape, where a
+    single width and depth would describe the bounding box, not the room."""
+    if not px_per_m:
+        return ""
+    parts_ = room_parts(room)
+    if len(parts_) > 1:
+        return f"≈ {union_area(parts_) * px_per_m ** 2:.0f} m²"
+    return f"≈ {room['w'] * px_per_m:.1f} × {room['h'] * px_per_m:.1f} m"
+
+
+def _free_label_spot(layout, shape, x, y, cw, ch, block, text_w):
+    """Centre x and baseline for a room's name in the overview: the lowest
+    spot in its main part where the name clears every piece of furniture,
+    trying the middle, then the left and right. Bottom-centre if none does."""
+    default = (x + cw / 2, y + ch - block)
+    if not layout:
+        return default
+    s = shape["w"] / layout["W"]
+    boxes = [(shape["x"] + q["x"] * s, shape["y"] + q["y"] * s, q["bw"] * s, q["bd"] * s)
+             for q in layout.get("placed", []) if q.get("place") != "under"]
+    half = min(text_w, cw - 4) / 2
+    xs = [x + cw / 2, x + half + 4, x + cw - half - 4]
+    base = y + ch - block
+    while base >= y + 12:
+        for cx in xs:
+            band = (cx - half, base - 11, 2 * half, block + 4)
+            if not any(b[0] < band[0] + band[2] and band[0] < b[0] + b[2] and
+                       b[1] < band[1] + band[3] and band[1] < b[1] + b[3] for b in boxes):
+                return cx, base
+        base -= 6
+    return default
+
+
+def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
+    """The overview drawn where the plan puts each room, in its orientation,
+    joined by the walkways between them. Deliberately quiet: room names only.
+    Furniture is drawn to scale but unlabelled, and sizes are left to the room
+    cards, which carry every label."""
+    placed = geometry["rooms"]
+    walkways = geometry.get("walkways") or []
+    spaces = [r for r in placed.values()] + walkways
+
+    min_x = min(r["x"] for r in spaces)
+    min_y = min(r["y"] for r in spaces)
+    max_x = max(r["x"] + r["w"] for r in spaces)
+    max_y = max(r["y"] + r["h"] for r in spaces)
+
+    w, pad, foot = 600, 24, 30
+    s = (w - 2 * pad) / max(max_x - min_x, 1)
+    h = int((max_y - min_y) * s + 2 * pad + foot)
+    bg = "#FBF9F5"
+
+    svg = [
+        f'<svg viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
+        f'<rect width="{w}" height="{h}" fill="{bg}"/>',
+    ]
+    # Walkways first, as plain floor under a light line: they join the rooms
+    # without competing with them.
+    if walkways:
+        walk = _scale_room({"x": 0, "y": 0, "w": 1, "h": 1, "parts": walkways},
+                           min_x, min_y, s, pad, pad)
+        svg += _room_shape_svg(walk, "#E6E0D5", 0.7, "#B5AFA5", 1.2)
+
+    walls, labels = [], []
+    for room in rooms:
+        geo = placed.get(room["label"])
+        if not geo:
+            continue
+        shape = _scale_room(geo, min_x, min_y, s, pad, pad)
+        shape_svg = _room_shape_svg(shape, room.get("colour", "#C9D4E0"), 0.55, "#4A4844", 2.5)
+        svg += shape_svg[:-1]
+        walls.append(shape_svg[-1])
+        m = geometry.get("m_per_px") or geometry.get("m_per_px_ref")
+        main_ = _main_part(shape)
+        walls += _door_svg(shape, bg, door_width_m(room["label"]) / m * s if m
+                           else 0.25 * min(main_["w"], main_["h"]))
+
+        # The name goes in the room's largest part — for an L-shape, the body
+        # of the L rather than the middle of its bounding box.
+        main = _main_part(shape)
+        x, y, cw, ch = main["x"], main["y"], main["w"], main["h"]
+        if room.get("layout"):
+            svg += _draw_layout(room["layout"], shape["x"], shape["y"],
+                                shape["w"] / room["layout"]["W"], "#F2EEE6", labels=False)
+        elif cw >= 70 and ch >= 84:
+            svg += _furniture_markers(room["label"], room.get("items", []),
+                                      int(x), int(y), int(cw), int(ch), "#6E6A63",
+                                      labels=False)
+
+        size = 10 if cw >= 90 else 8.5
+        label = room["label"]
+        fits = int((cw - 6) / (size * 0.55))
+        if len(label) > fits:
+            label = label[:max(3, fits - 1)] + "…"
+        tx, ty = _free_label_spot(room.get("layout"), shape, x, y, cw, ch, 8,
+                                  len(label) * size * 0.56 + 6)
+        labels.append(f'<text x="{tx:.1f}" y="{ty:.1f}" text-anchor="middle" '
+                      f'font-size="{size}" fill="#1C1B19" font-weight="500" {_HALO}>{html_escape(label)}</text>')
+    # Walls over every fill, so a neighbour's fill never covers a shared wall;
+    # labels over everything.
+    svg += walls + labels
+
+    note = "Traced from your floor plan — positions and sizes are approximate"
+    if geometry.get("missing"):
+        note = "Not found on the plan: " + ", ".join(geometry["missing"])
+    svg.append(f'<text x="{pad}" y="{h - 10}" font-size="9" fill="#6B6660">{html_escape(note)}</text>')
+    svg.append("</svg>")
+    return "\n".join(svg)
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Furniture
+#
+# What goes in each room, and how big it is, comes from one model call that
+# reads the homeowner's ticked items AND what they wrote, sized by general
+# interior design standards. Where it goes is decided by furniture_layout —
+# rules, not the model — so a layout never overlaps or blocks a walkway.
+# ─────────────────────────────────────────────────────────────────────────────
+FURNITURE_TIMEOUT = 60
+
+_DESIGN_GUIDES = """\
+- Circulation: 900 mm for main walkways; never under 600 mm between pieces.
+- Beds: headboard on a solid wall; 600 mm clear each side of a double bed and
+  at its foot. Choose the bed to suit the room: a room under about 3 m across
+  takes a single or super single, or a queen with one side to the wall.
+- Wardrobes and cabinets: 900 mm clear in front to open doors and drawers.
+- Desks: 900 mm behind for the chair.
+- Living: sofa against a wall facing the TV, 2-3 m viewing distance; coffee
+  table 400-450 mm from the sofa; rug large enough for the sofa's front legs.
+- Dining: 600 mm of table per seat; 900 mm behind every chair.
+- Kitchen: hob, sink and fridge form a work triangle along the counters, with
+  a 1.0-1.2 m work aisle.
+- Bathroom: 600 mm clear in front of the WC and basin; showers at least
+  900 x 900 mm.
+- Service yard: 900 mm in front of the washing machine."""
+
+
+def furniture_key(rooms_info: list[dict], notes: str = "") -> str:
+    """Identifies a furniture plan: the same rooms, sizes, requirements and
+    project notes — so an applied refinement plans the furniture afresh."""
+    return hashlib.sha1(json.dumps([FURNITURE_VERSION, rooms_info, notes],
+                                   sort_keys=True).encode()).hexdigest()[:20]
+
+
+def plan_furniture(rooms_info: list[dict], notes: str = "") -> dict[str, list]:
+    """Ask the model what to place in every room, and how big each piece is.
+
+    rooms_info: [{"key", "label", "size_m": [w, d], "ticked": [...],
+                  "description": str, "avoid": str}]
+    notes: the homeowner's overall notes, applied refinements included.
+    Returns {room key: [raw piece dicts]} — validated later, room by room, by
+    furniture_layout.clean_pieces. Raises on any failure; the caller falls
+    back to the ticked items at standard sizes.
+    """
+    rooms_text = []
+    for r in rooms_info:
+        w, d = r["size_m"]
+        rooms_text.append(textwrap.dedent(f"""
+            ROOM {r['key']} — {r['label']}, about {w:.1f} m x {d:.1f} m
+              Ticked: {', '.join(r['ticked']) or 'nothing'}
+              They wrote: {r['description'] or '(nothing)'}
+              Must avoid: {r['avoid'] or '(nothing)'}""").strip())
+
+    prompt = textwrap.dedent("""
+        List the floor-standing furniture to lay out in each room of this home,
+        with a real-world size for every piece.
+
+        {rooms}
+
+        Overall notes from the homeowner, including changes they have asked
+        for since — these apply to every room and override the above:
+        {notes}
+
+        General interior design guides to size and place by:
+        {guides}
+
+        For each room:
+        - Include every ticked item that stands on the floor.
+        - Read what they wrote and add any furniture it names that is not
+          ticked (source "described"). Skip anything under "Must avoid".
+        - If nothing is ticked or described, list the essentials a room of
+          this kind needs (source "essential").
+        - Include built-in fixtures they ask for (showers, bathtubs, islands,
+          counters) and wall pieces that take floor space (a wall bike rack,
+          shelving). Leave out lighting, curtains, fans, mirrors and finishes.
+          Dining chairs are drawn with the table — do not list them.
+        - A piece stacked on another is one item: "Washer + Dryer (stacked)".
+        - List everything they asked for even if the room looks too small; the
+          layout reports what does not fit.
+        - Size every piece in metres as a typical product of its kind, chosen
+          to suit the room's size: "w" along the wall it backs onto (or its
+          long side), "d" its depth. For a piece with no standard size, give
+          general dimensions for what they described.
+        - "place": "wall", "corner", "centre" (free-standing, like a dining
+          table or island), or relative to another piece in "anchor":
+          "beside" (bedside table by the bed), "front" (coffee table before the
+          sofa), "facing" (TV console opposite the sofa), "under" (a rug).
+        - "clearance": clear floor needed in front, in metres, per the guides.
+          "side": clear floor needed at each end (only a double bed's 0.6).
+        - "qty": how many (e.g. two bedside tables).
+        - "rule": the guide behind its placement, under 12 words.
+
+        Reply with ONLY this JSON, every room key present:
+        {{"rooms": {{"master_bedroom": [
+          {{"name": "Queen Bed", "qty": 1, "w": 1.52, "d": 2.03, "place": "wall",
+            "clearance": 0.6, "side": 0.6, "source": "ticked",
+            "rule": "Headboard on a solid wall, 600 mm each side"}},
+          {{"name": "Bedside Table", "qty": 2, "w": 0.45, "d": 0.4, "place": "beside",
+            "anchor": "Queen Bed", "clearance": 0, "source": "ticked",
+            "rule": "Either side of the bed"}}
+        ]}}}}
+    """).strip().format(rooms="\n\n".join(rooms_text), guides=_DESIGN_GUIDES,
+                        notes=(notes or "").strip() or "(none)")
+
+    raw = call_llm([{"role": "user", "content": prompt}],
+                   system="You are an interior designer laying out furniture to "
+                          "general residential standards. You reply with JSON only.",
+                   max_tokens=3500,
+                   timeout=FURNITURE_TIMEOUT,
+                   fallback_to_mock=False)
+    data = _loads_salvaging_truncation(strip_code_fence(raw))
+    rooms = data.get("rooms") if isinstance(data, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        raise ValueError("no rooms in the furniture plan")
+    return {str(k): v for k, v in rooms.items() if isinstance(v, list)}
+
+
+def _piece_icon(label: str) -> str | None:
+    """The drawn icon for a piece, or None when there is no icon for it —
+    it is then drawn as a labelled block."""
+    s = label.lower()
+    for keywords, _name, icon, _rw, _rh in _ITEM_GLYPHS:
+        if any(k in s for k in keywords):
+            return icon
+    return None
+
+
+def _draw_layout(layout: dict, ox: float, oy: float, scale: float, fill: str,
+                 labels: bool = True, font: float = 8.5) -> list[str]:
+    """Placed furniture in drawing coordinates: (ox, oy) is the room's
+    top-left, scale drawing units per metre. Each piece is its icon, turned to
+    face into the room, or a dashed block for a piece with no icon. With
+    labels, every piece is named — inside it when the name fits, otherwise
+    just outside it on the side facing into the room. The design rule behind
+    each piece shows on hover either way."""
+    under, over, texts, taken = [], [], [], []
+    for q in layout.get("placed", []):
+        x, y = ox + q["x"] * scale, oy + q["y"] * scale
+        bw, bd = q["bw"] * scale, q["bd"] * scale
+        cx, cy = x + bw / 2, y + bd / 2
+        rot = q.get("rot", 0)
+        cw, cd = (bw, bd) if rot in (0, 180) else (bd, bw)   # canonical: back at top
+        label = q.get("label") or q["name"]
+        icon = _piece_icon(label)
+        tip = f'<title>{html_escape(label)} — {html_escape(q.get("rule", ""))}</title>'
+        if icon:
+            body = _ICON_DRAWERS[icon](-cw / 2, -cd / 2, cw, cd, fill)
+            g = (f'<g transform="translate({cx:.1f},{cy:.1f}) rotate({rot})">{tip}{body}</g>')
+        else:
+            g = (f'<g>{tip}<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bd:.1f}" '
+                 f'rx="2" fill="#fff" fill-opacity="0.85" stroke="#1C1B19" stroke-width="1.2" '
+                 f'stroke-dasharray="4 2"/></g>')
+        under_piece = q.get("place") == "under"
+        (under if under_piece else over).append(g)
+        if not labels:
+            continue
+
+        # Only a size nobody vouches for is marked; a piece without an icon of
+        # its own is already set apart by its dashed block.
+        text = f"{label} (est. size)" if q.get("estimated") else label
+        size = font
+        tw = len(text) * size * 0.55
+        # Where the name can go, best first: inside the piece if it fits, then
+        # on the side facing into the room, then below, above and the far
+        # side. The first spot clear of every name already placed wins.
+        inside = ("middle", cx, cy + size * 0.35)
+        below = ("middle", cx, y + bd + size + 2)
+        above = ("middle", cx, y - 3)
+        right = ("start", x + bw + 3, cy + size * 0.35)
+        left = ("end", x - 3, cy + size * 0.35)
+        inward = {"top": below, "bottom": above, "left": right, "right": left}.get(q.get("wall"), below)
+        spots = [inward, below, above, right, left]
+        if under_piece:
+            spots = [("middle", cx, y + bd - 3)] + spots   # a rug: along its near edge
+        elif tw <= bw - 4 and bd >= size + 4:
+            spots = [inside] + spots
+
+        def box(spot):
+            a, tx, ty = spot
+            x0 = tx - tw / 2 if a == "middle" else (tx if a == "start" else tx - tw)
+            return (x0, ty - size, tw, size + 2)
+
+        def clear(b):
+            return not any(b[0] < o[0] + o[2] and o[0] < b[0] + b[2] and
+                           b[1] < o[1] + o[3] and o[1] < b[1] + b[3] for o in taken)
+        anchor, tx, ty = next((sp for sp in spots if clear(box(sp))), spots[0])
+        taken.append(box((anchor, tx, ty)))
+        texts.append(f'<text x="{tx:.1f}" y="{ty:.1f}" text-anchor="{anchor}" '
+                     f'font-size="{size:.1f}" fill="#1C1B19" font-weight="500" {_HALO}>'
+                     f'{html_escape(text)}</text>')
+    return under + over + texts
 
 
 
@@ -3401,13 +4905,9 @@ def step4():
     # now and let it fetch the result itself.
     result = project_get("agent_result")
     if not result:
-        # The homeowner's own references, shown being read while they wait.
-        ref_thumbs = [u for paths in (s2.get("inspo_paths") or {}).values()
-                      for u in map(upload_url, paths or []) if u][:8]
         return render_template("step4_loading.html", current_step=4,
                                project=project,
                                room_count=len(rooms_base),
-                               ref_thumbs=ref_thumbs,
                                has_floor_plan=bool(s1.get("floor_plan_path")))
 
     project["inspiration_analysis"] = result["inspiration_analysis"]
@@ -3453,6 +4953,8 @@ def step4_prepare():
             existing_conflicts            = project_get("conflicts"),
             existing_trace                = project_get("agent_trace"),
             force_reanalyse               = False,
+            existing_plan_geometry        = project_get("plan_geometry"),
+            existing_furniture_plan       = project_get("furniture_plan"),
         )
     except Exception as e:
         app.logger.exception("Agent run failed")
@@ -3463,6 +4965,9 @@ def step4_prepare():
         inspiration_analysis = result["inspiration_analysis"],
         conflicts            = result["conflicts"],
         agent_trace          = result["agent_trace"],
+        # Kept apart from agent_result so Regenerate reuses it, not re-traces.
+        plan_geometry        = result.get("plan_geometry"),
+        furniture_plan       = result.get("furniture_plan"),
     )
     return jsonify({"ok": True})
 
@@ -3697,6 +5202,67 @@ def style_label(value: str) -> str:
 
 
 app.jinja_env.filters["style_label"] = style_label
+
+
+# ── Export everything the homeowner entered, as JSON ──────────────────────────
+@app.route("/export-inputs")
+def export_inputs():
+    """Every input the homeowner gave, as one JSON file they can keep — the
+    record of what they asked for, whatever the model made of it. Server
+    paths are reduced to file names; nothing generated is included."""
+    if not project_get("step1"):
+        return redirect(url_for("index"))
+
+    s1 = project_get("step1", {})
+    s2 = project_get("inspiration", {}) or {}
+    s3 = project_get("requirements", {}) or {}
+    paths = s2.get("inspo_paths") or {}
+    vibes = s2.get("vibes") or {}
+
+    def names(ps):
+        return [Path(p).name for p in ps or [] if p]
+
+    rooms = []
+    for room in get_rooms_for_type(s1.get("housing_type", "")):
+        key = room["key"]
+        rooms.append({
+            "room":        room["label"],
+            "items":       s3.get(f"{key}_items", []) or [],
+            "description": s3.get(f"{key}_prompt", ""),
+            "budget":      s3.get(f"{key}_budget", ""),
+            "priority":    s3.get(f"{key}_priority", ""),
+            "must_avoid":  s3.get(f"{key}_constraints", ""),
+            "inspiration": {"vibe": vibes.get(key, ""), "images": names(paths.get(key))},
+        })
+
+    data = {
+        "exported_from": "FORMA",
+        "exported_at":   datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "home": {
+            "housing_type":     s1.get("housing_type_label", ""),
+            "floor_size_sqm":   s1.get("floor_size", ""),
+            "floors":           s1.get("num_floors", ""),
+            "notes":            s1.get("space_notes", ""),
+            "floor_plan_image": Path(s1["floor_plan_path"]).name if s1.get("floor_plan_path") else None,
+        },
+        "style": {
+            "design_style":  style_label(s2.get("design_style", "")),
+            "palette":       s2.get("colour_name", ""),
+            "palette_hex":   s2.get("colour_hex", ""),
+            "custom_colour": s2.get("custom_colour", ""),
+            "overall_inspiration": {"vibe": vibes.get("overall", ""),
+                                    "images": names(paths.get("overall"))},
+        },
+        "project_notes": s3.get("project_notes", ""),
+        "rooms":         rooms,
+        "your_answers":  [{"question": c.get("question") or c.get("title", ""),
+                           "answer": c.get("decision")}
+                          for c in project_get("conflicts", []) or [] if c.get("resolved")],
+        "refinements":   project_get("refinements", []) or [],
+    }
+    body = json.dumps(data, indent=2, ensure_ascii=False)
+    return Response(body, mimetype="application/json", headers={
+        "Content-Disposition": 'attachment; filename="FORMA_My_Inputs.json"'})
 
 
 # ── Export brief as plain text ─────────────────────────────────────────────────

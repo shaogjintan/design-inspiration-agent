@@ -36,7 +36,10 @@ Agent trace format (each entry):
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+
+import furniture_layout
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,110 @@ def _trace_entry(step: str, action: str, reason: str,
 # Main agent entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _prepare_space(_app, rooms, step1, requirements,
+                   existing_geometry, existing_furniture) -> dict:
+    """Trace the plan, size the rooms, and plan their furniture. Runs in the
+    background while the inspiration analysis does; never raises — failures
+    come back as errors for the caller to report and fall back from."""
+    out = {"geometry": None, "geo_reused": False, "geo_error": None,
+           "px_per_m": None, "sizes": {}, "measured": {}, "outline": {},
+           "furniture": None, "furn_key": None, "furn_error": None}
+    plan_path = step1.get("floor_plan_path")
+    labels = [r["label"] for r in rooms]
+
+    if plan_path:
+        key = _app.plan_geometry_key(plan_path, labels)
+        if existing_geometry and existing_geometry.get("key") == key:
+            out["geometry"], out["geo_reused"] = existing_geometry, True
+        else:
+            try:
+                geo = _app.read_plan_geometry(
+                    plan_path, labels, housing_label=step1.get("housing_type_label", ""))
+                geo["key"] = key
+                out["geometry"] = geo
+            except Exception as e:                    # noqa: BLE001
+                out["geo_error"] = e
+
+    geo = out["geometry"]
+    if geo:
+        # The plan's scale, most trustworthy first: the floor area the
+        # homeowner gave; the standard furniture drawn on the plan itself;
+        # a typical flat of this type; typical rooms of these kinds.
+        m = None
+        if step1.get("floor_size"):
+            m = _app.plan_metres_per_px(geo, step1["floor_size"])
+        if not m:
+            m = geo.get("m_per_px_ref")
+        if not m:
+            m = _app.plan_metres_per_px(geo, _app.TYPICAL_FLOOR_SQM.get(step1.get("housing_type")))
+        if not m:
+            # No floor area to scale by: scale so the traced rooms add up to
+            # what rooms of their kinds typically measure.
+            typical = sum(furniture_layout.typical_room_size(l)[0]
+                          * furniture_layout.typical_room_size(l)[1] for l in geo["rooms"])
+            px = sum(_app.union_area(_app.room_parts(g)) for g in geo["rooms"].values())
+            m = (typical / px) ** 0.5 if px else None
+        out["px_per_m"] = m
+        geo["m_per_px"] = m                  # for drawing doors at their real width
+
+    for room in rooms:
+        g = (geo or {}).get("rooms", {}).get(room["label"])
+        m = out["px_per_m"]
+        if g and m:
+            main = _app._main_part(g)
+            out["sizes"][room["key"]] = (main["w"] * m, main["h"] * m)
+            out["measured"][room["key"]] = True
+            # The room's outline in metres, from its own top-left: its bounding
+            # box, and its parts largest first for the layout to fill in turn.
+            parts = _app.split_into_rects(_app.room_parts(g), wide=3.0 / m)
+            doors = []
+            for door in g.get("doors") or []:
+                src = _app.room_parts(g)
+                px, py = _app.door_point(src[door["part"]] if door["part"] < len(src) else src[0], door)
+                doors.append({"point": ((px - g["x"]) * m, (py - g["y"]) * m),
+                              "wall": door["wall"], "width": _app.door_width_m(room["label"])})
+            out["outline"][room["key"]] = {
+                "W": g["w"] * m, "D": g["h"] * m,
+                "parts": [((p["x"] - g["x"]) * m, (p["y"] - g["y"]) * m, p["w"] * m, p["h"] * m)
+                          for p in parts[:3]],
+                "doors": doors,
+            }
+        else:
+            w, d = furniture_layout.typical_room_size(room["label"])
+            out["sizes"][room["key"]] = (w, d)
+            out["measured"][room["key"]] = False
+            # No plan to read a door off: one door, where the drawing shows it.
+            drawn = dict(furniture_layout.DEFAULT_DOOR)
+            out["outline"][room["key"]] = {
+                "W": w, "D": d, "parts": [(0.0, 0.0, w, d)],
+                "doors": [{"point": (drawn["at"] * w, d), "wall": drawn["wall"],
+                           "width": _app.door_width_m(room["label"])}],
+                "doors_drawn": [drawn],
+            }
+
+    rooms_info = [{
+        "key":         r["key"],
+        "label":       r["label"],
+        "size_m":      [round(v, 1) for v in out["sizes"][r["key"]]],
+        "ticked":      list(requirements.get(f"{r['key']}_items", []) or []),
+        "description": (requirements.get(f"{r['key']}_prompt") or "").strip(),
+        "avoid":       (requirements.get(f"{r['key']}_constraints") or "").strip(),
+    } for r in rooms]
+    # Overall notes carry applied refinements ("add a piano to the living
+    # room"), so they plan the furniture too, and a new one re-plans it.
+    notes = (requirements.get("project_notes") or "").strip()
+    fkey = _app.furniture_key(rooms_info, notes)
+    out["furn_key"] = fkey
+    if existing_furniture and existing_furniture.get("key") == fkey:
+        out["furniture"] = existing_furniture.get("rooms") or {}
+    else:
+        try:
+            out["furniture"] = _app.plan_furniture(rooms_info, notes)
+        except Exception as e:                        # noqa: BLE001
+            out["furn_error"] = e
+    return out
+
+
 def run_agent(
     step1: dict,
     requirements: dict,
@@ -72,6 +179,8 @@ def run_agent(
     existing_conflicts: list[dict] | None,
     existing_trace: list[dict] | None,
     force_reanalyse: bool = False,
+    existing_plan_geometry: dict | None = None,
+    existing_furniture_plan: dict | None = None,
 ) -> dict:
     """
     Run the FORMA reasoning loop over the current project state.
@@ -91,6 +200,12 @@ def run_agent(
     force_reanalyse             : if True, re-run inspiration analysis even if a
                                   cached result exists (e.g. homeowner uploaded
                                   new images)
+    existing_plan_geometry      : session.get("plan_geometry") — the last plan
+                                  trace, reused while the plan file and room
+                                  list are unchanged
+    existing_furniture_plan     : session.get("furniture_plan") — the last
+                                  furniture list, reused while rooms, sizes
+                                  and requirements are unchanged
 
     Returns
     -------
@@ -157,6 +272,15 @@ def run_agent(
         ),
         confidence = "medium",
     ))
+
+    # Tracing the plan and planning the furniture need only the plan, the
+    # rooms and the requirements, and together take the best part of half a
+    # minute. Start them now, alongside the analysis, and collect them where
+    # the drawings need them.
+    pool = ThreadPoolExecutor(max_workers=1)
+    space_future = pool.submit(_prepare_space, _app, rooms, step1, requirements,
+                               existing_plan_geometry, existing_furniture_plan)
+    pool.shutdown(wait=False)
 
     # ─────────────────────────────────────────────────────────────────────────
     # REASON + ACT: Inspiration analysis
@@ -358,6 +482,83 @@ def run_agent(
         ))
 
     # ─────────────────────────────────────────────────────────────────────────
+    # ACT: The plan trace and the furniture (started at the top)
+    # ─────────────────────────────────────────────────────────────────────────
+    # Any trace failure leaves plan_geometry None and the drawings fall back
+    # to the schematic — a wrong plan is worse than an honest diagram. A
+    # furniture failure falls back to the ticked items at standard sizes.
+    space = space_future.result()
+    plan_geometry = space["geometry"]
+    px_per_m = space["px_per_m"]
+    if has_floor_plan:
+        if space["geo_reused"]:
+            trace.append(_trace_entry(
+                step    = "Reused the floor plan trace",
+                action  = "trace_floor_plan",
+                reason  = "Same plan and room list as the last run.",
+                status  = "success",
+                summary = f"{len(plan_geometry['rooms'])} of {len(rooms)} rooms located.",
+            ))
+        elif plan_geometry:
+            missing = plan_geometry["missing"]
+            trace.append(_trace_entry(
+                step    = "Traced the floor plan",
+                action  = "trace_floor_plan",
+                reason  = "Find each labelled room on the plan and fit them together.",
+                status  = "success",
+                summary = (f"{len(plan_geometry['rooms'])} of {len(rooms)} rooms located"
+                           + (f"; not found: {', '.join(missing)}." if missing else ".")),
+            ))
+        else:
+            logger.warning(f"Floor plan trace failed: {space['geo_error']}")
+            trace.append(_trace_entry(
+                step    = "Floor plan trace — fell back to schematic",
+                action  = "trace_floor_plan",
+                reason  = "Find each labelled room on the plan and fit them together.",
+                status  = "failed",
+                summary = f"{str(space['geo_error'])[:120]}. Drawing a schematic layout instead.",
+            ))
+
+    furniture = space["furniture"]
+    layouts: dict[str, dict] = {}
+    for room in rooms:
+        key = room["key"]
+        ticked = requirements.get(f"{key}_items", []) or []
+        outline = space["outline"][key]
+        if furniture is not None:
+            pieces = furniture_layout.clean_pieces(furniture.get(key), ticked)
+        else:
+            pieces = furniture_layout.pieces_from_names(ticked)
+        if not pieces:
+            # Nothing chosen: the essentials for a room of its kind.
+            pieces = furniture_layout.pieces_from_names(
+                [g["label"] for g in _app._items_to_glyphs([], room["label"])])
+        layout = furniture_layout.place_parts(outline["parts"], pieces, outline.get("doors", []))
+        layout.update(W=outline["W"], D=outline["D"], measured=space["measured"][key],
+                      doors_drawn=outline.get("doors_drawn", []))
+        layouts[key] = layout
+
+    placed = sum(len(l["placed"]) for l in layouts.values())
+    described = sum(1 for l in layouts.values() for q in l["placed"]
+                    if q.get("source") == "described")
+    no_fit = [f"{name} ({room['label']})" for room in rooms
+              for name in layouts[room["key"]]["skipped"]]
+    trace.append(_trace_entry(
+        step    = ("Laid out the furniture" if furniture is not None
+                   else "Laid out the furniture — standard sizes"),
+        action  = "plan_furniture",
+        reason  = ("Size each piece the homeowner ticked or described, then place it "
+                   "by general design guides: clearances, walkways, what faces what."),
+        status  = "success" if furniture is not None else "failed",
+        summary = (f"{placed} pieces placed"
+                   + (f", {described} read from their descriptions" if described else "")
+                   + (f"; did not fit: {', '.join(no_fit)}" if no_fit else "")
+                   + ("." if furniture is not None
+                      else f". Model unavailable ({str(space['furn_error'])[:80]}) — "
+                           "ticked items at standard sizes.")),
+    ))
+
+    # ─────────────────────────────────────────────────────────────────────────
     # ACT: Generate per-room concepts
     # ─────────────────────────────────────────────────────────────────────────
     room_results: list[dict] = []
@@ -403,6 +604,9 @@ def run_agent(
                                 if isinstance(room_inspo_note, dict) else None)
                                or inspo_analysis.get("materials", [])),
                 items       = requirements.get(f"{key}_items", []) or [],
+                geo         = (plan_geometry or {}).get("rooms", {}).get(room["label"]),
+                px_per_m    = px_per_m,
+                layout      = layouts.get(key),
             )
         except Exception as e:
             logger.warning(f"Concept visual failed for {room['label']}: {e}")
@@ -418,6 +622,7 @@ def run_agent(
             "priority": requirements.get(f"{key}_priority", "medium"),
             "budget":   requirements.get(f"{key}_budget", ""),
             "colour":   _app.ROOM_COLOURS[i % len(_app.ROOM_COLOURS)],
+            "layout":   layouts.get(key),
         })
 
     if room_errors == 0:
@@ -441,9 +646,10 @@ def run_agent(
     # ─────────────────────────────────────────────────────────────────────────
     # ACT: Floor plan schematic
     # ─────────────────────────────────────────────────────────────────────────
-    floor_plan_svg = _app.generate_floor_plan_svg(room_results)
+    floor_plan_svg = _app.generate_floor_plan_svg(room_results, geometry=plan_geometry)
     trace.append(_trace_entry(
-        step    = "Generated schematic space overview",
+        step    = ("Drew the floor plan from the trace" if plan_geometry
+                   else "Generated schematic space overview"),
         action  = "generate_floor_plan_svg",
         reason  = "Visual summary of the home's spaces.",
         status  = "success",
@@ -476,6 +682,9 @@ def run_agent(
         "ai_brief":             ai_brief,
         "room_results":         room_results,
         "floor_plan_svg":       floor_plan_svg,
+        "plan_geometry":        plan_geometry,
+        "furniture_plan":       ({"key": space["furn_key"], "rooms": furniture}
+                                 if furniture is not None else None),
         "agent_trace":          trace,
         "needs_input":          needs_input,
     }

@@ -307,6 +307,7 @@
       <div class="brief-export__actions">
         <button class="btn btn--outline" onclick="window.print()">Print / Save PDF</button>
         <a href="{{ url_for('export_brief') }}" class="btn btn--outline">Download Brief (.txt)</a>
+        <a href="{{ url_for('export_inputs') }}" class="btn btn--outline">Download your inputs (.json)</a>
       </div>
     </div>
   </div>
@@ -540,9 +541,18 @@
 
           const affectedEl = document.getElementById('refine-proposal-affected');
           if (data.proposal.affected_areas && data.proposal.affected_areas.length) {
-            affectedEl.innerHTML = '<span class="refine-label">Affects:</span> '
-              + data.proposal.affected_areas.map(a =>
-                  `<span class="inspo-tag">${a}</span>`).join(' ');
+            // Built as nodes, not HTML: the areas are model-written text.
+            affectedEl.replaceChildren();
+            const label = document.createElement('span');
+            label.className = 'refine-label';
+            label.textContent = 'Affects:';
+            affectedEl.appendChild(label);
+            data.proposal.affected_areas.forEach(a => {
+              const tag = document.createElement('span');
+              tag.className = 'inspo-tag';
+              tag.textContent = a;
+              affectedEl.appendChild(tag);
+            });
             affectedEl.style.display = 'flex';
           } else {
             affectedEl.style.display = 'none';
