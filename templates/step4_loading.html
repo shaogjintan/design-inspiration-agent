@@ -80,7 +80,16 @@
 
       <div class="draft__block draft__rooms" data-for="4">
         {% for room in project.rooms %}
-        <span class="draft__room" data-key="{{ room.key }}"><span class="draft__room-name">{{ room.label }}</span></span>
+        <span class="draft__room" data-key="{{ room.key }}">
+          {# The liquid: a body that rises, two wave layers for its surface,
+             and a few bubbles while it pours. #}
+          <span class="liquid" aria-hidden="true">
+            <span class="liquid__wave liquid__wave--back"></span>
+            <span class="liquid__wave liquid__wave--front"></span>
+            <span class="liquid__bubble"></span><span class="liquid__bubble"></span><span class="liquid__bubble"></span>
+          </span>
+          <span class="draft__room-name">{{ room.label }}</span>
+        </span>
         {% endfor %}
       </div>
     </div>
