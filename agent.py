@@ -67,7 +67,7 @@ def _trace_entry(step: str, action: str, reason: str,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _prepare_space(_app, rooms, step1, requirements,
-                   existing_geometry, existing_furniture) -> dict:
+                   existing_geometry, existing_furniture, emit=lambda *a, **k: None) -> dict:
     """Trace the plan, size the rooms, and plan their furniture. Runs in the
     background while the inspiration analysis does; never raises — failures
     come back as errors for the caller to report and fall back from."""
@@ -90,6 +90,7 @@ def _prepare_space(_app, rooms, step1, requirements,
             except Exception as e:                    # noqa: BLE001
                 out["geo_error"] = e
 
+    emit("plan", ok=bool(out["geometry"]))
     geo = out["geometry"]
     if geo:
         # The plan's scale, most trustworthy first: the floor area the
@@ -105,8 +106,9 @@ def _prepare_space(_app, rooms, step1, requirements,
         if not m:
             # No floor area to scale by: scale so the traced rooms add up to
             # what rooms of their kinds typically measure.
-            typical = sum(furniture_layout.typical_room_size(l)[0]
-                          * furniture_layout.typical_room_size(l)[1] for l in geo["rooms"])
+            ht = step1.get("housing_type")
+            typical = sum(furniture_layout.typical_room_size(l, ht)[0]
+                          * furniture_layout.typical_room_size(l, ht)[1] for l in geo["rooms"])
             px = sum(_app.union_area(_app.room_parts(g)) for g in geo["rooms"].values())
             m = (typical / px) ** 0.5 if px else None
         out["px_per_m"] = m
@@ -135,7 +137,7 @@ def _prepare_space(_app, rooms, step1, requirements,
                 "doors": doors,
             }
         else:
-            w, d = furniture_layout.typical_room_size(room["label"])
+            w, d = furniture_layout.typical_room_size(room["label"], step1.get("housing_type"))
             out["sizes"][room["key"]] = (w, d)
             out["measured"][room["key"]] = False
             # No plan to read a door off: one door, where the drawing shows it.
@@ -181,6 +183,7 @@ def run_agent(
     force_reanalyse: bool = False,
     existing_plan_geometry: dict | None = None,
     existing_furniture_plan: dict | None = None,
+    progress=None,
 ) -> dict:
     """
     Run the FORMA reasoning loop over the current project state.
@@ -206,6 +209,11 @@ def run_agent(
     existing_furniture_plan     : session.get("furniture_plan") — the last
                                   furniture list, reused while rooms, sizes
                                   and requirements are unchanged
+    progress                    : optional callable(event, **data), told as
+                                  each stage finishes — "plan", "references",
+                                  "conflicts", "brief", then "room" (key=...)
+                                  per room — so the waiting page can show real
+                                  progress. Never allowed to break the run.
 
     Returns
     -------
@@ -224,6 +232,13 @@ def run_agent(
     import app as _app
 
     trace: list[dict] = list(existing_trace or [])
+
+    def emit(event: str, **data) -> None:
+        if progress:
+            try:
+                progress(event, **data)
+            except Exception as e:                      # noqa: BLE001
+                logger.warning(f"Progress report failed: {e}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # OBSERVE: What do we know about this project?
@@ -279,7 +294,7 @@ def run_agent(
     # the drawings need them.
     pool = ThreadPoolExecutor(max_workers=1)
     space_future = pool.submit(_prepare_space, _app, rooms, step1, requirements,
-                               existing_plan_geometry, existing_furniture_plan)
+                               existing_plan_geometry, existing_furniture_plan, emit)
     pool.shutdown(wait=False)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -374,6 +389,8 @@ def run_agent(
             confidence = inspo_analysis.get("confidence"),
         ))
 
+    emit("references")
+
     # ─────────────────────────────────────────────────────────────────────────
     # REASON + ACT: Conflict detection
     # ─────────────────────────────────────────────────────────────────────────
@@ -435,6 +452,8 @@ def run_agent(
     # ─────────────────────────────────────────────────────────────────────────
     needs_input = bool(open_conflicts)
 
+    emit("conflicts")
+
     # ─────────────────────────────────────────────────────────────────────────
     # ACT: Generate design brief
     # ─────────────────────────────────────────────────────────────────────────
@@ -481,6 +500,8 @@ def run_agent(
             summary = str(e),
         ))
 
+    emit("brief")
+
     # ─────────────────────────────────────────────────────────────────────────
     # ACT: The plan trace and the furniture (started at the top)
     # ─────────────────────────────────────────────────────────────────────────
@@ -521,6 +542,7 @@ def run_agent(
 
     furniture = space["furniture"]
     layouts: dict[str, dict] = {}
+    all_pieces: list[dict] = []
     for room in rooms:
         key = room["key"]
         ticked = requirements.get(f"{key}_items", []) or []
@@ -533,11 +555,19 @@ def run_agent(
             # Nothing chosen: the essentials for a room of its kind.
             pieces = furniture_layout.pieces_from_names(
                 [g["label"] for g in _app._items_to_glyphs([], room["label"])])
+        all_pieces += pieces
         layout = furniture_layout.place_parts(outline["parts"], pieces, outline.get("doors", []))
         layout.update(W=outline["W"], D=outline["D"], measured=space["measured"][key],
                       doors_drawn=outline.get("doors_drawn", []))
         layouts[key] = layout
 
+    # Pieces the size list did not know are added to it, so the next project
+    # uses the same size without asking the model again.
+    try:
+        learned = furniture_layout.remember(all_pieces)
+    except OSError as e:
+        logger.warning(f"Could not save new furniture sizes: {e}")
+        learned = []
     placed = sum(len(l["placed"]) for l in layouts.values())
     described = sum(1 for l in layouts.values() for q in l["placed"]
                     if q.get("source") == "described")
@@ -553,6 +583,7 @@ def run_agent(
         summary = (f"{placed} pieces placed"
                    + (f", {described} read from their descriptions" if described else "")
                    + (f"; did not fit: {', '.join(no_fit)}" if no_fit else "")
+                   + (f"; new sizes saved to the size list: {', '.join(learned)}" if learned else "")
                    + ("." if furniture is not None
                       else f". Model unavailable ({str(space['furn_error'])[:80]}) — "
                            "ticked items at standard sizes.")),
@@ -624,6 +655,7 @@ def run_agent(
             "colour":   _app.ROOM_COLOURS[i % len(_app.ROOM_COLOURS)],
             "layout":   layouts.get(key),
         })
+        emit("room", key=key)
 
     if room_errors == 0:
         trace.append(_trace_entry(

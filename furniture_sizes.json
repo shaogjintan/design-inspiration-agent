@@ -1,0 +1,617 @@
+{
+  "_about": "FORMA's furniture sizes, in metres. w is the width along the wall a piece backs onto (or its long side), d its depth into the room; clearance is the clear floor it needs in front, side the clear floor at each end. The first entry whose 'match' words appear in a piece's name gives its size, so put specific names before general ones. Entries marked 'model estimate' were sized by the model the first time a homeowner asked for them, and are reused from then on — correct them here if they look wrong.",
+  "items": [
+    {
+      "name": "Bedside table",
+      "match": [
+        "bedside",
+        "nightstand"
+      ],
+      "w": 0.45,
+      "d": 0.4,
+      "place": "beside",
+      "anchor": "bed",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "",
+      "rule": "Beside the bed, at mattress height",
+      "source": "standard"
+    },
+    {
+      "name": "King bed",
+      "match": [
+        "king bed"
+      ],
+      "w": 1.83,
+      "d": 2.03,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.6,
+      "align": "centre",
+      "rule": "Headboard on a solid wall, 600 mm clear on each side",
+      "source": "standard"
+    },
+    {
+      "name": "Queen bed",
+      "match": [
+        "queen bed"
+      ],
+      "w": 1.52,
+      "d": 2.03,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.6,
+      "align": "centre",
+      "rule": "Headboard on a solid wall, 600 mm clear on each side",
+      "source": "standard"
+    },
+    {
+      "name": "Super single bed",
+      "match": [
+        "super single"
+      ],
+      "w": 1.07,
+      "d": 1.9,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Along a wall to free floor space",
+      "source": "standard"
+    },
+    {
+      "name": "Single bed",
+      "match": [
+        "single bed"
+      ],
+      "w": 0.91,
+      "d": 1.9,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Along a wall to free floor space",
+      "source": "standard"
+    },
+    {
+      "name": "Bunk bed",
+      "match": [
+        "bunk",
+        "loft bed"
+      ],
+      "w": 1.0,
+      "d": 2.0,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Along a wall to free floor space",
+      "source": "standard"
+    },
+    {
+      "name": "Bed",
+      "match": [
+        "bed"
+      ],
+      "w": 1.52,
+      "d": 2.03,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.6,
+      "align": "centre",
+      "rule": "Headboard on a solid wall, 600 mm clear on each side",
+      "source": "standard"
+    },
+    {
+      "name": "Wardrobe",
+      "match": [
+        "wardrobe",
+        "closet"
+      ],
+      "w": 1.8,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a long wall, 900 mm clear to open the doors",
+      "source": "standard"
+    },
+    {
+      "name": "Dresser",
+      "match": [
+        "dresser",
+        "dressing table",
+        "chest of drawers",
+        "vanity table"
+      ],
+      "w": 1.0,
+      "d": 0.5,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.8,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 800 mm clear to open drawers",
+      "source": "standard"
+    },
+    {
+      "name": "Desk",
+      "match": [
+        "desk",
+        "study table",
+        "workstation"
+      ],
+      "w": 1.2,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 900 mm for the chair to pull out",
+      "source": "standard"
+    },
+    {
+      "name": "Sofa bed",
+      "match": [
+        "sofa bed"
+      ],
+      "w": 2.0,
+      "d": 0.95,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.45,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Against a wall, facing the room",
+      "source": "standard"
+    },
+    {
+      "name": "Sectional sofa",
+      "match": [
+        "sectional",
+        "l-shaped sofa"
+      ],
+      "w": 2.6,
+      "d": 1.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.45,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Against a wall, facing the TV",
+      "source": "standard"
+    },
+    {
+      "name": "Sofa",
+      "match": [
+        "sofa",
+        "couch",
+        "settee"
+      ],
+      "w": 2.1,
+      "d": 0.9,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.45,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Against a wall, facing the TV",
+      "source": "standard"
+    },
+    {
+      "name": "Coffee table",
+      "match": [
+        "coffee table"
+      ],
+      "w": 1.1,
+      "d": 0.6,
+      "place": "front",
+      "anchor": "sofa",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "450 mm in front of the sofa, within reach",
+      "source": "standard"
+    },
+    {
+      "name": "TV console",
+      "match": [
+        "tv console",
+        "tv cabinet",
+        "media console",
+        "tv"
+      ],
+      "w": 1.8,
+      "d": 0.45,
+      "place": "facing",
+      "anchor": "sofa",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Opposite the sofa, 2-3 m viewing distance",
+      "source": "standard"
+    },
+    {
+      "name": "Armchair",
+      "match": [
+        "armchair",
+        "accent chair",
+        "reading chair",
+        "lounge chair"
+      ],
+      "w": 0.85,
+      "d": 0.85,
+      "place": "corner",
+      "anchor": "",
+      "clearance": 0.45,
+      "side": 0.0,
+      "align": "end",
+      "rule": "In a corner, angled towards the seating group",
+      "source": "standard"
+    },
+    {
+      "name": "Side table",
+      "match": [
+        "side table",
+        "end table"
+      ],
+      "w": 0.5,
+      "d": 0.5,
+      "place": "beside",
+      "anchor": "sofa",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "",
+      "rule": "At the arm of the sofa",
+      "source": "standard"
+    },
+    {
+      "name": "Dining table",
+      "match": [
+        "dining table",
+        "dining set"
+      ],
+      "w": 1.6,
+      "d": 0.9,
+      "place": "centre",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "900 mm all round to pull chairs out",
+      "source": "standard"
+    },
+    {
+      "match": [
+        "dining chair",
+        "chairs"
+      ],
+      "skip": true,
+      "note": "Not laid out on its own: drawn as part of the dining table."
+    },
+    {
+      "name": "Sideboard",
+      "match": [
+        "sideboard",
+        "buffet",
+        "bar cabinet",
+        "display cabinet",
+        "console table"
+      ],
+      "w": 1.6,
+      "d": 0.45,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 900 mm to open doors",
+      "source": "standard"
+    },
+    {
+      "name": "Shelving",
+      "match": [
+        "bookshelf",
+        "bookcase",
+        "shelving",
+        "shelf",
+        "display shelving"
+      ],
+      "w": 1.2,
+      "d": 0.35,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, clear of walkways",
+      "source": "standard"
+    },
+    {
+      "name": "Rug",
+      "match": [
+        "rug",
+        "carpet"
+      ],
+      "w": 2.0,
+      "d": 1.4,
+      "place": "under",
+      "anchor": "coffee table",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Under the seating group, anchoring it",
+      "source": "standard"
+    },
+    {
+      "name": "Floor lamp",
+      "match": [
+        "floor lamp"
+      ],
+      "w": 0.4,
+      "d": 0.4,
+      "place": "corner",
+      "anchor": "",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "end",
+      "rule": "In a corner, lighting the seating",
+      "source": "standard"
+    },
+    {
+      "name": "Plant",
+      "match": [
+        "plant"
+      ],
+      "w": 0.45,
+      "d": 0.45,
+      "place": "corner",
+      "anchor": "",
+      "clearance": 0.0,
+      "side": 0.0,
+      "align": "end",
+      "rule": "In a corner, out of the walkway",
+      "source": "standard"
+    },
+    {
+      "name": "Island",
+      "match": [
+        "island",
+        "breakfast bar"
+      ],
+      "w": 1.8,
+      "d": 0.9,
+      "place": "centre",
+      "anchor": "",
+      "clearance": 1.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "1 m clear all round for the work aisle",
+      "source": "standard"
+    },
+    {
+      "name": "Fridge",
+      "match": [
+        "refrigerator",
+        "fridge"
+      ],
+      "w": 0.75,
+      "d": 0.7,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 1.0,
+      "side": 0.0,
+      "align": "end",
+      "rule": "At the end of the counter run, 1 m to open the door",
+      "source": "standard"
+    },
+    {
+      "name": "Hob",
+      "match": [
+        "hob",
+        "cooktop",
+        "stove",
+        "oven",
+        "cooker"
+      ],
+      "w": 0.9,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 1.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "On the counter run, 1 m work aisle in front",
+      "source": "standard"
+    },
+    {
+      "name": "Sink",
+      "match": [
+        "kitchen sink",
+        "sink"
+      ],
+      "w": 0.8,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 1.0,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "On the counter run, near the hob — the work triangle",
+      "source": "standard"
+    },
+    {
+      "name": "Dishwasher",
+      "match": [
+        "dishwasher"
+      ],
+      "w": 0.6,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 1.0,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Beside the sink",
+      "source": "standard"
+    },
+    {
+      "name": "Storage",
+      "match": [
+        "pantry",
+        "tall cabinet",
+        "kitchen cabinet",
+        "cabinet",
+        "storage"
+      ],
+      "w": 1.2,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 900 mm to open doors",
+      "source": "standard"
+    },
+    {
+      "name": "Washing machine",
+      "match": [
+        "washing machine",
+        "washer",
+        "dryer"
+      ],
+      "w": 0.6,
+      "d": 0.6,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 900 mm to load it",
+      "source": "standard"
+    },
+    {
+      "name": "Drying rack",
+      "match": [
+        "drying rack",
+        "laundry rack",
+        "clothes rack"
+      ],
+      "w": 1.2,
+      "d": 0.5,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Along a wall, clear of the washer",
+      "source": "standard"
+    },
+    {
+      "name": "Double vanity",
+      "match": [
+        "double vanity"
+      ],
+      "w": 1.5,
+      "d": 0.55,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.75,
+      "side": 0.0,
+      "align": "centre",
+      "rule": "Against a wall, 750 mm clear in front",
+      "source": "standard"
+    },
+    {
+      "name": "Vanity",
+      "match": [
+        "vanity",
+        "basin",
+        "wash basin"
+      ],
+      "w": 0.8,
+      "d": 0.5,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.75,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Against a wall, 750 mm clear in front",
+      "source": "standard"
+    },
+    {
+      "name": "Toilet",
+      "match": [
+        "toilet",
+        "wc",
+        "water closet"
+      ],
+      "w": 0.4,
+      "d": 0.7,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.2,
+      "align": "end",
+      "rule": "Against a wall, 600 mm clear in front",
+      "source": "standard"
+    },
+    {
+      "name": "Bathtub",
+      "match": [
+        "bathtub",
+        "tub"
+      ],
+      "w": 1.7,
+      "d": 0.75,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.7,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Along the end wall",
+      "source": "standard"
+    },
+    {
+      "name": "Shower",
+      "match": [
+        "shower"
+      ],
+      "w": 0.9,
+      "d": 0.9,
+      "place": "corner",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "In a corner, 600 mm clear to step out",
+      "source": "standard"
+    },
+    {
+      "name": "Shelves",
+      "match": [
+        "shelves"
+      ],
+      "w": 1.8,
+      "d": 0.4,
+      "place": "wall",
+      "anchor": "",
+      "clearance": 0.6,
+      "side": 0.0,
+      "align": "end",
+      "rule": "General storage access",
+      "source": "model estimate",
+      "added": "2026-09-24"
+    }
+  ]
+}

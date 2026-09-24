@@ -254,6 +254,13 @@ class PieceTogether(unittest.TestCase):
 
 
 class WalkwaysAndScale(unittest.TestCase):
+    """How the model's own walkways are handled — with gap filling off."""
+
+    def setUp(self):
+        app.FILL_WALKWAYS = False
+
+    def tearDown(self):
+        app.FILL_WALKWAYS = True
 
     def _reply(self, walkways=(), refs=()):
         r = json.loads(json.dumps(GOOD_REPLY))
@@ -379,18 +386,35 @@ class Doors(unittest.TestCase):
         self.assertAlmostEqual((x, y)[0], 0)
         self.assertAlmostEqual((x, y)[1], 80)
 
-    def test_en_suite_gets_a_door_from_its_bedroom(self):
-        # Neither room reported the door they share (fixture: master bedroom
-        # sits directly above the master bathroom).
+    def test_no_door_is_ever_added(self):
+        # Only the doors the model read off the plan: none are imposed, not
+        # even the en-suite or yard doors a flat usually has.
         g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
-        bath, bed = g["rooms"]["Master Bathroom"], g["rooms"]["Master Bedroom"]
-        self.assertIn("top", [d["wall"] for d in bath["doors"]])
-        self.assertIn("bottom", [d["wall"] for d in bed["doors"]])
-        # Both ends are the same point on the plan.
-        bp = app.door_point(app.room_parts(bath)[0], next(d for d in bath["doors"] if d["wall"] == "top"))
-        dp = app.door_point(app.room_parts(bed)[0], next(d for d in bed["doors"] if d["wall"] == "bottom"))
-        self.assertAlmostEqual(bp[0], dp[0], delta=1.5)
-        self.assertAlmostEqual(bp[1], dp[1], delta=1.5)
+        counts = {l: len(r["doors"]) for l, r in g["rooms"].items()}
+        self.assertEqual(counts["Master Bathroom"], 0)
+        self.assertEqual(counts["Master Bedroom"], 0)
+        self.assertEqual(counts["Service Yard"], 0)
+        self.assertEqual(counts["Kitchen"], 1)
+        self.assertEqual(sum(counts.values()), 2)
+
+    def test_a_door_both_rooms_list_is_drawn_once(self):
+        r = json.loads(json.dumps(GOOD_REPLY))
+        # The door between Master Bedroom (above) and Master Bathroom (below),
+        # listed by both.
+        r["rooms"][2]["doors"] = [{"box": 0, "wall": "bottom", "at": 500}]    # Master Bedroom
+        r["rooms"][4]["doors"] = [{"box": 0, "wall": "top", "at": 500}]       # Master Bathroom
+        g = app.parse_plan_geometry(app._normalise_trace(r), LABELS, SIZE)
+        svg = app.generate_floor_plan_svg([{"label": l, "items": []} for l in LABELS], geometry=g)
+        self.assertEqual(svg.count('stroke-dasharray="2 2"'), 1)
+
+    def test_neighbouring_doors_on_one_corridor_wall_both_stay(self):
+        r = json.loads(json.dumps(GOOD_REPLY))
+        # Both bathrooms open onto the corridor above them, doors close together.
+        r["rooms"][5]["doors"] = [{"box": 0, "wall": "top", "at": 900}]       # Common Bathroom
+        r["rooms"][4]["doors"] = [{"box": 0, "wall": "top", "at": 100}]       # Master Bathroom
+        g = app.parse_plan_geometry(app._normalise_trace(r), LABELS, SIZE)
+        svg = app.generate_floor_plan_svg([{"label": l, "items": []} for l in LABELS], geometry=g)
+        self.assertEqual(svg.count('stroke-dasharray="2 2"'), 2)
 
     def test_existing_en_suite_door_is_left_alone(self):
         r = json.loads(json.dumps(GOOD_REPLY))
@@ -398,10 +422,6 @@ class Doors(unittest.TestCase):
         g = app.parse_plan_geometry(app._normalise_trace(r), LABELS, SIZE)
         self.assertEqual(g["rooms"]["Master Bathroom"]["doors"],
                          [{"wall": "top", "at": 0.3, "part": 0}])
-
-    def test_service_yard_opens_from_the_kitchen(self):
-        g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
-        self.assertIn("left", [d["wall"] for d in g["rooms"]["Service Yard"]["doors"]])
 
     def test_prompt_describes_how_doors_are_drawn(self):
         import tempfile as _t
@@ -416,13 +436,180 @@ class Doors(unittest.TestCase):
             app.call_llm = real
             tmp.cleanup()
         self.assertIn("quarter-circle arc, often dotted or dashed", seen[0])
-        self.assertIn("en suite opens from its", seen[0])
+        self.assertIn("List only doors you can see drawn on the plan", seen[0])
+        self.assertIn("list each door ONCE", seen[0])
+        self.assertNotIn("en suite opens from", seen[0])
+        self.assertNotIn("Every room has at least one", seen[0])
 
     def test_doors_are_drawn_with_their_swing(self):
         g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
         svg = app.generate_floor_plan_svg([{"label": l, "items": []} for l in LABELS], geometry=g)
         doors = sum(len(r["doors"]) for r in g["rooms"].values())
         self.assertEqual(svg.count('stroke-dasharray="2 2"'), doors)   # one arc per door
+
+
+class OutlineFirst(unittest.TestCase):
+    """Outline, then rooms and doors, then fixed positions, then sizes."""
+
+    def _reply(self, **extra):
+        r = json.loads(json.dumps(GOOD_REPLY))
+        r["outline"] = [[281, 214, 714, 760]]
+        r.update(extra)
+        return app._normalise_trace(r)
+
+    def test_outline_and_label_points_are_kept(self):
+        r = json.loads(json.dumps(GOOD_REPLY))
+        r["outline"] = [[0, 0, 500, 500]]
+        r["rooms"][0]["label_at"] = [100, 200]
+        d = app._normalise_trace(r)
+        self.assertEqual(d["outline"], [[0.0, 0.0, 500.0, 500.0]])
+        self.assertEqual(d["rooms"][0]["label_box"], [100.0, 200.0, 100.0, 200.0])
+
+    def test_room_is_moved_to_contain_its_label(self):
+        d = {"rooms": [{"name": "Kitchen", "boxes": [[100, 100, 200, 200]],
+                        "label_box": [260, 150, 260, 150]}]}
+        app._fix_to_labels(d)
+        b = d["rooms"][0]["boxes"][0]
+        self.assertTrue(b[0] <= 260 <= b[2])
+        self.assertEqual(b[2] - b[0], 100)              # moved, not stretched
+
+    def test_room_already_around_its_label_stays(self):
+        d = {"rooms": [{"name": "Kitchen", "boxes": [[100, 100, 200, 200]],
+                        "label_box": [150, 150, 150, 150]}]}
+        app._fix_to_labels(d)
+        self.assertEqual(d["rooms"][0]["boxes"][0], [100, 100, 200, 200])
+
+    def test_rooms_are_clipped_to_the_outline(self):
+        d = {"outline": [[100, 100, 500, 500]],
+             "rooms": [{"name": "A", "boxes": [[50, 150, 300, 300]]}]}
+        app._clip_to_outline(d)
+        self.assertEqual(d["rooms"][0]["boxes"], [[100, 150, 300, 300]])
+
+    def test_walkways_stay_inside_the_outline(self):
+        g = app.parse_plan_geometry(self._reply(walkways=[[100, 400, 621, 493]]), LABELS, SIZE)
+        ox = 281 / 1000 * 700
+        for w in g["walkways"]:
+            self.assertGreaterEqual(w["x"], ox - 0.01)          # clipped at the outline
+
+    def test_walkways_are_the_outline_no_room_claims(self):
+        g = app.parse_plan_geometry(self._reply(walkways=[[281, 214, 714, 760]]), LABELS, SIZE)
+        self.assertTrue(g["outline"])
+        rooms = [p for r in g["rooms"].values() for p in r["parts"]]
+        for w in g["walkways"]:
+            for p in rooms:
+                ix = min(w["x"] + w["w"], p["x"] + p["w"]) - max(w["x"], p["x"])
+                iy = min(w["y"] + w["h"], p["y"] + p["h"]) - max(w["y"], p["y"])
+                self.assertFalse(ix > 0.5 and iy > 0.5)
+
+    def test_scale_from_floor_area_uses_the_outline(self):
+        g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
+        m = app.plan_metres_per_px(g, 67)
+        self.assertAlmostEqual(app.union_area(g["outline"]) * m * m, 67 * 0.93, places=6)
+
+    def test_bathroom_joined_to_master_bedroom_is_the_master_bathroom(self):
+        # Swap the two bathrooms' boxes: the one under the master bedroom is
+        # now called "Common Bathroom".
+        r = json.loads(json.dumps(GOOD_REPLY))
+        mb = next(x for x in r["rooms"] if x["name"] == "Master Bathroom")
+        cb = next(x for x in r["rooms"] if x["name"] == "Common Bathroom")
+        mb["box"], cb["box"] = cb["box"], mb["box"]
+        g = app.parse_plan_geometry(app._normalise_trace(r), LABELS, SIZE)
+        master = g["rooms"]["Master Bathroom"]
+        self.assertAlmostEqual(master["x"], 621 / 1000 * 700, places=3)   # back under the bedroom
+
+    def test_prompt_is_outline_first(self):
+        import tempfile as _t
+        tmp = _t.TemporaryDirectory()
+        plan = Path(tmp.name) / "p.png"
+        _png(plan, *SIZE)
+        seen, real = [], app.call_llm
+        app.call_llm = lambda m, **kw: (seen.append(m[0]["content"]), json.dumps(_in_pixels(GOOD_REPLY)))[1]
+        try:
+            app.read_plan_geometry(str(plan), LABELS)
+        finally:
+            app.call_llm = real
+            tmp.cleanup()
+        p = seen[0]
+        self.assertLess(p.index('"outline"'), p.index('"rooms"'))
+        self.assertIn('"label_at"', p)
+        self.assertIn("is ALWAYS the Master", p)
+        self.assertLess(p.index('"rooms"'), p.index('4. "walkways"'))
+
+
+class Proportion(unittest.TestCase):
+    """A master bedroom is larger than the common bedroom beside it."""
+
+    def _geo(self):
+        # Bedroom 2 (left) drawn larger than the master (right) beside it.
+        return {"image_w": 1000, "image_h": 1000, "rooms": {
+            "Bedroom 2": {"x": 0, "y": 0, "w": 600, "h": 400,
+                          "parts": [{"x": 0, "y": 0, "w": 600, "h": 400}],
+                          "doors": [{"part": 0, "wall": "bottom", "at": 0.5}]},
+            "Master Bedroom": {"x": 600, "y": 0, "w": 300, "h": 400,
+                               "parts": [{"x": 600, "y": 0, "w": 300, "h": 400}],
+                               "doors": [{"part": 0, "wall": "bottom", "at": 0.5}]},
+        }}
+
+    def test_wall_moves_to_a_real_line_that_fixes_it(self):
+        g = self._geo()
+        moved = app.keep_in_proportion(g, "hdb_3room", {"x": [0, 420, 600, 900], "y": [0, 400]})
+        self.assertEqual(moved, ["Bedroom 2 / Master Bedroom"])
+        r = g["rooms"]
+        self.assertEqual(r["Bedroom 2"]["w"], 420)                 # onto the line at 420
+        self.assertEqual(r["Master Bedroom"]["x"], 420)
+        self.assertGreater(r["Master Bedroom"]["w"], r["Bedroom 2"]["w"])
+
+    def test_with_no_line_it_takes_the_typical_split(self):
+        g = self._geo()
+        app.keep_in_proportion(g, "hdb_3room", {"x": [0, 600, 900], "y": [0, 400]})
+        r = g["rooms"]
+        ratio = r["Master Bedroom"]["w"] / r["Bedroom 2"]["w"]
+        self.assertAlmostEqual(ratio, 11 / 9.5, places=2)
+
+    def test_doors_keep_their_place(self):
+        g = self._geo()
+        before = app.door_point(g["rooms"]["Bedroom 2"]["parts"][0], g["rooms"]["Bedroom 2"]["doors"][0])
+        app.keep_in_proportion(g, "hdb_3room", {"x": [0, 420, 900], "y": [0, 400]})
+        r = g["rooms"]["Bedroom 2"]
+        after = app.door_point(r["parts"][0], r["doors"][0])
+        self.assertAlmostEqual(before[0], after[0], delta=1)
+
+    def test_master_already_larger_is_left_alone(self):
+        g = self._geo()
+        g["rooms"]["Bedroom 2"]["w"] = g["rooms"]["Bedroom 2"]["parts"][0]["w"] = 250
+        self.assertEqual(app.keep_in_proportion(g, "hdb_3room", {"x": [0, 420], "y": []}), [])
+
+    def test_typical_sizes_depend_on_the_flat_type(self):
+        import furniture_layout as F
+        three, four = F.typical_room_size("Master Bedroom", "hdb_3room"), F.typical_room_size("Master Bedroom", "hdb_4room")
+        self.assertLess(three[0] * three[1], four[0] * four[1])
+        self.assertAlmostEqual(four[0] * four[1], 12.5, delta=0.1)
+        self.assertEqual(F.typical_room_size("Master Bedroom", "condo"), (3.4, 3.8))
+        self.assertEqual(F.room_kind("Main Bedroom"), "master_bedroom")
+        self.assertEqual(F.room_kind("Bedside Table Nook"), None)
+
+
+class PageFour(unittest.TestCase):
+
+    def test_markdown_bold_becomes_real_bold(self):
+        self.assertEqual(app.markdown_bold("<p>A **floating** unit and **oak**.</p>"),
+                         "<p>A <strong>floating</strong> unit and <strong>oak</strong>.</p>")
+        self.assertEqual(str(app.brief_html("<p>plain</p>")), "<p>plain</p>")
+
+    def test_every_room_on_the_plan_is_a_target(self):
+        g = app.parse_plan_geometry(GOOD_REPLY, LABELS, SIZE)
+        svg = app.generate_floor_plan_svg([{"label": l, "items": []} for l in LABELS], geometry=g)
+        self.assertEqual(svg.count('class="plan-room"'), len(LABELS))
+        self.assertIn('data-room="Living / Dining"', svg)
+
+    def test_progress_is_recorded_per_client(self):
+        app._PROGRESS.clear()
+        app._progress_event("c1", "brief")
+        app._progress_event("c1", "brief")                 # reported twice, kept once
+        app._progress_event("c1", "room", key="kitchen")
+        app._progress_event("c2", "plan")
+        self.assertEqual(app._PROGRESS["c1"], {"events": ["brief"], "rooms": ["kitchen"]})
+        self.assertEqual(app._PROGRESS["c2"]["events"], ["plan"])
 
 
 class SizeHints(unittest.TestCase):
@@ -453,6 +640,31 @@ class SizeHints(unittest.TestCase):
         self.assertNotIn("typically about this size", seen[0])
         self.assertIn("typically about this size", seen[-1])
         self.assertNotIn("{size_hints}", seen[0])
+
+
+class FilledWalkways(unittest.TestCase):
+
+    def test_gap_between_rooms_becomes_walkway(self):
+        rooms = [{"x": 0, "y": 0, "w": 100, "h": 100}, {"x": 150, "y": 0, "w": 100, "h": 100}]
+        walks = app._fill_between(rooms, [], [], 1)
+        self.assertEqual(walks, [{"x": 100, "y": 0, "w": 50, "h": 100}])
+
+    def test_notch_of_an_l_shaped_flat_stays_open(self):
+        # An L: a tall room on the left, a short one on the right at the bottom.
+        rooms = [{"x": 0, "y": 0, "w": 100, "h": 200}, {"x": 100, "y": 100, "w": 100, "h": 100}]
+        self.assertEqual(app._fill_between(rooms, [], [], 1), [])   # top-right is outside
+
+    def test_filled_floor_stays_inside_the_outline(self):
+        rooms = [{"x": 0, "y": 0, "w": 100, "h": 100}, {"x": 150, "y": 0, "w": 100, "h": 100}]
+        outline = [{"x": 0, "y": 0, "w": 250, "h": 50}]              # gap only half inside
+        walks = app._fill_between(rooms, [], outline, 1)
+        self.assertTrue(all(w["y"] + w["h"] / 2 <= 50 for w in walks))
+
+    def test_trace_has_no_holes_between_rooms(self):
+        g = app.parse_plan_geometry(GOOD_REPLY, LABELS, SIZE)
+        spaces = [p for r in g["rooms"].values() for p in r["parts"]] + g["walkways"]
+        # Nothing enclosed between the spaces is left uncovered.
+        self.assertEqual(app._fill_between(spaces, [], [], 1), [])
 
 
 class Walls(unittest.TestCase):
@@ -589,8 +801,10 @@ class Scale(unittest.TestCase):
     def test_rooms_add_up_to_the_floor_area(self):
         g = app.parse_plan_geometry(GOOD_REPLY, LABELS, SIZE)
         m = app.plan_metres_per_px(g, 67)
-        total = sum(app.union_area(r["parts"]) * m * m for r in g["rooms"].values())
-        self.assertAlmostEqual(total, 67 * app._ROOM_COVERAGE, places=6)
+        rooms = sum(app.union_area(r["parts"]) for r in g["rooms"].values())
+        walks = sum(w["w"] * w["h"] for w in g["walkways"])
+        coverage = 0.95 if walks else app._ROOM_COVERAGE
+        self.assertAlmostEqual((rooms + walks) * m * m, 67 * coverage, places=6)
 
     def test_no_floor_size_means_no_dimensions(self):
         g = app.parse_plan_geometry(GOOD_REPLY, LABELS, SIZE)
@@ -613,7 +827,8 @@ class Drawing(unittest.TestCase):
         self.assertNotIn("≈", svg)
         for item in ("Bed", "Wardrobe", "Vanity", "Shower", "Cooktop"):
             self.assertNotIn(f">{item}<", svg)
-        self.assertEqual(svg.count('class="room-wall"'), 8)       # one outline per room
+        # One outline per room, plus one round the walkways.
+        self.assertEqual(svg.count('class="room-wall"'), 8 + (1 if self.geo["walkways"] else 0))
 
     def test_traced_plan_matches_the_plan_aspect(self):
         svg = app.generate_floor_plan_svg(self.rooms, geometry=self.geo)

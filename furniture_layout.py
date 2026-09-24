@@ -23,86 +23,89 @@ left) and wall.
 
 from __future__ import annotations
 
+import json
 import re
+import threading
+from datetime import date
+from pathlib import Path
 
 # ── General design standards ─────────────────────────────────────────────────
 # Sizes and clearances from common residential guides (Neufert; NKBA kitchen
-# guidelines; typical Singapore HDB furnishing). Used to fill anything the
-# model leaves out, and as the whole plan when the model is unavailable.
+# guidelines; typical Singapore HDB furnishing), kept in furniture_sizes.json
+# so they can be read and corrected without touching code. Pieces the model
+# had to size itself are added there, so each is estimated once and then the
+# same every time.
+CATALOGUE_PATH = Path(__file__).parent / "furniture_sizes.json"
+_catalogue_lock = threading.Lock()
+
 # keywords, name, w, d, place, anchor, clearance, side, align, rule
-STANDARDS = [
-    (("bedside", "nightstand"), "Bedside table", 0.45, 0.40, "beside", "bed", 0.0, 0.0, "",
-     "Beside the bed, at mattress height"),
-    (("king bed",), "King bed", 1.83, 2.03, "wall", "", 0.6, 0.6, "centre",
-     "Headboard on a solid wall, 600 mm clear on each side"),
-    (("queen bed",), "Queen bed", 1.52, 2.03, "wall", "", 0.6, 0.6, "centre",
-     "Headboard on a solid wall, 600 mm clear on each side"),
-    (("single bed", "super single"), "Single bed", 1.07, 1.9, "wall", "", 0.6, 0.0, "end",
-     "Along a wall to free floor space"),
-    (("bunk", "loft bed"), "Bunk bed", 1.0, 2.0, "wall", "", 0.6, 0.0, "end",
-     "Along a wall to free floor space"),
-    (("bed",), "Bed", 1.52, 2.03, "wall", "", 0.6, 0.6, "centre",
-     "Headboard on a solid wall, 600 mm clear on each side"),
-    (("wardrobe", "closet"), "Wardrobe", 1.8, 0.6, "wall", "", 0.9, 0.0, "end",
-     "Against a long wall, 900 mm clear to open the doors"),
-    (("dresser", "dressing table", "chest of drawers", "vanity table"), "Dresser", 1.0, 0.5, "wall", "", 0.8, 0.0, "end",
-     "Against a wall, 800 mm clear to open drawers"),
-    (("desk", "study table", "workstation"), "Desk", 1.2, 0.6, "wall", "", 0.9, 0.0, "end",
-     "Against a wall, 900 mm for the chair to pull out"),
-    (("sofa bed",), "Sofa bed", 2.0, 0.95, "wall", "", 0.45, 0.0, "centre",
-     "Against a wall, facing the room"),
-    (("sectional", "l-shaped sofa"), "Sectional sofa", 2.6, 1.6, "wall", "", 0.45, 0.0, "centre",
-     "Against a wall, facing the TV"),
-    (("sofa", "couch", "settee"), "Sofa", 2.1, 0.9, "wall", "", 0.45, 0.0, "centre",
-     "Against a wall, facing the TV"),
-    (("coffee table",), "Coffee table", 1.1, 0.6, "front", "sofa", 0.0, 0.0, "centre",
-     "450 mm in front of the sofa, within reach"),
-    (("tv console", "tv cabinet", "media console", "tv"), "TV console", 1.8, 0.45, "facing", "sofa", 0.0, 0.0, "centre",
-     "Opposite the sofa, 2-3 m viewing distance"),
-    (("armchair", "accent chair", "reading chair", "lounge chair"), "Armchair", 0.85, 0.85, "corner", "", 0.45, 0.0, "end",
-     "In a corner, angled towards the seating group"),
-    (("side table", "end table"), "Side table", 0.5, 0.5, "beside", "sofa", 0.0, 0.0, "",
-     "At the arm of the sofa"),
-    (("dining table", "dining set"), "Dining table", 1.6, 0.9, "centre", "", 0.9, 0.0, "centre",
-     "900 mm all round to pull chairs out"),
-    (("dining chair", "chairs"), "", 0, 0, "", "", 0, 0, "", ""),   # drawn with the table
-    (("sideboard", "buffet", "bar cabinet", "display cabinet", "console table"), "Sideboard", 1.6, 0.45, "wall", "", 0.9, 0.0, "end",
-     "Against a wall, 900 mm to open doors"),
-    (("bookshelf", "bookcase", "shelving", "shelf", "display shelving"), "Shelving", 1.2, 0.35, "wall", "", 0.6, 0.0, "end",
-     "Against a wall, clear of walkways"),
-    (("rug", "carpet"), "Rug", 2.0, 1.4, "under", "coffee table", 0.0, 0.0, "centre",
-     "Under the seating group, anchoring it"),
-    (("floor lamp",), "Floor lamp", 0.4, 0.4, "corner", "", 0.0, 0.0, "end",
-     "In a corner, lighting the seating"),
-    (("plant",), "Plant", 0.45, 0.45, "corner", "", 0.0, 0.0, "end",
-     "In a corner, out of the walkway"),
-    (("island", "breakfast bar"), "Island", 1.8, 0.9, "centre", "", 1.0, 0.0, "centre",
-     "1 m clear all round for the work aisle"),
-    (("refrigerator", "fridge"), "Fridge", 0.75, 0.7, "wall", "", 1.0, 0.0, "end",
-     "At the end of the counter run, 1 m to open the door"),
-    (("hob", "cooktop", "stove", "oven", "cooker"), "Hob", 0.9, 0.6, "wall", "", 1.0, 0.0, "centre",
-     "On the counter run, 1 m work aisle in front"),
-    (("kitchen sink", "sink"), "Sink", 0.8, 0.6, "wall", "", 1.0, 0.0, "centre",
-     "On the counter run, near the hob — the work triangle"),
-    (("dishwasher",), "Dishwasher", 0.6, 0.6, "wall", "", 1.0, 0.0, "end",
-     "Beside the sink"),
-    (("pantry", "tall cabinet", "kitchen cabinet", "cabinet", "storage"), "Storage", 1.2, 0.6, "wall", "", 0.9, 0.0, "end",
-     "Against a wall, 900 mm to open doors"),
-    (("washing machine", "washer", "dryer"), "Washing machine", 0.6, 0.6, "wall", "", 0.9, 0.0, "end",
-     "Against a wall, 900 mm to load it"),
-    (("drying rack", "laundry rack", "clothes rack"), "Drying rack", 1.2, 0.5, "wall", "", 0.6, 0.0, "end",
-     "Along a wall, clear of the washer"),
-    (("double vanity",), "Double vanity", 1.5, 0.55, "wall", "", 0.75, 0.0, "centre",
-     "Against a wall, 750 mm clear in front"),
-    (("vanity", "basin", "wash basin"), "Vanity", 0.8, 0.5, "wall", "", 0.75, 0.0, "end",
-     "Against a wall, 750 mm clear in front"),
-    (("toilet", "wc", "water closet"), "Toilet", 0.4, 0.7, "wall", "", 0.6, 0.2, "end",
-     "Against a wall, 600 mm clear in front"),
-    (("bathtub", "tub"), "Bathtub", 1.7, 0.75, "wall", "", 0.7, 0.0, "end",
-     "Along the end wall"),
-    (("shower",), "Shower", 0.9, 0.9, "corner", "", 0.6, 0.0, "end",
-     "In a corner, 600 mm clear to step out"),
-]
+STANDARDS: list[tuple] = []
+MODEL_ESTIMATES: set[str] = set()      # names whose size the model supplied
+
+
+def load_catalogue(path: Path | None = None) -> None:
+    """(Re)load the size list into STANDARDS."""
+    global CATALOGUE_PATH
+    if path:
+        CATALOGUE_PATH = Path(path)
+    try:
+        items = json.loads(CATALOGUE_PATH.read_text()).get("items", [])
+    except (OSError, ValueError):
+        items = []
+    STANDARDS.clear()
+    MODEL_ESTIMATES.clear()
+    for it in items:
+        keywords = tuple(str(k).lower() for k in it.get("match") or [])
+        if not keywords:
+            continue
+        if it.get("skip"):
+            STANDARDS.append((keywords, "", 0, 0, "", "", 0, 0, "", ""))
+            continue
+        STANDARDS.append((keywords, it["name"], float(it["w"]), float(it["d"]),
+                          it.get("place", "wall"), it.get("anchor", ""),
+                          float(it.get("clearance", 0.6)), float(it.get("side", 0)),
+                          it.get("align", "end"), it.get("rule", "")))
+        if it.get("source") == "model estimate":
+            MODEL_ESTIMATES.add(it["name"])
+
+
+def remember(pieces: list[dict]) -> list[str]:
+    """Add every piece the size list does not know to it, with the size the
+    model gave, so the next project uses the same size without asking.
+    Returns the names added."""
+    new = [p for p in pieces if p.get("estimated") and p.get("sized_by_model")]
+    if not new:
+        return []
+    added = []
+    with _catalogue_lock:
+        try:
+            doc = json.loads(CATALOGUE_PATH.read_text())
+        except (OSError, ValueError):
+            doc = {"items": []}
+        known = {k for it in doc.get("items", []) for k in it.get("match", [])}
+        for p in new:
+            key = (p.get("label") or p["name"]).strip().lower()
+            if not key or key in known:
+                continue
+            known.add(key)
+            added.append(p.get("label") or p["name"])
+            doc.setdefault("items", []).append({
+                "name": p.get("label") or p["name"], "match": [key],
+                "w": round(p["w"], 2), "d": round(p["d"], 2), "place": p["place"],
+                "anchor": p.get("anchor", ""), "clearance": round(p["clearance"], 2),
+                "side": round(p.get("side", 0), 2), "align": p.get("align", "end"),
+                "rule": p.get("rule", ""), "source": "model estimate",
+                "added": date.today().isoformat(),
+            })
+        if added:
+            tmp = CATALOGUE_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+            tmp.replace(CATALOGUE_PATH)
+            load_catalogue()
+    return added
+
+
+load_catalogue()
 
 # Not floor furniture — nothing to place.
 NOT_FLOOR = ("curtain", "blind", "drape", "pendant", "ceiling", "light", "lamp shade",
@@ -183,7 +186,11 @@ def clean_pieces(raw: list, fallback_names: list[str]) -> list[dict]:
                 return default
             return v if lo <= v <= hi else default
 
-        w, d = num("w", sw, 0.2, 4.0), num("d", sd, 0.2, 3.0)
+        # A piece on the size list takes the listed size, so it is the same
+        # every time. Only a piece the list does not know takes the model's.
+        sized_by_model = std is None and all(
+            isinstance(p.get(k), (int, float)) for k in ("w", "d"))
+        w, d = (sw, sd) if std else (num("w", sw, 0.2, 4.0), num("d", sd, 0.2, 3.0))
         place = str(p.get("place", splace)).lower().strip()
         if place not in PLACES:
             place = splace
@@ -202,12 +209,14 @@ def clean_pieces(raw: list, fallback_names: list[str]) -> list[dict]:
             "name": name if n == 0 else f"{name} ({n + 1})", "label": name,
             "w": w, "d": d, "place": place,
             "anchor": str(p.get("anchor") or sanchor).strip().lower(),
-            "clearance": num("clearance", sclear, 0.0, 1.5),
-            "side": num("side", sside, 0.0, 1.0),
+            "clearance": sclear if std else num("clearance", sclear, 0.0, 1.5),
+            "side": sside if std else num("side", sside, 0.0, 1.0),
             "align": salign if p.get("align") not in ("centre", "end") else p["align"],
             "rule": str(p.get("rule") or srule)[:90],
-            # A size the table does not vouch for is the model's estimate.
-            "estimated": std is None,
+            # A size no standard vouches for is the model's estimate — new
+            # now, or remembered from an earlier project.
+            "estimated": std is None or label in MODEL_ESTIMATES,
+            "sized_by_model": sized_by_model,
             "source": "described" if str(p.get("source", "")).lower().startswith("desc") else "ticked",
             })
     return _dedupe(out) or pieces_from_names(fallback_names)
@@ -321,24 +330,54 @@ def _candidates(p, room: _Room, placed: dict):
         place = "centre" if place == "under" else "wall"
 
     if place in ("wall", "corner"):
-        for wall in WALLS:
-            L = _wall_len(wall, W, D)
-            if place == "corner":
-                ts = [0.0, L - w] if L - w >= 0 else []
-            else:
-                ts = _steps(side, L - w - side)
-            for t in ts:
-                body, zone, sides, rot = _wall_rects(wall, t, w, d, c, side, W, D)
-                if p["align"] == "centre":
-                    score = abs(t + w / 2 - L / 2)
-                    score -= 0.3 * L                 # big pieces want the long wall
+        # A bed may also lie with its long side to the wall, headboard in a
+        # corner — how most small bedrooms fit one. Only when headboard-to-wall
+        # does not fit: it scores worse.
+        ways = [(w, d, side, 0, 0.0)]
+        if p.get("is_bed"):
+            ways.append((d, w, 0.0, 90, 1.5))
+        for ww, dd, sd, turn, penalty in ways:
+            for wall in WALLS:
+                L = _wall_len(wall, W, D)
+                if place == "corner":
+                    ts = [0.0, L - ww] if L - ww >= 0 else []
+                elif turn:
+                    ts = [0.0, L - ww] if L - ww >= 0 else []     # headboard in a corner
                 else:
-                    score = min(t, L - w - t)        # near a corner
-                if p["side"] and wall in room.door_walls:
-                    # A bed wants a solid wall: not the one the door is in,
-                    # where it would sit beside the swing and face nothing.
-                    score += 2.0
-                yield score, body, (zone, sides), rot, wall
+                    ts = _steps(sd, L - ww - sd)
+                for t in ts:
+                    body, zone, sides, rot = _wall_rects(wall, t, ww, dd, c, sd, W, D)
+                    if p["align"] == "centre" and not turn:
+                        score = abs(t + ww / 2 - L / 2)
+                        score -= 0.3 * L                 # big pieces want the long wall
+                    else:
+                        score = min(t, L - ww - t)        # near a corner
+                    if p["side"] and wall in room.door_walls:
+                        # A bed wants a solid wall: not the one the door is in,
+                        # where it would sit beside the swing and face nothing.
+                        score += 2.0
+                    if turn:
+                        # Headboard in the corner the bed starts from: the
+                        # icon's headboard (its top) turned to face it.
+                        at_start = t < 1e-9
+                        rot = ((270 if at_start else 90) if wall in ("top", "bottom")
+                               else (0 if at_start else 180))
+                    yield score + penalty, body, (zone, sides), rot, wall
+
+    elif place == "beside" and anchor.get("sideways"):
+        # A bed lying side-on has its headboard in a corner: the bedside table
+        # goes at the head, against the other wall of that corner, on the
+        # bed's open side.
+        b, a_rot, a_wall = anchor["rect"], anchor["rot"], anchor["wall"]
+        if a_wall in ("left", "right"):
+            corner = "top" if a_rot == 0 else "bottom"
+            t = b[0] - GAP - w if a_wall == "right" else b[0] + b[2] + GAP
+        else:
+            corner = "left" if a_rot == 270 else "right"
+            t = b[1] + b[3] + GAP if a_wall == "top" else b[1] - GAP - w
+        if 0 <= t <= _wall_len(corner, W, D) - w:
+            body, zone, sides, rot = _wall_rects(corner, t, w, d, c, 0, W, D)
+            yield 0.0, body, (zone,), rot, corner
 
     elif place == "beside":
         a_body, a_rot, a_wall = anchor["rect"], anchor["rot"], anchor["wall"]
@@ -471,6 +510,29 @@ def _between(a, b):
     return (x0, y0, max(x1 - x0, 0), max(y1 - y0, 0))
 
 
+# Bed sizes, largest first: a bed that will not fit tries the next one down.
+BED_LADDER = ("King bed", "Queen bed", "Super single bed", "Single bed")
+
+
+def _is_bed(name: str) -> bool:
+    n = name.lower()
+    return bool(re.search(r"\bbed\b", n)) and not any(
+        k in n for k in ("bedside", "sofa bed", "bed frame storage", "flower bed", "garden bed"))
+
+
+def _smaller_beds(p: dict) -> list[dict]:
+    """The standard beds smaller than this one, largest first, as pieces."""
+    out = []
+    for name in BED_LADDER:
+        std = standard_for(name)
+        if not std or std[1] >= p["w"] - 1e-6:
+            continue
+        label, w, d, place, anchor, clearance, side, align, rule = std
+        out.append(dict(p, label=label, w=w, d=d, clearance=clearance, side=side,
+                        align=align, rule=rule))
+    return out
+
+
 def _greedy(W, D, ordered, first_wall=None, doors=()):
     room = _Room(W, D, doors)
     placed: dict[str, dict] = {}
@@ -479,25 +541,33 @@ def _greedy(W, D, ordered, first_wall=None, doors=()):
     for i, p in enumerate(ordered):
         key = p["name"].lower()
         best = None
-        # Recommended clearance first; then the minimum the guides allow;
-        # only then a smaller piece.
-        for size, relax in ((1.0, False), (1.0, True), (0.85, True)):
-            c = _min_clearance(p["clearance"]) if relax else p["clearance"]
-            side = _min_clearance(p["side"]) if relax else p["side"]
-            q = dict(p, w=p["w"] * size, d=p["d"] * size, clearance=c, side=side)
+        # Recommended clearance first; then the minimum the guides allow; then
+        # a bed a size down, and down again; only then a smaller piece.
+        tries = [(p, 1.0, False), (p, 1.0, True)]
+        if p.get("is_bed"):
+            tries += [(smaller, 1.0, relax) for smaller in _smaller_beds(p)
+                      for relax in (False, True)]
+        tries.append((p, 0.85, True))
+        for base, size, relax in tries:
+            c = _min_clearance(base["clearance"]) if relax else base["clearance"]
+            side = _min_clearance(base["side"]) if relax else base["side"]
+            q = dict(base, w=base["w"] * size, d=base["d"] * size, clearance=c, side=side)
             ignore = (q["anchor"],) if q["place"] in ("front", "beside") else ()
             for score, body, zones, rot, wall in _candidates(q, room, placed):
                 if i == 0 and first_wall and wall != first_wall:
                     continue
                 if q["place"] == "under" or room.fits(body, zones, ignore=ignore):
                     if best is None or score < best[0] - 1e-9:
-                        best = (score, body, rot, wall, size, relax)
+                        best = (score, body, rot, wall, size, relax, base)
             if best:
                 break
         if not best:
             skipped.append(p.get("label", p["name"]))
             continue
-        score, body, rot, wall, size, relax = best
+        score, body, rot, wall, size, relax, base = best
+        if base is not p:
+            # Placed a size down: say so on the drawing.
+            p = dict(p, label=f"{base['label']} (smaller, to fit)", resized=True)
         total += score
         if p["place"] != "under":
             room.bodies.append((body, key))
@@ -508,7 +578,9 @@ def _greedy(W, D, ordered, first_wall=None, doors=()):
             # Keep the sightline between the pair clear of anything placed
             # later — no dining table between the sofa and the TV.
             room.zones.append((_between(placed[p["anchor"]]["rect"], body), key))
-        placed[key] = {"rect": body, "rot": rot, "wall": wall}
+        facing_wall = {"top": 0, "right": 90, "bottom": 180, "left": 270}.get(wall)
+        placed[key] = {"rect": body, "rot": rot, "wall": wall,
+                       "sideways": bool(p.get("is_bed")) and wall is not None and rot != facing_wall}
         out.append({
             **p, "x": body[0], "y": body[1], "bw": body[2], "bd": body[3],
             "rot": rot, "wall": wall, "scaled": size < 1.0, "tight": relax,
@@ -529,6 +601,9 @@ def place_room(W: float, D: float, pieces: list[dict], doors: list[dict] = ()) -
     doors: [{"zone": (x, y, w, h), "wall": "top" | ... | None}] — each door's
     swing, kept clear, and the wall it is in."""
     pieces = [dict(p) for p in pieces]
+    for p in pieces:
+        p["is_bed"] = _is_bed(p.get("label") or p["name"])
+        p.setdefault("label", p["name"])
     _match_anchor(pieces)
     ordered = _order(pieces)
     if not ordered:
@@ -591,7 +666,15 @@ def place_parts(parts: list[tuple], pieces: list[dict], doors: list[dict] = ()) 
 
 
 # ── Typical room sizes ────────────────────────────────────────────────────────
-# For rooms with no traced plan to measure: a believable footprint by type.
+# Per HDB flat type, from room_sizes.json (sourced; editable). Used to size a
+# room with no traced plan, and to keep a traced plan in proportion.
+ROOM_SIZES_PATH = Path(__file__).parent / "room_sizes.json"
+try:
+    ROOM_SIZES = json.loads(ROOM_SIZES_PATH.read_text()).get("flat_types", {})
+except (OSError, ValueError):
+    ROOM_SIZES = {}
+
+# When the flat type has no entry (condos, landed): a believable footprint.
 TYPICAL_ROOM_M = [
     (("living", "dining", "family"), 4.5, 5.5),
     (("master bed", "main bed"), 3.4, 3.8),
@@ -606,7 +689,44 @@ TYPICAL_ROOM_M = [
 ]
 
 
-def typical_room_size(label: str) -> tuple[float, float]:
+def room_kind(label: str) -> str | None:
+    """Which kind of room a label names, as room_sizes.json calls them."""
+    n = label.lower()
+    if any(k in n for k in ("master bath", "ensuite", "en suite", "en-suite")):
+        return "master_bathroom"
+    if any(k in n for k in ("bath", "wc", "toilet", "powder")):
+        return "bathroom"
+    if any(k in n for k in ("master bed", "main bed")):
+        return "master_bedroom"
+    if re.search(r"\bbed(room)?\b", n):
+        return "bedroom"
+    if any(k in n for k in ("living", "dining", "family", "lounge")):
+        return "living"
+    if "kitchen" in n:
+        return "kitchen"
+    if any(k in n for k in ("yard", "utility", "laundry")):
+        return "service_yard"
+    if any(k in n for k in ("shelter", "store", "storage", "bunker")):
+        return "shelter"
+    if any(k in n for k in ("study", "office")):
+        return "study"
+    return None
+
+
+def typical_area(label: str, housing_type: str | None) -> float | None:
+    """A room's typical floor area in m² for this flat type, or None."""
+    entry = ROOM_SIZES.get(housing_type or "", {}).get(room_kind(label) or "")
+    return float(entry["sqm"]) if entry else None
+
+
+def typical_room_size(label: str, housing_type: str | None = None) -> tuple[float, float]:
+    """A room's typical width and depth in metres: from its flat type's sizes
+    when known, otherwise a believable footprint by kind."""
+    entry = ROOM_SIZES.get(housing_type or "", {}).get(room_kind(label) or "")
+    if entry:
+        shape = float(entry.get("shape", 1.2))
+        w = (float(entry["sqm"]) / shape) ** 0.5
+        return round(w, 2), round(w * shape, 2)
     n = label.lower()
     for keywords, w, d in TYPICAL_ROOM_M:
         if any(k in n for k in keywords):

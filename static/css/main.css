@@ -224,12 +224,16 @@ em { font-style: italic; color: var(--gold); }
   line-height: 1.7;
 }
 
+/* Four across, or two by two — never three and an orphan. */
 .hero__features {
-  display: flex;
-  justify-content: center;
-  gap: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem 1.5rem;
   margin-top: 3.5rem;
-  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .hero__features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .hero__feature {
@@ -1095,18 +1099,6 @@ em { font-style: italic; color: var(--gold); }
   color: var(--ink);
 }
 
-.room-result-card__badge {
-  font-size: .6rem;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  padding: .2rem .6rem;
-  border-radius: 20px;
-  font-weight: 500;
-}
-
-.room-result-card__badge--high   { background: #FEF0EE; color: #C0392B; }
-.room-result-card__badge--medium { background: #FEF9EE; color: #B7770D; }
-.room-result-card__badge--low    { background: #EEF8F2; color: #27AE60; }
 
 /* Render placeholder */
 .render-placeholder {
@@ -1249,7 +1241,16 @@ em { font-style: italic; color: var(--gold); }
   padding-top: .5rem;
 }
 
-.legend-item { display: flex; align-items: center; gap: .5rem; }
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0 -.5rem;
+  padding: .3rem .5rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: background-color .15s ease;
+}
 
 .legend-dot {
   width: 12px;
@@ -1622,8 +1623,9 @@ em { font-style: italic; color: var(--gold); }
 
 .decision-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: .75rem;
+  gap: .25rem .75rem;
   font-size: .875rem;
   padding: .6rem 1rem;
   background: var(--cream);
@@ -1633,11 +1635,12 @@ em { font-style: italic; color: var(--gold); }
 .decision-item__title {
   font-weight: 500;
   color: var(--ink);
-  flex-shrink: 0;
 }
 
 .decision-item__answer {
   color: var(--ink-light);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Agent Activity / Trace ──────────────────────────────────────────────────── */
@@ -2059,7 +2062,7 @@ em { font-style: italic; color: var(--gold); }
 /* Figures read as a column, not ransom-note widths. */
 .summary-bar__val,
 .trace-entry__time,
-.room-result-card__badge { font-variant-numeric: tabular-nums; }
+.priority-tag { font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion: reduce) {
   /* Keep the state changes legible, drop the movement. */
@@ -2728,19 +2731,48 @@ html[data-vt] .hero > * { animation: none; }
 }
 
 .draft__room {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding: .25rem .7rem;
   border: 1px solid var(--stone);
   border-radius: 99px;
   font-size: .75rem;
   color: var(--ink-muted);
   background: var(--cream);
-  transition: border-color .3s ease, background-color .3s ease, color .3s ease;
+  transition: border-color .3s ease, color .3s ease;
 }
 
-.draft__rooms.is-done .draft__room {
+/* The fill: a gold layer revealed from the left with clip-path — off the main
+   thread, so it stays smooth while the page is busy. The room being drafted
+   creeps towards full over a room's usual time; when the server says it is
+   done it snaps full, fast. Slow while working, quick on arrival. */
+.draft__room::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gold-light);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path .45s var(--ease-out);
+}
+
+.draft__room.is-drafting {
   border-color: var(--gold);
-  background: var(--white);
   color: var(--ink);
+}
+.draft__room.is-drafting::before {
+  clip-path: inset(0 30% 0 0);
+  transition: clip-path 6s var(--ease-creep);
+}
+
+.draft__room.is-done {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+.draft__room.is-done::before {
+  clip-path: inset(0 0 0 0);
+  transition: clip-path .45s var(--ease-out);
 }
 
 @media (max-width: 760px) {
@@ -2751,4 +2783,126 @@ html[data-vt] .hero > * { animation: none; }
     border-left: 0;
     border-top: 1px solid var(--cream-dark);
   }
+}
+
+
+/* ── Page 4: finding your way round ───────────────────────────────────────────
+   A long page, so a bar under the site nav to move between its sections,
+   marking the one in view. The floor plan and the room cards point at each
+   other: a room on the plan or in its key leads to its card, and each card's
+   "See on plan" lights its room in the drawing.
+   ───────────────────────────────────────────────────────────────────────────── */
+.page-nav {
+  position: sticky;
+  top: var(--site-nav-h, 66px);
+  z-index: 50;
+  margin: 0 0 2rem;
+  background: color-mix(in srgb, var(--cream) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--cream-dark);
+}
+
+.page-nav__inner {
+  display: flex;
+  gap: .25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: .5rem 0;
+}
+.page-nav__inner::-webkit-scrollbar { display: none; }
+
+.page-nav__link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .4rem .8rem;
+  border-radius: 99px;
+  font-size: .8rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.page-nav__link[aria-current="true"] {
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: inset 0 0 0 1px var(--stone);
+}
+
+.page-nav__count {
+  min-width: 1.2rem;
+  padding: 0 .35rem;
+  border-radius: 99px;
+  background: var(--gold);
+  color: var(--white);
+  font-size: .68rem;
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .page-nav__link:hover { color: var(--ink); }
+  .legend-item:hover { background: var(--cream); }
+  .room-result-card__plan-link:hover { color: var(--ink); }
+}
+
+/* Sections land below both sticky bars, not under them. */
+.result-section { scroll-margin-top: calc(var(--site-nav-h, 66px) + 4rem); }
+.room-result-card { scroll-margin-top: calc(var(--site-nav-h, 66px) + 5rem); }
+
+/* Room card header: name, then a quiet priority and the way to the plan. */
+.room-result-card__meta {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex: none;
+}
+
+.priority-tag {
+  font-size: .68rem;
+  color: var(--ink-muted);
+}
+.priority-tag--high { color: var(--ink-light); font-weight: 500; }
+
+.room-result-card__plan-link {
+  font-size: .72rem;
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--gold-light);
+  transition: color .15s ease;
+}
+
+/* A room arrived at from the plan says so, then settles. */
+.room-result-card.is-focused {
+  box-shadow: 0 0 0 2px var(--gold), var(--shadow-lg);
+}
+.room-result-card {
+  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out),
+              box-shadow .6s var(--ease-out);
+}
+
+/* The plan's rooms as targets: invisible until pointed at or asked for. */
+.plan-room { cursor: pointer; }
+.plan-room__floor {
+  fill: var(--gold);
+  fill-opacity: 0;
+  transition: fill-opacity .2s ease;
+}
+.plan-room__edge {
+  fill: none;
+  stroke: var(--gold);
+  stroke-opacity: 0;
+  stroke-width: 3;
+  stroke-linecap: square;
+  pointer-events: none;
+  transition: stroke-opacity .2s ease;
+}
+.plan-room.is-lit .plan-room__floor { fill-opacity: .18; }
+.plan-room.is-lit .plan-room__edge { stroke-opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .plan-room:hover .plan-room__floor { fill-opacity: .12; }
+  .plan-room:hover .plan-room__edge { stroke-opacity: .7; }
 }

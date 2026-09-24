@@ -9,6 +9,7 @@ import json
 import uuid
 import base64
 import hashlib
+import math
 import statistics
 from concurrent.futures import ThreadPoolExecutor
 import textwrap
@@ -1477,7 +1478,7 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
         Respond with ONLY the HTML content, no surrounding tags.
     """)
 
-    return strip_code_fence(call_llm(
+    return markdown_bold(strip_code_fence(call_llm(
         [{"role": "user", "content": prompt}],
         system="You are a senior interior designer writing a premium design brief. "
                "You always explain WHY you recommend something, connecting it to "
@@ -1485,7 +1486,7 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
                "You write tight, specific prose and never pad to reach a length. "
                "You reply with bare HTML and never wrap it in a markdown code fence.",
         max_tokens=1000
-    ))
+    )))
 
 
 def format_room_direction(entry) -> str:
@@ -2276,7 +2277,7 @@ def image_size(path: str) -> tuple[int, int] | None:
 
 # Bump when the trace or furniture pipeline changes what it produces, so
 # results saved by older code are redone rather than reused.
-PLAN_TRACE_VERSION = 5          # rooms, walkways, doors + conventions, scale
+PLAN_TRACE_VERSION = 10         # doors only as drawn on the plan; none imposed
 FURNITURE_VERSION = 2           # project notes and refinements included
 
 
@@ -2349,6 +2350,13 @@ def _cells(parts: list[dict]):
 def union_area(parts: list[dict]) -> float:
     xs, ys, covered = _cells(parts)
     return sum((xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]) for i, j in covered)
+
+
+def union_outline_filled(parts: list[dict]) -> str:
+    """SVG path data covering a room's floor — its parts as closed rectangles,
+    for a shape that can be filled and clicked."""
+    return " ".join(f"M{p['x']:.1f},{p['y']:.1f}h{p['w']:.1f}v{p['h']:.1f}h{-p['w']:.1f}Z"
+                    for p in parts)
 
 
 def union_outline(parts: list[dict]) -> str:
@@ -2548,6 +2556,85 @@ def _carve_open_plan(rooms: dict) -> None:
         }
 
 
+# Words that mean the same room, for matching a name the model changed.
+_ROOM_WORDS = {
+    "main": "master", "master": "master", "living": "living", "lounge": "living",
+    "family": "living", "dining": "living", "bed": "bed", "bedroom": "bed",
+    "bath": "bath", "bathroom": "bath", "wc": "bath", "toilet": "bath",
+    "ensuite": "bath", "kitchen": "kitchen", "yard": "yard", "utility": "yard",
+    "laundry": "yard", "shelter": "shelter", "bunker": "shelter", "store": "store",
+    "storage": "store", "study": "study", "office": "study", "balcony": "balcony",
+    "common": "common", "guest": "common",
+}
+
+
+def _room_words(text: str) -> set[str]:
+    words = re.findall(r"[a-z]+|\d+", text.lower())
+    return {_ROOM_WORDS.get(w, w) for w in words if w not in ("room", "the", "and", "a")}
+
+
+# Fill every gap between the rooms with walkway, so the flat reads as one
+# connected shape the way the plan does.
+FILL_WALKWAYS = True
+
+
+def _fill_between(rooms: list[dict], walkways: list[dict], outline: list[dict],
+                  min_side: float) -> list[dict]:
+    """The floor between the rooms, as walkway rectangles.
+
+    A spot is floor if spaces lie on both sides of it, along its row or
+    along its column: it is enclosed. That fills corridors and the gaps
+    between rooms, but leaves open a notch in the flat's outline, or a ledge
+    outside it — open on one side both ways — as the plan has them. The footprint
+    stays inside the traced outline, when there is one; the rooms are then
+    cut out of it."""
+    spaces = rooms + walkways
+    if not spaces:
+        return walkways
+    xs, ys, covered = _cells(spaces)
+    nx, ny = len(xs) - 1, len(ys) - 1
+    rows = {j: [i for i in range(nx) if (i, j) in covered] for j in range(ny)}
+    cols = {i: [j for j in range(ny) if (i, j) in covered] for i in range(nx)}
+    between_row = lambda i, j: bool(rows[j]) and rows[j][0] < i < rows[j][-1]
+    between_col = lambda i, j: bool(cols[i]) and cols[i][0] < j < cols[i][-1]
+    hull = [{"x": xs[i], "y": ys[j], "w": xs[i + 1] - xs[i], "h": ys[j + 1] - ys[j]}
+            for j in range(ny) for i in range(nx)
+            if (i, j) not in covered and (between_row(i, j) or between_col(i, j))]
+    if outline:
+        hull = [c for c in hull
+                if any(o["x"] - 1 <= c["x"] + c["w"] / 2 <= o["x"] + o["w"] + 1 and
+                       o["y"] - 1 <= c["y"] + c["h"] / 2 <= o["y"] + o["h"] + 1 for o in outline)]
+    # Cells already walkway count; merge each row's run of cells into one.
+    free = hull + walkways
+    for cut in rooms:
+        free = [q for p in free for q in _rect_minus(p, cut)]
+    merged = []
+    for p in sorted(free, key=lambda p: (round(p["y"], 3), round(p["h"], 3), p["x"])):
+        last = merged[-1] if merged else None
+        if (last and abs(last["y"] - p["y"]) < 1e-6 and abs(last["h"] - p["h"]) < 1e-6
+                and abs(last["x"] + last["w"] - p["x"]) < 1e-6):
+            last["w"] += p["w"]
+        else:
+            merged.append(dict(p))
+    # Offcuts thinner than a wall in both directions are noise.
+    return [p for p in merged if max(p["w"], p["h"]) >= min_side and min(p["w"], p["h"]) >= 1]
+
+
+def _loose_label(entry: dict, room_labels: list[str], claimed: set[str]) -> str | None:
+    """The listed room a renamed entry most likely is — the model sometimes
+    writes "Living Room" for "Living / Dining", or the plan's "Main Bedroom"
+    for "Master Bedroom". Matched on shared meaning words, against rooms no
+    other entry has claimed; None when it is not clear-cut."""
+    words = _room_words(str(entry.get("name", ""))) | _room_words(str(entry.get("printed", "")))
+    scored = sorted(((len(words & _room_words(l)), l) for l in room_labels if l not in claimed),
+                    reverse=True)
+    if not scored or scored[0][0] == 0:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None                                   # a tie: do not guess
+    return scored[0][1]
+
+
 def parse_plan_geometry(data: dict, room_labels: list[str],
                         size: tuple[int, int]) -> dict:
     """Validate the model's trace and convert it to image pixels.
@@ -2561,11 +2648,21 @@ def parse_plan_geometry(data: dict, room_labels: list[str],
     by_name = {re.sub(r"\s+", " ", l).strip().lower(): l for l in room_labels}
 
     rooms: dict[str, dict] = {}
-    for entry in data.get("rooms") or []:
-        if not isinstance(entry, dict):
-            continue
+    entries = [e for e in data.get("rooms") or [] if isinstance(e, dict)]
+    # Exact names first, so a loose match never takes a room an exact one
+    # would have claimed.
+    named = []
+    for entry in entries:
         name = re.sub(r"\s+", " ", str(entry.get("name", ""))).strip().lower()
-        label = by_name.get(name)
+        named.append((entry, by_name.get(name)))
+    claimed = {label for _e, label in named if label}
+    for i, (entry, label) in enumerate(named):
+        if not label:
+            label = _loose_label(entry, room_labels, claimed)
+            if label:
+                claimed.add(label)
+                named[i] = (entry, label)
+    for entry, label in named:
         if not label or label in rooms:
             continue
         boxes = _clean_boxes(entry)
@@ -2620,8 +2717,18 @@ def parse_plan_geometry(data: dict, room_labels: list[str],
     # room wins. Offcuts thinner than a wall are noise.
     room_rects = [p for g in rooms.values() for p in g["parts"]]
     min_side = 0.015 * max(img_w, img_h)
+    outline = [px(b) for b in _trace_boxes(data, "outline")
+               if b[2] - b[0] > 0 and b[3] - b[1] > 0]
     walkways = []
-    for b in _trace_boxes(data, "walkways"):
+    # The model's walkways follow the corridors; the outline — often traced as
+    # one bounding rectangle — would fill notches and ledges outside the flat
+    # with floor. So walkways come from the model, kept inside the outline.
+    walk_src = _trace_boxes(data, "walkways")
+    if outline:
+        ob = _trace_boxes(data, "outline")
+        walk_src = [[max(b[0], o[0]), max(b[1], o[1]), min(b[2], o[2]), min(b[3], o[3])]
+                    for b in walk_src for o in ob]
+    for b in walk_src:
         b = [min(max(v, 0.0), 1000.0) for v in b]
         if b[2] - b[0] <= 0 or b[3] - b[1] <= 0:
             continue
@@ -2630,6 +2737,9 @@ def parse_plan_geometry(data: dict, room_labels: list[str],
             pieces = [q for p in pieces for q in _rect_minus(p, cut)]
         walkways += [q for q in pieces if q["w"] >= min_side and q["h"] >= min_side]
 
+    if FILL_WALKWAYS:
+        walkways = _fill_between(room_rects, walkways, outline, min_side)
+
     refs = [{"type": r["type"], **px(r["box"])} for r in data.get("refs") or []
             if isinstance(r, dict) and isinstance(r.get("box"), list)]
     geometry = {
@@ -2637,66 +2747,192 @@ def parse_plan_geometry(data: dict, room_labels: list[str],
         "image_h":  img_h,
         "rooms":    rooms,
         "walkways": walkways,
+        "outline":  outline,
         "missing":  [l for l in room_labels if l not in rooms],
     }
     geometry["m_per_px_ref"] = _scale_from_furniture(refs, geometry)
     _fold_open_floor(geometry)
-    _apply_door_conventions(geometry)
+    _fix_ensuite_identity(geometry)
     return geometry
 
 
-# Rooms that open from one particular room: (this room, the room it opens
-# from). An en suite opens from its bedroom, a service yard from the kitchen.
-_OPENS_FROM = [
-    (("master bath", "ensuite", "en suite", "en-suite"), ("master bed", "main bed")),
-    (("yard", "utility", "laundry"), ("kitchen",)),
-]
+def keep_in_proportion(geometry: dict, housing_type: str | None,
+                       walls: dict | None) -> list[str]:
+    """A master bedroom is larger than the common bedrooms beside it. Where a
+    trace has it the other way round, the wall between them moves: to the
+    wall line found in the image that brings their areas closest to the
+    typical ratio for this flat type (room_sizes.json) — rooms only move to
+    walls really on the plan — or, if none will do, to that ratio itself.
+    Doors keep their places on the plan.
 
-
-def _shared_wall(a: dict, b: dict, tol: float) -> tuple | None:
-    """Where room a's wall meets room b: (a's part index, a's wall side, the
-    shared stretch's centre along that wall, 0-1). None if they do not touch."""
-    best = None
-    for i, p in enumerate(room_parts(a)):
-        for q in room_parts(b):
-            for side, gap, (lo, hi), (plo, pl) in (
-                ("top",    abs(p["y"] - (q["y"] + q["h"])), (max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])), (p["x"], p["w"])),
-                ("bottom", abs(p["y"] + p["h"] - q["y"]),   (max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])), (p["x"], p["w"])),
-                ("left",   abs(p["x"] - (q["x"] + q["w"])), (max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])), (p["y"], p["h"])),
-                ("right",  abs(p["x"] + p["w"] - q["x"]),   (max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])), (p["y"], p["h"])),
-            ):
-                if gap <= tol and hi - lo > 0 and (best is None or hi - lo > best[0]):
-                    best = (hi - lo, i, side, ((lo + hi) / 2 - plo) / pl)
-    return best[1:] if best else None
-
-
-def _apply_door_conventions(geometry: dict) -> None:
-    """Doors the layout of a flat implies, enforced where the trace missed
-    them: an en suite opens from its bedroom, a service yard from the kitchen.
-    If the room has no door on the wall it shares with that room, one goes at
-    the middle of the shared stretch — in both rooms, so the furniture in each
-    keeps it clear. Mutates geometry."""
+    Only this one rule. Measured on live traces, also pulling other pairs
+    (living areas, bathrooms, kitchens) towards typical sizes made the traces
+    worse: those rooms vary too much between flats. Returns the pairs that
+    changed; mutates geometry."""
+    import furniture_layout
     rooms = geometry["rooms"]
-    tol = 0.02 * max(geometry.get("image_w", 1000), geometry.get("image_h", 1000))
+    size = max(geometry.get("image_w", 1000), geometry.get("image_h", 1000))
+    tol = 0.02 * size
+    changed = []
+    labels = list(rooms)
 
-    def find(keys):
+    def area(label, parts=None):
+        return union_area(parts if parts is not None else room_parts(rooms[label]))
+
+    for i, a in enumerate(labels):
+        for b in labels[i + 1:]:
+            ta = furniture_layout.typical_area(a, housing_type)
+            tb = furniture_layout.typical_area(b, housing_type)
+            if not ta or not tb:
+                continue
+            want = ta / tb
+            pa_list, pb_list = room_parts(rooms[a]), room_parts(rooms[b])
+            for ia, pa in enumerate(pa_list):
+                for ib, pb in enumerate(pb_list):
+                    wall = _between_parts(pa, pb, tol)
+                    if not wall:
+                        continue
+                    axis, first, coord, lo, hi = wall
+                    have = area(a) / area(b)
+                    kinds = (furniture_layout.room_kind(a), furniture_layout.room_kind(b))
+                    inverted = ((kinds == ("master_bedroom", "bedroom") and have < 1) or
+                                (kinds == ("bedroom", "master_bedroom") and have > 1))
+                    if not inverted:
+                        continue
+
+                    def trial(c):
+                        na, nb = dict(pa), dict(pb)
+                        _set_shared(na, nb, axis, first, c)
+                        pa2 = [na if k == ia else p for k, p in enumerate(pa_list)]
+                        pb2 = [nb if k == ib else p for k, p in enumerate(pb_list)]
+                        return area(a, pa2) / area(b, pb2), na, nb
+
+                    def cost(r):
+                        return abs(math.log(r / want))
+
+                    # Each room keeps at least a quarter of the span they share.
+                    margin = 0.25 * (hi - lo)
+                    lines = (walls or {}).get("x" if axis == "x" else "y", [])
+                    cands = [c for c in lines if lo + margin <= c <= hi - margin
+                             and abs(c - coord) > 1]
+                    best = None
+                    for c in cands:
+                        r, na, nb = trial(c)
+                        if inverted and ((kinds[0] == "master_bedroom") != (r > 1)):
+                            continue
+                        if best is None or cost(r) < best[0]:
+                            best = (cost(r), c, na, nb)
+                    if best:
+                        _, c, na, nb = best
+                    else:
+                        # No wall line on the plan does it: the typical split.
+                        c = _solve_shared(trial, want, lo + margin, hi - margin)
+                        if c is None:
+                            continue
+                        _, na, nb = trial(c)
+                    old_a, old_b = list(pa_list), list(pb_list)
+                    pa_list[ia], pb_list[ib] = na, nb
+                    for label, old, new in ((a, old_a, pa_list), (b, old_b, pb_list)):
+                        room = rooms[label]
+                        room["doors"] = _reattach_doors(room.get("doors") or [], old, new)
+                        x0, y0 = min(p["x"] for p in new), min(p["y"] for p in new)
+                        room.update(parts=list(new), x=x0, y=y0,
+                                    w=max(p["x"] + p["w"] for p in new) - x0,
+                                    h=max(p["y"] + p["h"] for p in new) - y0)
+                    changed.append(f"{a} / {b}")
+                    pa, pb = na, nb
+    return changed
+
+
+def _between_parts(pa: dict, pb: dict, tol: float):
+    """The wall two parts share, if they sit side by side along most of it:
+    (axis, which comes first, its coordinate, far edge of the first, far edge
+    of the second). axis "x" is a vertical wall."""
+    oy = min(pa["y"] + pa["h"], pb["y"] + pb["h"]) - max(pa["y"], pb["y"])
+    ox = min(pa["x"] + pa["w"], pb["x"] + pb["w"]) - max(pa["x"], pb["x"])
+    if oy >= 0.5 * min(pa["h"], pb["h"]):
+        if abs(pa["x"] + pa["w"] - pb["x"]) <= tol:
+            return ("x", "a", pb["x"], pa["x"], pb["x"] + pb["w"])
+        if abs(pb["x"] + pb["w"] - pa["x"]) <= tol:
+            return ("x", "b", pa["x"], pb["x"], pa["x"] + pa["w"])
+    if ox >= 0.5 * min(pa["w"], pb["w"]):
+        if abs(pa["y"] + pa["h"] - pb["y"]) <= tol:
+            return ("y", "a", pb["y"], pa["y"], pb["y"] + pb["h"])
+        if abs(pb["y"] + pb["h"] - pa["y"]) <= tol:
+            return ("y", "b", pa["y"], pb["y"], pa["y"] + pa["h"])
+    return None
+
+
+def _set_shared(pa: dict, pb: dict, axis: str, first: str, c: float) -> None:
+    """Move the wall between two parts to coordinate c, in place."""
+    one, two = (pa, pb) if first == "a" else (pb, pa)
+    if axis == "x":
+        end = two["x"] + two["w"]
+        one["w"] = c - one["x"]
+        two["x"], two["w"] = c, end - c
+    else:
+        end = two["y"] + two["h"]
+        one["h"] = c - one["y"]
+        two["y"], two["h"] = c, end - c
+
+
+def _solve_shared(trial, want: float, lo: float, hi: float) -> float | None:
+    """The wall position giving the typical area ratio, by bisection."""
+    r_lo, r_hi = trial(lo)[0], trial(hi)[0]
+    if (r_lo - want) * (r_hi - want) > 0:
+        return None
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if (trial(mid)[0] - want) * (r_lo - want) > 0:
+            lo, r_lo = mid, trial(mid)[0]
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _fix_ensuite_identity(geometry: dict) -> None:
+    """The bathroom joined to the master bedroom is always the master
+    bathroom. If the trace named the common one there instead — the two are
+    both printed "BATH / WC" — swap them. Mutates geometry."""
+    rooms = geometry["rooms"]
+
+    def find(*keys):
         return next((l for l in rooms if any(k in l.lower() for k in keys)), None)
 
-    for child_keys, parent_keys in _OPENS_FROM:
-        child, parent = find(child_keys), find(parent_keys)
-        if not child or not parent:
-            continue
-        shared = _shared_wall(rooms[child], rooms[parent], tol)
-        if not shared:
-            continue
-        part, side, at = shared
-        if any(d["wall"] == side and d.get("part", 0) == part for d in rooms[child].get("doors") or []):
-            continue
-        rooms[child].setdefault("doors", []).append({"part": part, "wall": side, "at": at})
-        back = _shared_wall(rooms[parent], rooms[child], tol)
-        if back:
-            rooms[parent].setdefault("doors", []).append(
-                {"part": back[0], "wall": back[1], "at": back[2]})
+    bed = find("master bed", "main bed")
+    master = find("master bath", "ensuite", "en suite", "en-suite")
+    common = find("common bath")
+    if not (bed and master and common):
+        return
+    tol = 0.02 * max(geometry.get("image_w", 1000), geometry.get("image_h", 1000))
+
+    def contact(label):
+        shared = 0.0
+        for p in room_parts(rooms[label]):
+            for q in room_parts(rooms[bed]):
+                ox = min(p["x"] + p["w"], q["x"] + q["w"]) - max(p["x"], q["x"])
+                oy = min(p["y"] + p["h"], q["y"] + q["h"]) - max(p["y"], q["y"])
+                touch_x = min(abs(p["x"] - (q["x"] + q["w"])), abs(q["x"] - (p["x"] + p["w"])))
+                touch_y = min(abs(p["y"] - (q["y"] + q["h"])), abs(q["y"] - (p["y"] + p["h"])))
+                if touch_y <= tol and ox > 0:
+                    shared += ox
+                elif touch_x <= tol and oy > 0:
+                    shared += oy
+        # A door from the bedroom settles it more than a shared wall does.
+        doors = sum(1 for d in rooms[label].get("doors") or []
+                    if _door_touches(rooms[label], d, rooms[bed], tol))
+        return doors * 1e6 + shared
+
+    if contact(common) > contact(master):
+        rooms[master], rooms[common] = rooms[common], rooms[master]
+
+
+def _door_touches(room: dict, door: dict, other: dict, tol: float) -> bool:
+    """Does this door of room sit on other's outline?"""
+    parts = room_parts(room)
+    x, y = door_point(parts[door["part"]] if door.get("part", 0) < len(parts) else parts[0], door)
+    return any(q["x"] - tol <= x <= q["x"] + q["w"] + tol and
+               q["y"] - tol <= y <= q["y"] + q["h"] + tol for q in room_parts(other))
 
 
 _OPEN_PLAN = ("living", "dining", "family", "lounge")
@@ -2795,61 +3031,69 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
         {img_w} pixels wide and {img_h} pixels tall. Give every coordinate in
         its pixels: x from 0 to {img_w}, y from 0 to {img_h}.
 
-        Find each of these rooms on it. The homeowner confirmed this list;
-        the plan usually prints each room's name inside it, though maybe in
-        different words (e.g. "Master Bathroom" may be printed "BATH / WC"
-        beside the main bedroom):
+        The homeowner confirmed these rooms; the plan usually prints each
+        room's name inside it, though maybe in different words (e.g. "Master
+        Bathroom" may be printed "BATH / WC"):
         {{names}}
 
         {{size_hints}}
-        Ignore windows and ledges.
+        Work in this order, and put every step in your reply.
 
-        Work walls first, then spaces:
-        1. "wall_x": the x position of every main vertical wall, left to right.
+        1. "outline": the whole flat's floor as one to four rectangles
+           [x0, y0, x1, y1] — everything inside its thick outer walls,
+           corridors included. Leave out air-con ledges, planters and anything
+           outside the main door. The outer walls are the thickest lines.
+        2. "wall_x": the x position of every main vertical wall, left to right.
            "wall_y": the y position of every main horizontal wall, top to
            bottom.
-        2. "rooms": for every room you can find, "printed" — the label as the
-           plan prints it — and "boxes" — its floor area as rectangles
-           [x0, y0, x1, y1], with every edge taken from wall_x and wall_y so
-           rooms that share a wall share the exact number. Start from the
-           printed label and grow out to the walls around it.
-           A rectangular room is ONE box. An L- or T-shaped room is two or
-           three boxes that share an edge and do not overlap; largest first.
-           An open-plan living area is the floor left between the other
-           rooms — do not draw it over them.
-           "doors": every door into the room, as {{"box": index of the box
-           whose wall it is in, "wall": "top" | "right" | "bottom" | "left",
-           "at": 0-1000}} — "at" is the centre of the door's gap along that
-           box's wall, from its left end (top and bottom walls) or its top end
-           (left and right walls). Furniture is placed clear of every door.
-
-           Finding doors: a door is a GAP in the wall with a thin straight line
-           (the leaf) and a quarter-circle arc, often dotted or dashed, swinging
-           into the room it opens into — "at" is the gap's centre, not the
-           arc's. Every room has at least one. An en suite opens from its
-           master bedroom and a service yard from the kitchen; bedrooms and the
-           common bathroom open onto the corridor or the living area.
-        3. "walkways": the corridors, hallways and entrance foyer that join the
-           rooms but belong to none of them, as boxes the same way, so the
-           rooms and walkways together cover the whole flat.
-        4. "furniture_drawn": furniture printed on the plan that has a standard
+        3. "rooms": for every room you can find, in this order —
+           - "printed": the label as the plan prints it.
+           - "label_at": [x, y], the centre of that printed label.
+           - "boxes": its floor area as rectangles [x0, y0, x1, y1] inside the
+             outline, grown out from the label to the walls around it, with
+             every edge taken from wall_x and wall_y so rooms that share a
+             wall share the exact number. A rectangular room is ONE box; an L-
+             or T-shaped room is two or three boxes that share an edge,
+             largest first. An open-plan living area is the floor left between
+             the other rooms — do not draw it over them. Corridors belong to
+             no room: they go in "walkways".
+           - "doors": every door into the room, as {{"box": index of the box
+             whose wall it is in, "wall": "top" | "right" | "bottom" | "left",
+             "at": 0-1000}} — "at" is the centre of the door's gap along that
+             box's wall, from its left end (top and bottom walls) or its top
+             end (left and right walls).
+           Finding doors: a door is a GAP in the wall with a thin straight
+           line (the leaf) and a quarter-circle arc, often dotted or dashed,
+           swinging into the room it opens into — "at" is the gap's centre, not
+           the arc's. List only doors you can see drawn on the plan, never ones
+           you expect to be there, and list each door ONCE: in the room its arc
+           swings into.
+           The bathroom joined to the master bedroom is ALWAYS the Master
+           Bathroom; the other is the Common Bathroom, even though both may be
+           printed "BATH / WC".
+        4. "walkways": the corridors, hallways and entrance foyer inside the
+           outline that join the rooms but belong to none of them, as boxes.
+        5. "furniture_drawn": furniture printed on the plan that has a standard
            size — every bed, sofa and WC — each as {{"type": "double bed" |
            "single bed" | "sofa" | "wc", "box": [x0, y0, x1, y1]}} tight around
            the drawn piece. These set the plan's scale, so trace them closely.
 
         Rules:
-        - Use the room names exactly as listed. Never add a room that is not
+        - Use the room names exactly as listed — every one of them, including
+          small ones like the household shelter. Never add a room that is not
           on the list; put any you cannot find in "missing".
-        - Rooms and walkways fit together like a jigsaw: neighbours touch,
-          never overlap.
+        - Rooms fit together like a jigsaw inside the outline: neighbours
+          touch, never overlap. Ignore windows.
         - Keep the plan's own orientation. Do not rotate or mirror it.
 
         Reply with ONLY this JSON:
-        {{"wall_x": [70, 175, 280, 371], "wall_y": [93, 224, 233, 327, 355],
+        {{"outline": [[70, 93, 371, 355]],
+          "wall_x": [70, 175, 280, 371], "wall_y": [93, 224, 233, 327, 355],
           "rooms": [
-          {{"name": "Kitchen", "printed": "KITCHEN", "boxes": [[280, 224, 371, 355]],
+          {{"name": "{{example_a}}", "printed": "KITCHEN", "label_at": [325, 290],
+            "boxes": [[280, 224, 371, 355]],
             "doors": [{{"box": 0, "wall": "left", "at": 300}}]}},
-          {{"name": "Living Room", "printed": "LIVING / DINING",
+          {{"name": "{{example_b}}", "printed": "LIVING / DINING", "label_at": [170, 160],
             "boxes": [[70, 93, 280, 233], [70, 233, 175, 327]],
             "doors": [{{"box": 1, "wall": "bottom", "at": 500}}]}}
         ],
@@ -2857,7 +3101,9 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
           "furniture_drawn": [{{"type": "double bed", "box": [300, 110, 352, 178]}}],
           "missing": []}}
     """).strip().replace("{names}", names).replace(
-        "{size_hints}", _size_hints(room_labels, housing_label) if PLAN_TRACE_SIZE_HINTS else "")
+        "{size_hints}", _size_hints(room_labels, housing_label) if PLAN_TRACE_SIZE_HINTS else ""
+    ).replace("{example_a}", room_labels[-1] if room_labels else "Kitchen"
+    ).replace("{example_b}", room_labels[0] if room_labels else "Living / Dining")
 
     walls = detect_plan_walls(floor_plan_path)
 
@@ -2874,10 +3120,13 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
         data = _normalise_trace(_loads_salvaging_truncation(strip_code_fence(raw)))
         if not (data and data["rooms"]):
             return None
+        # Outline and rooms located; now fix where they sit: onto the walls
+        # found in the image, each room around its own printed name, every
+        # room inside the flat's outline, neighbours edge to edge.
         data = _pixels_to_permille(_snap_to_walls(data, size), size)
         if walls:
             data = align_to_walls(data, walls, size)
-        return _close_gaps(data)
+        return _close_gaps(_clip_to_outline(_fix_to_labels(data)))
 
     # Single traces vary a lot run to run. Several in parallel, combined room
     # by room, cost no extra wait and are far steadier (see _trace_consensus).
@@ -2927,6 +3176,8 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
             break
     if best is None:
         raise last
+    housing_type = next((k for k, v in HOUSING_LABELS.items() if v == housing_label), None)
+    best["proportioned"] = keep_in_proportion(best, housing_type, walls)
     return best
 
 
@@ -2972,6 +3223,47 @@ def _most_typical_trace(samples: list[dict]) -> dict:
 # Largest gap (0-1000 scale) between neighbouring rooms that is closed up —
 # a wall's thickness or a walkway the plan leaves between them.
 _GAP_CLOSE = 30
+
+
+def _fix_to_labels(data: dict) -> dict:
+    """Each room must contain its own printed name. The model reads a label's
+    position more reliably than a room's edges, so a room whose boxes miss its
+    label is moved — the least distance — until its largest box holds it."""
+    for e in data.get("rooms") or []:
+        lb, boxes = e.get("label_box"), e.get("boxes") or []
+        if not lb or not boxes:
+            continue
+        px, py = lb[0], lb[1]
+        if any(b[0] <= px <= b[2] and b[1] <= py <= b[3] for b in boxes):
+            continue
+        main = max(boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+        mx, my = 0.08 * (main[2] - main[0]), 0.08 * (main[3] - main[1])
+        dx = (px - (main[2] - mx)) if px > main[2] - mx else (px - (main[0] + mx)) if px < main[0] + mx else 0
+        dy = (py - (main[3] - my)) if py > main[3] - my else (py - (main[1] + my)) if py < main[1] + my else 0
+        for b in boxes:
+            b[:] = [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy]
+    return data
+
+
+def _clip_to_outline(data: dict) -> dict:
+    """No room reaches outside the flat: each room box is cut to the outline.
+    Pieces thinner than a wall are dropped; a room left with nothing keeps
+    its boxes, since then the outline is the likelier mistake."""
+    outline = _trace_boxes(data, "outline")
+    if not outline:
+        return data
+    for e in data.get("rooms") or []:
+        kept = []
+        for b in e.get("boxes") or []:
+            for o in outline:
+                x0, y0 = max(b[0], o[0]), max(b[1], o[1])
+                x1, y1 = min(b[2], o[2]), min(b[3], o[3])
+                if x1 - x0 >= 8 and y1 - y0 >= 8:
+                    kept.append([x0, y0, x1, y1])
+        if kept:
+            e["boxes"] = kept[:3] if len(kept) <= 3 else sorted(
+                kept, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]), reverse=True)[:3]
+    return data
 
 
 def _close_gaps(data: dict) -> dict:
@@ -3035,6 +3327,7 @@ def _trace_consensus(samples: list[dict]) -> dict:
     # trace was fitted onto the same walls.
     typical = _most_typical_trace(samples)
     return {"rooms": rooms, "walkways": typical.get("walkways") or [],
+            "outline": typical.get("outline") or [],
             "refs": [r for d in samples for r in d.get("refs") or []]}
 
 
@@ -3105,13 +3398,15 @@ def align_to_walls(data: dict, walls: dict, size: tuple[int, int]) -> dict:
     axis by axis; the furniture it measured moves with it. Then pull each room
     and walkway edge onto the nearest wall line."""
     img_w, img_h = size
-    boxes = _trace_boxes(data, "rooms", "walkways")
+    boxes = _trace_boxes(data, "rooms", "walkways", "outline")
     if not boxes:
         return data
+    # The flat's own outline, when traced, is what should meet the outer walls.
+    frame = _trace_boxes(data, "outline") or boxes
     ex0, ey0, ex1, ey1 = walls["extent"]
     target = (ex0 / img_w * 1000, ey0 / img_h * 1000, ex1 / img_w * 1000, ey1 / img_h * 1000)
-    have = (min(b[0] for b in boxes), min(b[1] for b in boxes),
-            max(b[2] for b in boxes), max(b[3] for b in boxes))
+    have = (min(b[0] for b in frame), min(b[1] for b in frame),
+            max(b[2] for b in frame), max(b[3] for b in frame))
 
     def fit(axis):                               # 0 for x, 1 for y
         lo, hi = have[axis], have[axis + 2]
@@ -3133,7 +3428,7 @@ def align_to_walls(data: dict, walls: dict, size: tuple[int, int]) -> dict:
         near = min(lines, key=lambda l: abs(l - v), default=None)
         return near if near is not None and abs(near - v) <= _WALL_SNAP else v
 
-    for b in _trace_boxes(data, "refs"):
+    for b in _trace_boxes(data, "refs", "labels"):
         b[:] = [fx(b[0]), fy(b[1]), fx(b[2]), fy(b[3])]
     for b in boxes:
         b[:] = [snap(fx(b[0]), wx), snap(fy(b[1]), wy), snap(fx(b[2]), wx), snap(fy(b[3]), wy)]
@@ -3161,21 +3456,31 @@ def _normalise_trace(data) -> dict | None:
         raw = e.get("boxes") if isinstance(e.get("boxes"), list) else [e.get("box")]
         boxes = [b for b in map(_as_box, raw) if b]
         if boxes:
-            rooms.append({**{k: v for k, v in e.items() if k not in ("box", "boxes")},
-                          "boxes": boxes})
+            room = {**{k: v for k, v in e.items() if k not in ("box", "boxes", "label_at")},
+                    "boxes": boxes}
+            # The printed label's centre, kept as a zero-size box so every
+            # step that moves boxes moves it too.
+            at = e.get("label_at")
+            if isinstance(at, (list, tuple)) and len(at) == 2:
+                point = _as_box([at[0], at[1], at[0], at[1]])
+                if point:
+                    room["label_box"] = point
+            rooms.append(room)
     walkways = [b for b in map(_as_box, data.get("walkways") or []) if b]
+    outline = [b for b in map(_as_box, data.get("outline") or []) if b]
     refs = []
     for r in data.get("furniture_drawn") or data.get("refs") or []:
         if isinstance(r, dict) and _as_box(r.get("box")):
             refs.append({"type": str(r.get("type", "")).lower().strip(),
                          "box": _as_box(r.get("box"))})
     return {**{k: data[k] for k in ("wall_x", "wall_y", "missing") if k in data},
-            "rooms": rooms, "walkways": walkways, "refs": refs}
+            "rooms": rooms, "walkways": walkways, "refs": refs, "outline": outline}
 
 
 def _trace_boxes(data: dict, *kinds: str) -> list[list[float]]:
     """The mutable [x0, y0, x1, y1] lists of a normalised trace, by kind:
-    "rooms", "walkways", "refs"."""
+    "rooms", "walkways", "outline", "refs", "labels" (points, as zero-size
+    boxes)."""
     out = []
     if not isinstance(data, dict):
         return out
@@ -3184,9 +3489,14 @@ def _trace_boxes(data: dict, *kinds: str) -> list[list[float]]:
                 for b in e.get("boxes") or [] if isinstance(b, list) and len(b) == 4]
     if "walkways" in kinds:
         out += [b for b in data.get("walkways") or [] if isinstance(b, list) and len(b) == 4]
+    if "outline" in kinds:
+        out += [b for b in data.get("outline") or [] if isinstance(b, list) and len(b) == 4]
     if "refs" in kinds:
         out += [r["box"] for r in data.get("refs") or [] if isinstance(r, dict)
                 and isinstance(r.get("box"), list) and len(r["box"]) == 4]
+    if "labels" in kinds:
+        out += [e["label_box"] for e in data.get("rooms") or [] if isinstance(e, dict)
+                and isinstance(e.get("label_box"), list)]
     return out
 
 
@@ -3215,7 +3525,7 @@ def _snap_to_walls(data: dict, size: tuple[int, int]) -> dict:
         near = min(walls, key=lambda w: abs(w - v), default=None)
         return near if near is not None and abs(near - v) <= tol else v
 
-    for b in _trace_boxes(data, "rooms", "walkways"):
+    for b in _trace_boxes(data, "rooms", "walkways", "outline"):
         b[:] = [snap(b[0], wall_x, img_w * 0.02), snap(b[1], wall_y, img_h * 0.02),
                 snap(b[2], wall_x, img_w * 0.02), snap(b[3], wall_y, img_h * 0.02)]
     return data
@@ -3229,12 +3539,12 @@ def _pixels_to_permille(data: dict, size: tuple[int, int]) -> dict:
     0-1000 scale anyway. A coordinate past the image's own edge gives that
     away, and such a reply is passed through rather than converted twice."""
     img_w, img_h = size
-    spaces = _trace_boxes(data, "rooms", "walkways")
+    spaces = _trace_boxes(data, "rooms", "walkways", "outline")
     if spaces and (max(max(b[0], b[2]) for b in spaces) > img_w * 1.02 or
                    max(max(b[1], b[3]) for b in spaces) > img_h * 1.02):
         app.logger.info("Plan trace came back on a 0-1000 scale, not pixels")
         return data
-    for b in _trace_boxes(data, "rooms", "walkways", "refs"):
+    for b in _trace_boxes(data, "rooms", "walkways", "outline", "refs", "labels"):
         b[:] = [b[0] / img_w * 1000, b[1] / img_h * 1000,
                 b[2] / img_w * 1000, b[3] / img_h * 1000]
     return data
@@ -3249,8 +3559,12 @@ def plan_metres_per_px(geometry: dict, floor_sqm) -> float | None:
         return None
     area_px = sum(union_area(room_parts(r)) for r in (geometry.get("rooms") or {}).values())
     walk_px = sum(w["w"] * w["h"] for w in geometry.get("walkways") or [])
+    outline_px = union_area(geometry["outline"]) if geometry.get("outline") else 0
     if sqm <= 0 or area_px <= 0:
         return None
+    if outline_px:
+        # The outline is the whole flat, walls and all; walls take ~7%.
+        return (sqm * 0.93 / outline_px) ** 0.5
     # With the walkways traced, the spaces cover nearly all of the floor area;
     # without them, only the rooms' share of it.
     coverage = 0.95 if walk_px else _ROOM_COVERAGE
@@ -3378,7 +3692,7 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
                            min_x, min_y, s, pad, pad)
         svg += _room_shape_svg(walk, "#E6E0D5", 0.7, "#B5AFA5", 1.2)
 
-    walls, labels = [], []
+    walls, labels, drawn_doors, hits = [], [], [], []
     for room in rooms:
         geo = placed.get(room["label"])
         if not geo:
@@ -3387,10 +3701,36 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
         shape_svg = _room_shape_svg(shape, room.get("colour", "#C9D4E0"), 0.55, "#4A4844", 2.5)
         svg += shape_svg[:-1]
         walls.append(shape_svg[-1])
+        # The target: its floor to fill and click, and its outer edge alone to
+        # outline — no line down the seam of an L-shaped room.
+        hits.append(f'<g class="plan-room" data-room="{html_escape(room["label"])}">'
+                    f'<title>{html_escape(room["label"])}</title>'
+                    f'<path class="plan-room__floor" d="{union_outline_filled(room_parts(shape))}"/>'
+                    f'<path class="plan-room__edge" d="{union_outline(room_parts(shape))}"/></g>')
         m = geometry.get("m_per_px") or geometry.get("m_per_px_ref")
         main_ = _main_part(shape)
-        walls += _door_svg(shape, bg, door_width_m(room["label"]) / m * s if m
-                           else 0.25 * min(main_["w"], main_["h"]))
+        door_w = (door_width_m(room["label"]) / m * s if m
+                  else 0.25 * min(main_["w"], main_["h"]))
+        # A door both rooms listed is one door: the two rooms list it from
+        # opposite sides of the same wall line, a little apart along it. Draw
+        # it once. Two doors side by side on one corridor wall are listed
+        # from the same side, and both stay.
+        along = (1.0 / m * s) if m else 0.05 * w          # about a metre
+        across = (0.25 / m * s) if m else 0.015 * w       # about a wall's width
+        opposite = {"top": "bottom", "bottom": "top", "left": "right", "right": "left"}
+        own = []
+        for d in shape.get("doors") or []:
+            parts_ = room_parts(shape)
+            pt = door_point(parts_[d["part"]] if d.get("part", 0) < len(parts_) else parts_[0], d)
+            flat = d["wall"] in ("top", "bottom")
+            same = any(side == opposite[d["wall"]] and
+                       (abs(pt[1] - q[1]) <= across and abs(pt[0] - q[0]) <= along if flat else
+                        abs(pt[0] - q[0]) <= across and abs(pt[1] - q[1]) <= along)
+                       for q, side in drawn_doors)
+            if not same:
+                own.append(d)
+                drawn_doors.append((pt, d["wall"]))
+        walls += _door_svg({**shape, "doors": own}, bg, door_w)
 
         # The name goes in the room's largest part — for an L-shape, the body
         # of the L rather than the middle of its bounding box.
@@ -3414,8 +3754,8 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
         labels.append(f'<text x="{tx:.1f}" y="{ty:.1f}" text-anchor="middle" '
                       f'font-size="{size}" fill="#1C1B19" font-weight="500" {_HALO}>{html_escape(label)}</text>')
     # Walls over every fill, so a neighbour's fill never covers a shared wall;
-    # labels over everything.
-    svg += walls + labels
+    # then each room's target; labels over everything.
+    svg += walls + hits + labels
 
     note = "Traced from your floor plan — positions and sizes are approximate"
     if geometry.get("missing"):
@@ -4920,13 +5260,43 @@ def step4():
                            project=project,
                            ai_brief=result["ai_brief"],
                            room_results=result["room_results"],
-                           floor_plan_svg=result["floor_plan_svg"],
+                           # Redrawn from the saved trace on every view, so
+                           # improvements to the drawing reach saved projects
+                           # without re-running the model.
+                           floor_plan_svg=(generate_floor_plan_svg(result["room_results"],
+                                                                   geometry=result["plan_geometry"])
+                                           if result.get("plan_geometry") else result["floor_plan_svg"]),
                            inspo_analysis=result["inspiration_analysis"],
                            open_conflicts=[c for c in conflicts if not c.get("resolved")],
                            closed_conflicts=[c for c in conflicts if c.get("resolved")],
                            agent_trace=result["agent_trace"],
                            needs_input=result["needs_input"],
                            refinements=project_get("refinements", []))
+
+
+# What the agent has finished for each client's run in progress, so the
+# waiting page can show real progress rather than a guess. In memory: it
+# only matters while a run is going, in this process.
+_PROGRESS: dict[str, dict] = {}
+_progress_lock = __import__("threading").Lock()
+
+
+def _progress_event(cid: str, event: str, **data) -> None:
+    with _progress_lock:
+        state = _PROGRESS.setdefault(cid, {"events": [], "rooms": []})
+        if event == "room":
+            state["rooms"].append(data.get("key"))
+        elif event not in state["events"]:
+            state["events"].append(event)
+
+
+@app.route("/step4/progress")
+def step4_progress():
+    """What the agent has finished so far in this client's run."""
+    with _progress_lock:
+        state = dict(_PROGRESS.get(current_client_id()) or {"events": [], "rooms": []})
+    state["done"] = bool(project_get("agent_result"))
+    return jsonify(state)
 
 
 @app.route("/step4/prepare", methods=["POST"])
@@ -4942,6 +5312,9 @@ def step4_prepare():
 
     s1 = project_get("step1")
     rooms_base = get_rooms_for_type(s1["housing_type"])
+    cid = current_client_id()
+    with _progress_lock:
+        _PROGRESS[cid] = {"events": [], "rooms": []}      # a fresh run
 
     try:
         result = forma_agent.run_agent(
@@ -4955,6 +5328,7 @@ def step4_prepare():
             force_reanalyse               = False,
             existing_plan_geometry        = project_get("plan_geometry"),
             existing_furniture_plan       = project_get("furniture_plan"),
+            progress                      = lambda event, **data: _progress_event(cid, event, **data),
         )
     except Exception as e:
         app.logger.exception("Agent run failed")
@@ -5202,6 +5576,22 @@ def style_label(value: str) -> str:
 
 
 app.jinja_env.filters["style_label"] = style_label
+
+
+def markdown_bold(html: str) -> str:
+    """The brief is HTML, but the model now and then marks emphasis the
+    markdown way, which showed on the page as literal **asterisks**."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html or "", flags=re.S)
+
+
+def brief_html(html: str):
+    """The brief as page HTML, stray markdown bold turned into real bold —
+    for briefs saved before generation cleaned it up too."""
+    from markupsafe import Markup
+    return Markup(markdown_bold(html))
+
+
+app.jinja_env.filters["brief_html"] = brief_html
 
 
 # ── Export everything the homeowner entered, as JSON ──────────────────────────

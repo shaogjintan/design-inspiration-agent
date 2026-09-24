@@ -8,6 +8,7 @@ Run:  python test_furniture_layout.py
 
 import json
 import unittest
+from pathlib import Path
 
 import app
 import furniture_layout as F
@@ -202,6 +203,108 @@ class DoorRules(unittest.TestCase):
         zone = F.door_zone(doors[0]["point"], "right", 0.85)
         for q in res["placed"]:
             self.assertFalse(_overlap(zone, _rect(q)))
+
+
+class SizeList(unittest.TestCase):
+
+    def setUp(self):
+        import shutil, tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "sizes.json"
+        shutil.copy(F.CATALOGUE_PATH, self.path)
+        self.real = F.CATALOGUE_PATH
+        F.load_catalogue(self.path)
+
+    def tearDown(self):
+        F.load_catalogue(self.real)
+        self.tmp.cleanup()
+
+    def test_listed_size_wins_over_the_models(self):
+        out = F.clean_pieces([{"name": "Queen Bed", "w": 1.4, "d": 1.9}], [])
+        self.assertEqual((out[0]["w"], out[0]["d"]), (1.52, 2.03))
+        self.assertFalse(out[0]["estimated"])
+
+    def test_new_piece_is_sized_by_the_model_then_remembered(self):
+        out = F.clean_pieces([{"name": "Upright Piano", "w": 1.5, "d": 0.6,
+                               "place": "wall", "clearance": 0.9}], [])
+        self.assertTrue(out[0]["estimated"] and out[0]["sized_by_model"])
+        self.assertEqual(F.remember(out), ["Upright Piano"])
+        saved = json.loads(self.path.read_text())["items"][-1]
+        self.assertEqual((saved["name"], saved["w"], saved["d"], saved["source"]),
+                         ("Upright Piano", 1.5, 0.6, "model estimate"))
+        # Next time: the saved size, whatever the model says — and still
+        # marked as an estimate on the drawing.
+        again = F.clean_pieces([{"name": "Upright Piano", "w": 2.5, "d": 1.2}], [])
+        self.assertEqual((again[0]["w"], again[0]["d"]), (1.5, 0.6))
+        self.assertTrue(again[0]["estimated"])
+        self.assertFalse(again[0]["sized_by_model"])
+        self.assertEqual(F.remember(again), [])               # not saved twice
+
+    def test_standard_sizes_are_not_saved_as_estimates(self):
+        out = F.pieces_from_names(["Wardrobe", "Aquarium Stand"])
+        self.assertEqual(F.remember(out), [])                  # generic block: no model size
+
+    def test_file_is_readable_and_complete(self):
+        doc = json.loads(self.real.read_text())
+        self.assertIn("_about", doc)
+        names = [i["name"] for i in doc["items"] if "name" in i]
+        for bed in F.BED_LADDER:
+            self.assertIn(bed, names)
+
+
+class Beds(unittest.TestCase):
+
+    def test_bed_steps_down_a_size_rather_than_go_missing(self):
+        res = F.place_room(2.0, 4.1, F.pieces_from_names(["Queen Bed", "Wardrobe"]))
+        self.assertEqual(res["skipped"], [])
+        bed = next(q for q in res["placed"] if "bed" in q["label"].lower())
+        self.assertIn("(smaller, to fit)", bed["label"])
+        self.assertLess(bed["bw"], 1.52)
+
+    def test_bed_lies_side_on_in_a_small_room(self):
+        res = F.place_room(1.9, 2.3, F.pieces_from_names(["Single Bed"]))
+        bed = res["placed"][0]
+        self.assertEqual(res["skipped"], [])
+        self.assertAlmostEqual(max(bed["bw"], bed["bd"]), 1.9)
+        # Long side along the wall: turned a quarter from headboard-to-wall.
+        self.assertEqual(bed["rot"] % 180, 90 if bed["wall"] in ("top", "bottom") else 0)
+
+    def test_side_on_headboard_is_in_the_corner(self):
+        # For every wall a side-on bed can take, its headboard (the icon's
+        # top, turned by rot) must point at the corner end of the wall.
+        heading = {0: (0, -1), 90: (1, 0), 180: (0, 1), 270: (-1, 0)}
+        for W, D in ((1.9, 2.3), (2.3, 1.9)):
+            res = F.place_room(W, D, F.pieces_from_names(["Single Bed"]))
+            bed = res["placed"][0]
+            hx, hy = heading[bed["rot"]]
+            cx, cy = bed["x"] + bed["bw"] / 2, bed["y"] + bed["bd"] / 2
+            # The headboard end sits at the room's edge along the bed's length.
+            end = (cx + hx * max(bed["bw"], bed["bd"]) / 2, cy + hy * max(bed["bw"], bed["bd"]) / 2)
+            self.assertTrue(min(abs(end[0]), abs(end[0] - W), abs(end[1]), abs(end[1] - D)) < 1e-6,
+                            f"headboard not at a wall in {W}x{D}: rot {bed['rot']} on {bed['wall']}")
+
+    def test_bedside_table_goes_at_the_head_of_a_side_on_bed(self):
+        pieces = F.clean_pieces([
+            {"name": "Single Bed", "place": "wall"},
+            {"name": "Bedside Table", "place": "beside", "anchor": "Single Bed"}], [])
+        res = F.place_room(1.9, 2.4, pieces)
+        bed = next(q for q in res["placed"] if q["label"].lower() == "single bed")
+        table = next(q for q in res["placed"] if q["label"].lower() == "bedside table")
+        # The table is at the head end: within a table's width of the corner
+        # the headboard is in, on the wall that makes that corner.
+        head = {0: "top", 180: "bottom", 270: "left", 90: "right"}[bed["rot"]]
+        self.assertEqual(table["wall"], head)
+        tx, ty = table["x"] + table["bw"] / 2, table["y"] + table["bd"] / 2
+        if head in ("left", "right"):
+            self.assertLess(abs(ty - (bed["y"] + bed["bd"] + 0.25)), 0.3)
+        else:
+            self.assertLess(abs(tx - (bed["x"] + bed["bw"] + 0.25)), 0.3)
+
+    def test_what_counts_as_a_bed(self):
+        for name in ("Queen Bed", "Single bed", "Bunk Bed", "Bed"):
+            self.assertTrue(F._is_bed(name), name)
+        for name in ("Bedside Table", "Sofa Bed", "Flower Bed"):
+            self.assertFalse(F._is_bed(name), name)
 
 
 class Cleaning(unittest.TestCase):

@@ -36,9 +36,22 @@
     </div>
   </div>
 
+  {# A long page: a bar to move around it, marking the section in view. #}
+  <nav class="page-nav" aria-label="On this page">
+    <div class="page-nav__inner">
+      {% if inspo_analysis %}<a class="page-nav__link" href="#noticed">Overview</a>{% endif %}
+      {% if open_conflicts %}<a class="page-nav__link page-nav__link--attention" href="#conflicts-section">Your input <span class="page-nav__count">{{ open_conflicts | length }}</span></a>{% endif %}
+      <a class="page-nav__link" href="#brief">Brief</a>
+      <a class="page-nav__link" href="#rooms">Rooms</a>
+      {% if floor_plan_svg %}<a class="page-nav__link" href="#plan">Floor plan</a>{% endif %}
+      <a class="page-nav__link" href="#share">Share</a>
+      <a class="page-nav__link" href="#refine-section">Refine</a>
+    </div>
+  </nav>
+
   <!-- FORMA Inspiration Analysis -->
   {% if inspo_analysis %}
-  <div class="result-section">
+  <div class="result-section" id="noticed">
     <h3 class="result-section__title">{{ icon("eye") }} What FORMA Noticed</h3>
     <div class="inspo-analysis-card">
 
@@ -207,23 +220,26 @@
   {% endif %}
 
   <!-- AI Design Brief -->
-  <div class="result-section">
+  <div class="result-section" id="brief">
     <h3 class="result-section__title">{{ icon("brief") }} AI Design Brief</h3>
     <div class="brief-card">
-      <div class="brief-card__body">{{ ai_brief | safe }}</div>
+      <div class="brief-card__body">{{ ai_brief | brief_html }}</div>
     </div>
   </div>
 
   <!-- Room Suggestions -->
-  <div class="result-section">
+  <div class="result-section" id="rooms">
     <h3 class="result-section__title">{{ icon("rooms") }} Room-by-Room Suggestions</h3>
 
     <div class="room-results">
       {% for room in room_results %}
-      <div class="room-result-card">
+      <div class="room-result-card" id="room-{{ room.key }}" data-room="{{ room.label }}">
         <div class="room-result-card__header">
           <div class="room-result-card__name">{{ room.label }}</div>
-          {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
+          <div class="room-result-card__meta">
+            {% if room.priority %}<span class="priority-tag priority-tag--{{ room.priority }}">{{ room.priority | capitalize }} priority</span>{% endif %}
+            {% if floor_plan_svg %}<a class="room-result-card__plan-link" href="#plan" data-show-room="{{ room.label }}">See on plan</a>{% endif %}
+          </div>
         </div>
 
         <!-- Drawn concept visual — stylised from the palette and items, not a
@@ -282,7 +298,7 @@
   </div>
 
   <!-- 2D Floor Plan -->
-  <div class="result-section">
+  <div class="result-section" id="plan">
     <h3 class="result-section__title">{{ icon("plan") }} 2D Floor Plan</h3>
     <div class="floorplan-card">
       <div class="floorplan-render" id="floorplan-svg">
@@ -290,17 +306,17 @@
       </div>
       <div class="floorplan-legend">
         {% for room in room_results %}
-        <div class="legend-item">
+        <a class="legend-item" href="#room-{{ room.key }}" data-room="{{ room.label }}">
           <span class="legend-dot" style="background:{{ room.colour }};"></span>
           <span class="legend-label">{{ room.label }}</span>
-        </div>
+        </a>
         {% endfor %}
       </div>
     </div>
   </div>
 
   <!-- Designer Brief Export -->
-  <div class="result-section">
+  <div class="result-section" id="share">
     <h3 class="result-section__title">{{ icon("clipboard") }} Designer Brief</h3>
     <div class="brief-export">
       <p class="brief-export__desc">A complete brief ready to share with your interior designer, including all preferences, requirements, and AI suggestions.</p>
@@ -433,6 +449,101 @@
     });
   }, { threshold: 0.1 });
   cards.forEach(c => observer.observe(c));
+
+  // ── Finding your way round ───────────────────────────────────────────────
+  (function () {
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior = calm ? 'auto' : 'smooth';
+    const root = document.documentElement;
+
+    // The section bar sits under the site nav, whatever height that wraps to.
+    const siteNav = document.querySelector('.nav');
+    const setNavH = () => root.style.setProperty('--site-nav-h', (siteNav ? siteNav.offsetHeight : 0) + 'px');
+    setNavH();
+    if (siteNav && 'ResizeObserver' in window) new ResizeObserver(setNavH).observe(siteNav);
+
+    // Mark the section in view: the last one whose top has passed the bars.
+    const links = Array.from(document.querySelectorAll('.page-nav__link'));
+    const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    function spy() {
+      const line = (siteNav ? siteNav.offsetHeight : 0) + 90;
+      let current = sections[0];
+      sections.forEach(sec => { if (sec.getBoundingClientRect().top <= line) current = sec; });
+      // At the very bottom the last sections cannot reach the bar: the last
+      // one is then the one in view.
+      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) {
+        current = sections[sections.length - 1];
+      }
+      links.forEach(a => a.setAttribute('aria-current',
+        String(current && a.getAttribute('href') === '#' + current.id)));
+      // Keep the marked link in view in the bar on narrow screens.
+      const on = links.find(a => a.getAttribute('aria-current') === 'true');
+      if (on && on.parentElement.scrollWidth > on.parentElement.clientWidth) {
+        const bar = on.parentElement;
+        const left = on.offsetLeft - bar.clientWidth / 2 + on.offsetWidth / 2;
+        bar.scrollTo({ left, behavior });
+      }
+    }
+    let ticking = false;
+    addEventListener('scroll', () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(() => { spy(); ticking = false; }); }
+    }, { passive: true });
+    spy();
+
+    // The plan and the room cards, each pointing at the other.
+    const planRooms = new Map(Array.from(document.querySelectorAll('.plan-room'))
+      .map(el => [el.dataset.room, el]));
+    const cards = new Map(Array.from(document.querySelectorAll('.room-result-card[data-room]'))
+      .map(el => [el.dataset.room, el]));
+
+    function light(label, on) {
+      const el = planRooms.get(label);
+      if (el) el.classList.toggle('is-lit', on);
+    }
+    function flash(el, cls, ms) {
+      el.classList.add(cls);
+      clearTimeout(el._flash);
+      el._flash = setTimeout(() => el.classList.remove(cls), ms);
+    }
+
+    // The key: pointing at a room lights it on the plan; choosing it goes to its card.
+    document.querySelectorAll('.legend-item[data-room]').forEach(item => {
+      const label = item.dataset.room;
+      item.addEventListener('mouseenter', () => light(label, true));
+      item.addEventListener('mouseleave', () => light(label, false));
+      item.addEventListener('focus', () => light(label, true));
+      item.addEventListener('blur', () => light(label, false));
+      item.addEventListener('click', e => {
+        const card = cards.get(label);
+        if (!card) return;
+        e.preventDefault();
+        card.scrollIntoView({ behavior, block: 'start' });
+        flash(card, 'is-focused', 1800);
+      });
+    });
+
+    // A room on the plan goes to its card.
+    planRooms.forEach((el, label) => {
+      el.addEventListener('click', () => {
+        const card = cards.get(label);
+        if (!card) return;
+        card.scrollIntoView({ behavior, block: 'start' });
+        flash(card, 'is-focused', 1800);
+      });
+    });
+
+    // "See on plan" goes to the plan and lights the room there for a moment.
+    document.querySelectorAll('[data-show-room]').forEach(a => {
+      a.addEventListener('click', e => {
+        const plan = document.getElementById('plan');
+        const el = planRooms.get(a.dataset.showRoom);
+        if (!plan || !el) return;
+        e.preventDefault();
+        plan.scrollIntoView({ behavior, block: 'start' });
+        flash(el, 'is-lit', 2400);
+      });
+    });
+  })();
 
   // ── Agent trace toggle ────────────────────────────────────────────────────
   const traceToggle = document.getElementById('trace-toggle');
