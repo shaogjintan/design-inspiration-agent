@@ -41,7 +41,8 @@
         ] %}
         {% for val, label, desc in styles %}
         <label class="tile tile--style" for="style_{{ val }}">
-          <input type="radio" name="design_style" id="style_{{ val }}" value="{{ val }}" required>
+          <input type="radio" name="design_style" id="style_{{ val }}" value="{{ val }}"
+                 {% if saved.get("design_style") == val %}checked{% endif %} required>
           <span class="tile__label">{{ label }}</span>
           <span class="tile__meta">{{ desc }}</span>
         </label>
@@ -65,7 +66,8 @@
         ] %}
         {% for hex, name in palettes %}
         <label class="colour-swatch" for="pal_{{ loop.index }}" title="{{ name }}">
-          <input type="radio" name="colour_palette" id="pal_{{ loop.index }}" value="{{ hex }}|{{ name }}" required>
+          <input type="radio" name="colour_palette" id="pal_{{ loop.index }}" value="{{ hex }}|{{ name }}"
+                 {% if saved.get("colour_palette") == hex ~ "|" ~ name %}checked{% endif %} required>
           <span class="colour-swatch__chip" style="background:{{ hex }};"></span>
           <span class="colour-swatch__name">{{ name }}</span>
         </label>
@@ -74,6 +76,7 @@
       <div class="form-group" style="margin-top:1rem;">
         <label class="form-label form-label--sm" for="custom_colour">Or describe your palette</label>
         <input type="text" name="custom_colour" id="custom_colour" class="form-input"
+               value="{{ saved.get('custom_colour', '') }}"
                placeholder="e.g. warm terracotta with off-white accents and dark walnut wood">
       </div>
     </div>
@@ -112,6 +115,7 @@
           <div class="form-group" style="margin-top:0.75rem;">
             <label class="form-label form-label--sm">Describe the vibe for this room <span class="form-label__opt">(optional)</span></label>
             <input type="text" name="vibe_{{ room.key }}" class="form-input"
+                   value="{{ saved.get('vibes', {}).get(room.key, '') }}"
                    placeholder="e.g. calm sanctuary, moody and warm, bright and airy…">
           </div>
         </div>

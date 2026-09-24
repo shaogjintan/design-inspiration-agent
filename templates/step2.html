@@ -64,8 +64,8 @@
         </div>
         <div class="accordion-body">
 
-          {% if room["items"] %}
-          <div class="form-section">
+          <div class="form-section items-section"
+               {% if not room["items"] and not room.extra_items %}hidden{% endif %}>
             <label class="form-label">Items &amp; Fixtures Needed</label>
             <div class="check-grid">
               {% for item in room["items"] %}
@@ -75,9 +75,16 @@
                 <span class="check-tile__label">{{ item }}</span>
               </label>
               {% endfor %}
+              {% for item in room.extra_items %}
+              <label class="check-tile check-tile--found" for="{{ room.key }}_x{{ loop.index }}">
+                <input type="checkbox" name="{{ room.key }}_items" id="{{ room.key }}_x{{ loop.index }}" value="{{ item }}"
+                       {% if item in saved.get(room.key + "_items", []) %}checked{% endif %}>
+                <span class="check-tile__label">{{ item }}</span>
+              </label>
+              {% endfor %}
             </div>
+            <p class="items-note" aria-live="polite"></p>
           </div>
-          {% endif %}
 
           <div class="form-section form-section--row">
             <div class="form-group">
@@ -167,6 +174,11 @@
       </button>
     </div>
     <div class="accordion-body">
+      <div class="form-section items-section" hidden>
+        <label class="form-label">Items &amp; Fixtures Needed</label>
+        <div class="check-grid"></div>
+        <p class="items-note" aria-live="polite"></p>
+      </div>
       <div class="form-section form-section--row">
         <div class="form-group">
           <label class="form-label" for="__KEY___budget">Budget Range</label>
@@ -295,6 +307,76 @@
     input.addEventListener('click', e => e.stopPropagation());
   }
 
+  // Read the furniture out of a room's description and offer it as tiles.
+  // Fires when the homeowner stops typing, once per wording — the server keeps
+  // the answer against the text it came from, so it costs nothing to revisit.
+  const MIN_CHARS = 15;
+
+  function wireItemReader(card, ta) {
+    const section = card.querySelector('.items-section');
+    if (!section) return;
+    const grid = section.querySelector('.check-grid');
+    const note = section.querySelector('.items-note');
+    let lastAsked = ta.value.trim();
+    let timer = null;
+
+    const addTile = (name) => {
+      const known = Array.from(grid.querySelectorAll('input'))
+                         .map(i => i.value.toLowerCase());
+      if (known.includes(name.toLowerCase())) return false;
+      const key = card.dataset.room;
+      const id  = key + '_found' + (grid.children.length + 1);
+      const label = document.createElement('label');
+      label.className = 'check-tile check-tile--found check-tile--new';
+      label.setAttribute('for', id);
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.name = key + '_items'; cb.id = id; cb.value = name;
+      const span = document.createElement('span');
+      span.className = 'check-tile__label';
+      span.textContent = name;
+      label.append(cb, span);
+      cb.addEventListener('change', () =>
+        label.classList.toggle('check-tile--checked', cb.checked));
+      grid.appendChild(label);
+      return true;
+    };
+
+    async function read() {
+      const text = ta.value.trim();
+      if (text === lastAsked || text.length < MIN_CHARS) return;
+      lastAsked = text;
+      note.textContent = 'Reading your description…';
+      section.hidden = false;
+      try {
+        const res = await fetch('/step2/suggest-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_key: card.dataset.room,
+            label: card.querySelector('.accordion-header__label').textContent.trim(),
+            text: text
+          })
+        });
+        const data = await res.json();
+        const found = (data && data.items) || [];
+        const added = found.filter(addTile).length;
+        note.textContent = added
+          ? 'Found ' + added + (added === 1 ? ' item' : ' items') + ' in what you wrote — tick the ones you want.'
+          : '';
+        if (!added && !grid.children.length) section.hidden = true;
+      } catch (err) {
+        note.textContent = '';
+        if (!grid.children.length) section.hidden = true;
+      }
+    }
+
+    ta.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(read, 1500);
+    });
+    ta.addEventListener('blur', () => { clearTimeout(timer); read(); });
+  }
+
   function wire(card) {
     card.querySelector('.accordion-header').addEventListener('click', () => {
       const isOpen = card.classList.contains('accordion-item--open');
@@ -320,6 +402,7 @@
     card.querySelectorAll('.prompt-field').forEach(ta => {
       const counter = ta.parentElement.querySelector('.prompt-counter__num');
       if (counter) ta.addEventListener('input', () => counter.textContent = ta.value.length);
+      wireItemReader(card, ta);
     });
     card.querySelectorAll('.check-tile input').forEach(cb => {
       cb.addEventListener('change', () =>

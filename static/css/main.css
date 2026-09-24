@@ -429,7 +429,8 @@ em { font-style: italic; color: var(--gold); }
   background: var(--white);
 }
 
-.tile--selected {
+.tile--selected,
+.tile:has(input:checked) {
   border-color: var(--ink) !important;
   background: var(--white) !important;
   box-shadow: inset 0 0 0 1px var(--ink);
@@ -475,7 +476,8 @@ em { font-style: italic; color: var(--gold); }
 }
 
 .colour-swatch:hover .colour-swatch__chip,
-.colour-swatch--selected .colour-swatch__chip {
+.colour-swatch--selected .colour-swatch__chip,
+.colour-swatch:has(input:checked) .colour-swatch__chip {
   border-color: var(--ink);
   transform: scale(1.12);
 }
@@ -782,6 +784,41 @@ em { font-style: italic; color: var(--gold); }
 }
 
 .check-tile__label { pointer-events: none; }
+
+/* Items read out of the room's own description rather than offered by the
+   catalogue. Gold marks them as FORMA's reading of what was written, so an
+   untouched one is visibly a suggestion; ticked, it is an item like any
+   other and takes the solid fill above. */
+.check-tile--found {
+  border-color: var(--gold);
+  border-style: dashed;
+  background: var(--white);
+}
+
+.check-tile--found:has(input:checked),
+.check-tile--found.check-tile--checked {
+  border-style: solid;
+}
+
+.check-tile--new {
+  animation: tile-in .25s ease-out both;
+}
+
+@keyframes tile-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.items-note {
+  margin: .5rem 0 0;
+  font-size: .72rem;
+  color: var(--ink-muted);
+  min-height: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-tile--new { animation: none; }
+}
 
 /* ── Prompt counter ─────────────────────────────────────────────────────────── */
 .prompt-counter {

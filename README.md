@@ -47,22 +47,41 @@ The homeowner can then refine the result in plain language ("the living room fee
 
 ## Quick start
 
+**Requires Python 3.10 or newer.** The code annotates types as `str | None`,
+which earlier versions evaluate at import and reject with
+`TypeError: unsupported operand type(s) for |`. Check with `python3 -V`.
+
 ### 1. Install dependencies
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+**Already have a `venv/` folder?** It is gitignored, so a pull never brings one
+and never updates one. Recreate it rather than trusting it — a venv hardcodes
+the absolute path of the interpreter that built it, so one copied between
+machines (or built on an older Python) fails in confusing ways:
+
+```bash
+rm -rf venv && python3 -m venv venv
+source venv/bin/activate && pip install -r requirements.txt
+```
+
+To check one in place instead: `venv/bin/python -V` must report 3.10+, then
+re-run the `pip install` line to pick up anything new in `requirements.txt`.
 
 ### 2. Configure environment
 
 Copy and edit the environment file:
 
 ```bash
-cp .env.example _env.local
-# Edit _env.local with your LLM gateway credentials
+cp .env.example .env.local
+# Edit .env.local with your LLM gateway credentials
 ```
+
+(`_env.local` and `.env` are read too, in that order — all three are gitignored.)
 
 Required variables:
 ```
@@ -81,6 +100,9 @@ python app.py
 ```
 
 Open [http://localhost:5000](http://localhost:5000)
+
+`uploads/` and `data.json` are created on first run — neither is in the repo.
+A recent browser is assumed (Chrome 105+, Safari 15.4+, Firefox 121+).
 
 ---
 

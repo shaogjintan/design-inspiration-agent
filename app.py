@@ -59,6 +59,15 @@ LLM_GATEWAY_URL = os.environ.get("LLM_GATEWAY_URL")
 LLM_GATEWAY_API_KEY = os.environ.get("LLM_GATEWAY_API_KEY")
 LLM_MODEL = os.environ.get("LLM_MODEL")
 
+# SOCLAAS (NUS, OpenAI-compatible) — stand-in while the Sonnet gateway strips
+# images. Used in preference to the gateway above whenever all three are set;
+# comment them out of .env.local to go back.
+SOCLAAS_BASE_URL = os.environ.get("SOCLAAS_BASE_URL")
+SOCLAAS_API_KEY = os.environ.get("SOCLAAS_API_KEY")
+SOCLAAS_MODEL = os.environ.get("SOCLAAS_MODEL")
+USE_SOCLAAS = bool(SOCLAAS_BASE_URL and SOCLAAS_API_KEY and SOCLAAS_MODEL)
+LLM_CONFIGURED = USE_SOCLAAS or bool(LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY and LLM_MODEL)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Room definitions — keyed by housing type
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +229,67 @@ def items_for_room(label: str) -> list[str]:
         return merged
 
     return ROOM_ITEMS.get(match_catalogue_room(label), [])
+
+
+# The tick-list only covers what a typical room of its kind holds. Anything
+# else the homeowner asks for arrives as prose, so read that back into the
+# same tick-list rather than leaving it for the brief alone to notice.
+SUGGEST_MIN_CHARS  = 15     # below this there is nothing to read
+MAX_SUGGESTED_ITEMS = 6
+
+
+def extract_items_from_text(label: str, text: str, known: list[str]) -> list[str]:
+    """Pull the furniture a homeowner named in prose out of their description.
+
+    Someone who writes "a fold-down desk and a reading nook by the window" has
+    named two pieces nobody can tick, because the catalogue never had them.
+    This returns those as item names, so they can be offered as tick-boxes of
+    their own alongside the standard ones.
+
+    Returns [] on anything unusable — no gateway, a refusal, prose instead of
+    JSON — since a suggestion nobody can act on is worth less than none.
+    """
+    text = (text or "").strip()
+    if len(text) < SUGGEST_MIN_CHARS:
+        return []
+
+    system = (
+        "You read a homeowner's description of one room and list the furniture "
+        "and fixtures they asked for.\n"
+        "Reply with a JSON array of strings and nothing else.\n"
+        f"Rules: at most {MAX_SUGGESTED_ITEMS} items, most important first; "
+        "short Title Case names ('Fold-Down Desk', not 'a fold-down desk that "
+        "tucks away'); physical pieces only — never materials, colours, styles, "
+        "moods or work like rewiring; skip anything already on the tick-list. "
+        "Return [] if they named none."
+    )
+    prompt = (f"Room: {label}\n"
+              f"Already on the tick-list: {', '.join(known) if known else 'nothing'}\n"
+              f"Description: {text}")
+
+    try:
+        raw = call_llm([{"role": "user", "content": prompt}], system=system,
+                       max_tokens=200, timeout=20, fallback_to_mock=False)
+        parsed = json.loads(strip_code_fence(raw))
+    except Exception as e:                       # noqa: BLE001 — best effort
+        app.logger.info(f"Item extraction for {label} failed: {e}")
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    seen  = {k.lower() for k in known}
+    items = []
+    for entry in parsed:
+        if not isinstance(entry, str):
+            continue
+        name = " ".join(entry.split())[:40].strip(" .,-")
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            items.append(name)
+        if len(items) >= MAX_SUGGESTED_ITEMS:
+            break
+    return items
 
 
 def _count_room_kind(room_names, kind: str) -> int:
@@ -425,6 +495,51 @@ class VisionUnavailable(RuntimeError):
     """
 
 
+def _sniff_image_type(b64: str) -> str:
+    """Media type of a base64 image from its magic bytes — the messages only
+    carry the raw base64, but an OpenAI data URL needs the type."""
+    for prefix, media in (("iVBOR", "image/png"), ("/9j/", "image/jpeg"),
+                          ("R0lGOD", "image/gif"), ("UklGR", "image/webp")):
+        if b64.startswith(prefix):
+            return media
+    return "image/jpeg"
+
+
+def _soclaas_request(gateway_messages: list, max_tokens: int) -> urllib.request.Request:
+    """Build an OpenAI-format request for SOCLAAS from Ollama-format messages
+    (plain-string content, images in a separate "images" array)."""
+    converted = []
+    for m in gateway_messages:
+        images = m.get("images") or []
+        if images:
+            content = [{"type": "text", "text": m.get("content", "")}] + [
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{_sniff_image_type(b)};base64,{b}"}}
+                for b in images
+            ]
+        else:
+            content = m.get("content", "")
+        converted.append({"role": m["role"], "content": content})
+
+    payload = {
+        "model": SOCLAAS_MODEL,
+        "messages": converted,
+        "max_tokens": max_tokens,
+        # qwen3.8 thinks before answering by default, which burns the small
+        # token budgets the callers set and returns empty content.
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    return urllib.request.Request(
+        f"{SOCLAAS_BASE_URL.rstrip('/')}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {SOCLAAS_API_KEY}",
+        },
+        method="POST",
+    )
+
+
 def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: int = 60,
              fallback_to_mock: bool = True, images_sent: int = 0) -> str:
     """
@@ -436,7 +551,7 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
     pass off invented rooms as a real floor-plan read needs the exception.
     """
 
-    if not LLM_GATEWAY_URL or not LLM_GATEWAY_API_KEY or not LLM_MODEL:
+    if not LLM_CONFIGURED:
         if not fallback_to_mock:
             raise RuntimeError("LLM Gateway is not configured")
         app.logger.warning(
@@ -454,39 +569,57 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
 
     gateway_messages.extend(messages)
 
-    payload = {
-        "model": LLM_MODEL,
-        "messages": gateway_messages,
-        "stream": False,
-        "options": {
-            "num_predict": max_tokens
+    if USE_SOCLAAS:
+        req = _soclaas_request(gateway_messages, max_tokens)
+    else:
+        payload = {
+            "model": LLM_MODEL,
+            "messages": gateway_messages,
+            "stream": False,
+            "options": {
+                "num_predict": max_tokens
+            }
         }
-    }
 
-    req = urllib.request.Request(
-        f"{LLM_GATEWAY_URL.rstrip('/')}/api/chat",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "X-API-Key": LLM_GATEWAY_API_KEY,
-        },
-        method="POST",
-    )
+        req = urllib.request.Request(
+            f"{LLM_GATEWAY_URL.rstrip('/')}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-API-Key": LLM_GATEWAY_API_KEY,
+            },
+            method="POST",
+        )
 
     last_error = None
     for attempt in range(3):  # up to 3 attempts with back-off
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
-                prompt_tokens = result.get("prompt_eval_count")
-                app.logger.info(
-                    "LLM tokens: in=%s out=%s", prompt_tokens, result.get("eval_count"),
-                )
+                if USE_SOCLAAS:
+                    usage = result.get("usage") or {}
+                    prompt_tokens = usage.get("prompt_tokens")
+                    out_tokens = usage.get("completion_tokens")
+                    image_tokens = ((usage.get("prompt_tokens_details") or {})
+                                    .get("multimodal_tokens") or {}).get("image")
+                    content = result["choices"][0]["message"].get("content")
+                else:
+                    prompt_tokens = result.get("prompt_eval_count")
+                    out_tokens = result.get("eval_count")
+                    image_tokens = None
+                    content = result["message"]["content"]
+                app.logger.info("LLM tokens: in=%s out=%s", prompt_tokens, out_tokens)
+
+                # SOCLAAS counts image tokens itself — no guessing needed.
+                if images_sent and image_tokens is not None and image_tokens <= 0:
+                    raise VisionUnavailable(
+                        f"gateway reported 0 image tokens for {images_sent} image(s)"
+                    )
 
                 # Images silently dropped? Every image is worth at least ~150
                 # tokens, so a count near the bare text length means the
                 # gateway discarded them and the reply is invented.
-                if images_sent and isinstance(prompt_tokens, int):
+                if images_sent and image_tokens is None and isinstance(prompt_tokens, int):
                     text_estimate = sum(
                         len(m.get("content", "")) for m in messages
                         if isinstance(m.get("content"), str)
@@ -502,7 +635,9 @@ def call_llm(messages: list, system: str = "", max_tokens: int = 2048, timeout: 
                             f"{images_sent} image(s)"
                         )
 
-                return result["message"]["content"]
+                if not content:
+                    raise RuntimeError("model returned no content (token budget exhausted?)")
+                return content.strip()
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="replace")
@@ -788,7 +923,7 @@ def _floorplan_stub_enabled() -> bool:
     if USE_FLOORPLAN_STUB in ("0", "false", "no", "off"):
         return False
     # "auto": use stub only when the LLM gateway is not configured
-    return not (LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY and LLM_MODEL)
+    return not LLM_CONFIGURED
 
 
 def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
@@ -3054,6 +3189,47 @@ def autosave(step):
     return jsonify({"ok": True})
 
 
+@app.route("/step2/suggest-items", methods=["POST"])
+def step2_suggest_items():
+    """Read one room's description and offer the furniture it names as tiles.
+
+    One room per call, and only when that room's text has actually changed —
+    the result is kept against the text it came from, so re-opening the page,
+    switching rooms or submitting never spends a second call on the same words.
+    """
+    if not project_get("step1"):
+        return jsonify({"ok": False, "error": "no project"}), 400
+
+    body     = request.get_json(silent=True) or {}
+    key      = str(body.get("room_key", ""))[:60]
+    label    = " ".join(str(body.get("label", "")).split())[:40] or "Room"
+    text     = str(body.get("text", ""))[:1000]
+    if not key:
+        return jsonify({"ok": False, "error": "no room"}), 400
+
+    suggested = dict(project_get("suggested_items", {}) or {})
+    sources   = dict(project_get("suggested_src", {}) or {})
+
+    if sources.get(key, "").strip() == text.strip():
+        return jsonify({"ok": True, "cached": True, "items": suggested.get(key, [])})
+
+    known = list(items_for_room(label)) + list(suggested.get(key, []))
+    items = extract_items_from_text(label, text, known)
+
+    # Keep what earlier wording turned up: an edit that drops a mention should
+    # not silently untick a box the homeowner already ticked.
+    merged, seen = [], set()
+    for name in list(suggested.get(key, [])) + items:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            merged.append(name)
+
+    suggested[key] = merged[:MAX_SUGGESTED_ITEMS * 2]
+    sources[key]   = text
+    project_set(suggested_items=suggested, suggested_src=sources)
+    return jsonify({"ok": True, "items": items, "all": suggested[key]})
+
+
 # ── Step 2: Inspiration ───────────────────────────────────────────────────────
 @app.route("/step2", methods=["GET", "POST"])
 def step2():
@@ -3075,11 +3251,29 @@ def step2():
             housing_type, [r["label"] for r in rooms]
         )
 
+    # Items the tick-list does not carry: ones read out of the room's own
+    # description, plus anything ticked before that the catalogue has since
+    # stopped offering. Rebuilding this from the saved answers as well as the
+    # suggestions keeps a renamed room's ticks visible instead of stranding
+    # them in storage with no box to show them in.
+    saved_reqs = project_get("requirements", {}) or {}
+    suggested  = project_get("suggested_items", {}) or {}
+    for room in rooms:
+        catalogue = {i.lower() for i in room["items"]}
+        extra, seen = [], set()
+        for name in (list(suggested.get(room["key"], []))
+                     + list(saved_reqs.get(f"{room['key']}_items", []))):
+            low = name.lower()
+            if low not in catalogue and low not in seen:
+                seen.add(low)
+                extra.append(name)
+        room["extra_items"] = extra
+
     return render_template("step2.html", current_step=2, rooms=rooms,
                            ai_room_summary=project_get("ai_room_summary", ""),
                            plan_mismatch=plan_mismatch,
                            housing_label=HOUSING_LABELS.get(housing_type, housing_type),
-                           saved=project_get("requirements", {}))
+                           saved=saved_reqs)
 
 
 @app.route("/step2/reviewing")
