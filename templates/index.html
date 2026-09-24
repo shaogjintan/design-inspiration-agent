@@ -13,7 +13,7 @@
     Tell us about your home. Upload inspiration. Let AI bridge the gap between
     what you imagine and what your designer builds.
   </p>
-  <a href="{{ url_for('start') }}" class="btn btn--primary btn--lg" data-iris>Begin Your Project</a>
+  <a href="{{ url_for('start') }}" class="btn btn--primary btn--lg">Begin Your Project</a>
   {% if signed_in_as %}
   <p class="hero__resume">Signed in as {{ signed_in_as }} —
     <a href="{{ url_for('step1') }}">continue your brief</a>.</p>

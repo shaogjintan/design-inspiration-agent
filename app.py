@@ -1395,13 +1395,26 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
 
     project_notes = project.get("project_notes", "")
 
+    # Answers to FORMA's clarifying questions and applied refinements. The agent
+    # passes these in, but they had fallen out of the prompt — a homeowner
+    # could answer a conflict and the brief would argue the other side.
+    decisions = project.get("homeowner_decisions", "")
+    decisions_section = ""
+    if decisions:
+        decisions_section = (
+            "\n\nHOMEOWNER DECISIONS (confirmed by the homeowner — these MUST be "
+            "honoured and override any conflicting default):\n" + decisions
+        )
+
+    style = style_label(project.get('design_style', ''))
+
     prompt = textwrap.dedent(f"""
-        Create a comprehensive interior design brief in HTML format.
+        Create an interior design brief in HTML format.
 
         PROJECT FACTS:
         - Housing: {project.get('housing_type_label', '')}
         - Size: {project.get('floor_size', 'not given')} sqm
-        - Homeowner's chosen style: {project.get('design_style', '')}
+        - Homeowner's chosen style: {style}
         - Homeowner's chosen colour palette: {project.get('colour_name', '')}
         - Custom palette description: {project.get('custom_colour', '') or 'none'}
         - Rooms: {rooms_text}
@@ -1409,7 +1422,7 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
 
         ROOM REQUIREMENTS:
         {requirements_text or 'Not provided'}
-        {ia_section}
+        {ia_section}{decisions_section}
 
         IMPORTANT INSTRUCTIONS:
         - Where inspiration analysis is available, reference it specifically.
@@ -1417,29 +1430,37 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
           appeared consistently across your references."
         - Connect every recommendation back to homeowner requirements, constraints,
           or visually observed preferences. Show your reasoning.
+        - Any HOMEOWNER DECISIONS above override conflicting defaults — reflect
+          them explicitly.
+        - Where a room's own references pull against the overall direction, say
+          so plainly and back the room's references — smoothing that tension
+          over makes the brief useless.
         - Do NOT make unsupported renovation cost claims.
-        - Be specific about materials, finishes, and forms — not generic.
+        - Be specific about materials, finishes and forms — never generic.
         - If analysis confidence is low, acknowledge that recommendations are
           based on limited information.
-
-        Write the brief an interior designer would actually hand over: dense,
-        specific, nothing padded. Use <p> and <strong> tags.
-
-        Where a room's own references pull against the overall direction, say so
-        plainly and back the room's references — that tension is the most useful
-        thing you can tell them, and smoothing it over makes the brief useless.
-
-        LENGTH — around 250 words, and this is a ceiling as much as a target:
-        - FOUR paragraphs, each 3-4 sentences.
-        - Paragraph 1: the design direction and what their references add up to.
-        - Paragraph 2: materials, finishes and light, named specifically.
-        - Paragraph 3: the rooms that depart from the overall direction and how
-          to make that deliberate rather than accidental. If nothing departs,
-          use this paragraph for how the rooms relate to each other instead.
-        - Paragraph 4: what to get right first, and any real caveat.
         - Cut every sentence that restates their inputs back at them. They know
           what they chose; tell them what it means.
-        - No preamble, no summary sentence at the end, no headings.
+        - British spelling (colour, prioritise, analyse).
+
+        FORMAT — exactly these five sections, in this order, each an <h4>
+        heading followed by ONE <p> of 2-4 sentences. Use <strong> to mark the
+        single most important material, finish or decision in each paragraph,
+        and nowhere else. About 350 words in total; do not exceed 420.
+
+        <h4>Project Overview</h4>
+        <p>The home, who it is for, and what their references add up to.</p>
+        <h4>Design Direction</h4>
+        <p>The overall aesthetic, and any room that departs from it — how to
+        make that departure deliberate rather than accidental.</p>
+        <h4>Material Story</h4>
+        <p>Floors, joinery, surfaces and textiles, named specifically, and why.</p>
+        <h4>Lighting Strategy</h4>
+        <p>Ambient, task and accent light, and how it differs between rooms.</p>
+        <h4>Key Considerations</h4>
+        <p>What to get right first, and any real caveat.</p>
+
+        No preamble, no closing summary, no other tags.
         Respond with ONLY the HTML content, no surrounding tags.
     """)
 
@@ -1450,7 +1471,7 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
                "the homeowner's stated requirements or visually observed preferences. "
                "You write tight, specific prose and never pad to reach a length. "
                "You reply with bare HTML and never wrap it in a markdown code fence.",
-        max_tokens=700
+        max_tokens=1000
     ))
 
 
@@ -2192,7 +2213,7 @@ def detect_conflicts(step1: dict, requirements: dict, inspiration: dict,
     # Check outliers from image analysis — different from style conflict above
     outliers = inspiration_analysis.get("possible_outliers") or []
     if outliers and not conflicting_pairs:
-        outlier_desc = ", ".join(outliers[:2])
+        outlier_desc = "; ".join(o.strip().rstrip(".") for o in outliers[:2])
         conflicts.append({
             "id":          "style_outlier_01",
             "type":        "style",
@@ -3380,9 +3401,13 @@ def step4():
     # now and let it fetch the result itself.
     result = project_get("agent_result")
     if not result:
+        # The homeowner's own references, shown being read while they wait.
+        ref_thumbs = [u for paths in (s2.get("inspo_paths") or {}).values()
+                      for u in map(upload_url, paths or []) if u][:8]
         return render_template("step4_loading.html", current_step=4,
                                project=project,
                                room_count=len(rooms_base),
+                               ref_thumbs=ref_thumbs,
                                has_floor_plan=bool(s1.get("floor_plan_path")))
 
     project["inspiration_analysis"] = result["inspiration_analysis"]
@@ -3664,6 +3689,16 @@ def upload_url(stored_path: str) -> str:
 app.jinja_env.globals["upload_url"] = upload_url
 
 
+def style_label(value: str) -> str:
+    """Display name for a stored design style. The form posts the lowercase
+    key ("japandi"), which read as a typo wherever it was shown as-is."""
+    value = (value or "").strip()
+    return value[:1].upper() + value[1:] if value.islower() else value
+
+
+app.jinja_env.filters["style_label"] = style_label
+
+
 # ── Export brief as plain text ─────────────────────────────────────────────────
 @app.route("/export-brief")
 def export_brief():
@@ -3681,7 +3716,7 @@ def export_brief():
         "=" * 60,
         f"Housing Type : {s1.get('housing_type_label', '')}",
         f"Floor Size   : {s1.get('floor_size', 'N/A')} sqm",
-        f"Design Style : {s2.get('design_style', 'N/A')}",
+        f"Design Style : {style_label(s2.get('design_style', '')) or 'N/A'}",
         f"Colour Palette: {s2.get('colour_name', 'N/A')}",
         "",
         "ROOM REQUIREMENTS",

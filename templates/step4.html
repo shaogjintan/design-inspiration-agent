@@ -19,7 +19,7 @@
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Style</span>
-      <span class="summary-bar__val">{{ project.design_style }}</span>
+      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Palette</span>
@@ -141,8 +141,8 @@
         <div class="inspo-analysis__outlier-icon">!</div>
         <div>
           <strong>FORMA noticed something:</strong>
-          Some of your references differ from the overall direction —
-          {% for o in inspo_analysis.possible_outliers %}{{ o }}{% if not loop.last %}, {% endif %}{% endfor %}.
+          Some of your references differ from the overall direction.
+          {% for o in inspo_analysis.possible_outliers %}{{ o | trim | trim('.') }}.{% if not loop.last %} {% endif %}{% endfor %}
           You can address this in the refinement section below.
         </div>
       </div>

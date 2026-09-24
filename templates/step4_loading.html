@@ -18,7 +18,7 @@
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Style</span>
-      <span class="summary-bar__val">{{ project.design_style }}</span>
+      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Palette</span>
@@ -36,6 +36,7 @@
   </div>
 
   <div class="working" id="working" role="status" aria-live="polite">
+    <div class="working__body">
     <ol class="working__steps">
       {% set steps = [
         ('Reading your floor plan' if has_floor_plan else 'Reading your space', 'the layout, and how the rooms sit together'),
@@ -60,6 +61,45 @@
       {% endfor %}
     </ol>
 
+    {# The brief being assembled, stage by stage, out of the homeowner's own
+       material: their references are read, the five sections are written, the
+       rooms are drafted. Each block is tied to the step it belongs to, so the
+       panel shows the same progress as the list — it never runs ahead. #}
+    <div class="draft" aria-hidden="true">
+      <div class="draft__head">
+        <span class="draft__eyebrow">Your brief, taking shape</span>
+        <span class="draft__title">{{ project.housing_type_label }} · {{ project.design_style | style_label }}</span>
+      </div>
+
+      <div class="draft__block draft__refs" data-for="1">
+        {% if ref_thumbs %}
+          {% for url in ref_thumbs %}
+          <span class="draft__ref" style="--i: {{ loop.index0 }}"><img src="{{ url }}" alt="" loading="eager"></span>
+          {% endfor %}
+        {% else %}
+          <span class="draft__ref draft__ref--swatch" style="--i: 0; background: {{ project.colour_hex or 'var(--gold-light)' }}"></span>
+          <span class="draft__ref-note">No references uploaded — reading your style and palette instead.</span>
+        {% endif %}
+      </div>
+
+      <div class="draft__block draft__sections" data-for="3">
+        {% for name in ['Project Overview', 'Design Direction', 'Material Story', 'Lighting Strategy', 'Key Considerations'] %}
+        <div class="draft__section" style="--i: {{ loop.index0 }}">
+          <span class="draft__label">{{ name }}</span>
+          <span class="draft__line"><span class="draft__ink"></span></span>
+          <span class="draft__line draft__line--short"><span class="draft__ink"></span></span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="draft__block draft__rooms" data-for="4">
+        {% for room in project.rooms %}
+        <span class="draft__room" style="--i: {{ loop.index0 }}">{{ room.label }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    </div>
+
     {# Same mover as pages 2 and 3, but here it carries real progress: its
        position along the track is which stage the agent is on. #}
     {{ mover(determinate=true) }}
@@ -79,6 +119,7 @@
 (function () {
   const stepEls = Array.from(document.querySelectorAll('.working__step'));
   const moverEl = document.querySelector('.mover--steps');
+  const draftEls = Array.from(document.querySelectorAll('.draft__block'));
 
   // The figure's position on the track is which stage we are on.
   function setProgress(fraction) {
@@ -102,6 +143,11 @@
       el.classList.toggle('is-done',   n < i);
       el.classList.toggle('is-active', n === i);
     });
+    draftEls.forEach(el => {
+      const n = Number(el.dataset.for);
+      el.classList.toggle('is-done',   n < i);
+      el.classList.toggle('is-active', n === i);
+    });
     // Sit just short of the end while working — the last step of the walk
     // belongs to the response actually landing.
     setProgress(stepEls.length ? Math.min(i / stepEls.length, 0.92) : 0);
@@ -116,7 +162,7 @@
 
   function finish() {
     clearTimeout(timer);
-    stepEls.forEach(el => {
+    stepEls.concat(draftEls).forEach(el => {
       el.classList.remove('is-active');
       el.classList.add('is-done');
     });

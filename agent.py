@@ -396,7 +396,12 @@ def run_agent(
                 room["label"],
                 style       = inspiration.get("design_style", ""),
                 palette_hex = inspiration.get("colour_hex", ""),
-                materials   = inspo_analysis.get("materials", []),
+                # The room's own materials where the analysis gave it some —
+                # the project-wide list put the same caption under every room,
+                # oak and laminate included in the bathrooms.
+                materials   = ((room_inspo_note.get("materials")
+                                if isinstance(room_inspo_note, dict) else None)
+                               or inspo_analysis.get("materials", [])),
                 items       = requirements.get(f"{key}_items", []) or [],
             )
         except Exception as e:

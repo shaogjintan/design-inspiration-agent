@@ -12,6 +12,7 @@
      only armed once we know JS is running. Without this a script error leaves
      the room concepts permanently invisible. #}
   <script>document.documentElement.classList.add('js');</script>
+  <script src="{{ url_for('static', filename='js/transitions.js') }}"></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body>
