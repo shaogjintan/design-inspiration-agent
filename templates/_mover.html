@@ -1,0 +1,34 @@
+{#
+  The progress indicator for the short waits: a figure carrying a box along a
+  track. Its position is the progress, so there is no separate bar to read.
+  Two leg poses alternate for the walk cycle — cheaper and more legible at
+  44px than rotating limbs.
+#}
+{% macro mover(determinate=false) %}
+<div class="mover{{ ' mover--steps' if determinate }}" aria-hidden="true">
+  <div class="mover__track"><span class="mover__fill"></span></div>
+  <div class="mover__walker">
+    <svg class="mover__figure" viewBox="0 0 44 36">
+      <g class="mover__bob">
+        <!-- the box, carried in front -->
+        <rect class="mover__box" x="19" y="11" width="17" height="14" rx="2"/>
+        <path d="M19 18h17"/>
+        <!-- head and torso -->
+        <circle cx="11" cy="8" r="4.2"/>
+        <path d="M11 12.5v11"/>
+        <!-- arms reaching the box -->
+        <path d="M11 16l8-1.5"/>
+        <!-- two leg poses, alternated to make the walk read -->
+        <g class="mover__legs mover__legs--a">
+          <path d="M11 23.5L6.5 33"/>
+          <path d="M11 23.5l4.5 9.5"/>
+        </g>
+        <g class="mover__legs mover__legs--b">
+          <path d="M11 23.5L9 33"/>
+          <path d="M11 23.5l5.5 8"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+</div>
+{% endmacro %}

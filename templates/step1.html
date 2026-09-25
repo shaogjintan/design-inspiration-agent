@@ -42,12 +42,19 @@
       <label class="form-label">Floor Plan <span class="form-label__opt">(optional but recommended)</span></label>
       <div class="upload-zone" id="floorplan-zone">
         <input type="file" name="floor_plan" id="floor_plan_input" accept="image/*,.pdf" class="upload-zone__input">
-        <div class="upload-zone__body">
+        <div class="upload-zone__body"{% if form_data and form_data.floor_plan_path %} style="display:none;"{% endif %}>
           <div class="upload-zone__icon">⬆</div>
           <div class="upload-zone__text">Drop your floor plan here or <span class="upload-zone__link">browse</span></div>
           <div class="upload-zone__hint">PNG, JPG, PDF — max 10 MB</div>
         </div>
-        <div class="upload-zone__preview" id="fp-preview" style="display:none;"></div>
+        {% set saved_plan = upload_url(form_data.floor_plan_path) if form_data else '' %}
+        <div class="upload-zone__preview" id="fp-preview"
+             style="display:{{ 'flex' if saved_plan else 'none' }};">
+          {% if saved_plan %}
+          <img src="{{ saved_plan }}" alt="Your uploaded floor plan">
+          <span class="upload-zone__fname">Floor plan already uploaded</span>
+          {% endif %}
+        </div>
       </div>
     </div>
 
@@ -79,7 +86,7 @@
     </div>
 
     <div class="form-actions">
-      <button type="submit" class="btn btn--primary">Continue to Requirements →</button>
+      <button type="submit" class="btn btn--primary" data-busy-label="Uploading your plan…">Continue to Requirements →</button>
     </div>
 
   </form>
@@ -111,7 +118,7 @@
       reader.onload = e => { preview.innerHTML = `<img src="${e.target.result}" alt="Floor plan preview"><span class="upload-zone__fname">${file.name}</span>`; };
       reader.readAsDataURL(file);
     } else {
-      preview.innerHTML = `<div class="upload-zone__file-icon">📄</div><span class="upload-zone__fname">${file.name}</span>`;
+      preview.innerHTML = `<div class="upload-zone__file-icon">PDF</div><span class="upload-zone__fname">${file.name}</span>`;
     }
   }
 

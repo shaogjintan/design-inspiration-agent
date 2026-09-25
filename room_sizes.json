@@ -1,0 +1,187 @@
+{
+  "_about": "Typical room sizes in Singapore HDB flats, by flat type, in square metres, with each room's usual shape (depth divided by width). FORMA uses them to keep a traced plan in realistic proportion — a master bedroom larger than the common bedrooms — and to size rooms when no floor plan was uploaded. Areas are the middle of the ranges the sources give; rooms the sources do not cover are marked as estimates. Edit freely.",
+  "_sources": [
+    "https://renovationcontractorsingapore.com/blogs/news/hdb-room-size-guide-singapore",
+    "https://www.yangsid.com/blog/3-room-hdb-floor-plan/",
+    "https://www.yangsid.com/blog/4-room-hdb-floor-plan/",
+    "https://www.weiken.com/hdb-flat-size-3-room-4-room-5-room/",
+    "https://www.coohom.com/article/understanding-hdb-bedroom-sizes",
+    "https://qanvast.com/sg/articles/a-guide-to-every-modern-day-hdb-bto-flat-type-you-can-apply-for-2806"
+  ],
+  "flat_types": {
+    "hdb_2room": {
+      "label": "2-Room Flexi (36-47 sqm)",
+      "master_bedroom": {
+        "sqm": 10,
+        "shape": 1.1,
+        "note": "the only bedroom"
+      },
+      "bedroom": {
+        "sqm": 9,
+        "shape": 1.1
+      },
+      "living": {
+        "sqm": 14,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "kitchen": {
+        "sqm": 5,
+        "shape": 1.6,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "master_bathroom": {
+        "sqm": 3,
+        "shape": 1.4
+      },
+      "bathroom": {
+        "sqm": 3,
+        "shape": 1.4
+      },
+      "service_yard": {
+        "sqm": 1.5,
+        "shape": 1.4,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "shelter": {
+        "sqm": 1.6,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources"
+      }
+    },
+    "hdb_3room": {
+      "label": "3-Room (60-69 sqm)",
+      "master_bedroom": {
+        "sqm": 11,
+        "shape": 1.15,
+        "note": "10-12 sqm (improved and BTO)"
+      },
+      "bedroom": {
+        "sqm": 9.5,
+        "shape": 1.1,
+        "note": "9-10 sqm"
+      },
+      "living": {
+        "sqm": 22,
+        "shape": 1.3,
+        "note": "20-25 sqm, living and dining together"
+      },
+      "kitchen": {
+        "sqm": 6,
+        "shape": 1.6,
+        "note": "5-6 sqm; BTO a little larger"
+      },
+      "master_bathroom": {
+        "sqm": 3.5,
+        "shape": 1.4,
+        "note": "3-4 sqm"
+      },
+      "bathroom": {
+        "sqm": 2.8,
+        "shape": 1.4,
+        "note": "2-3 sqm"
+      },
+      "service_yard": {
+        "sqm": 2.5,
+        "shape": 1.4,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "shelter": {
+        "sqm": 1.8,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources"
+      }
+    },
+    "hdb_4room": {
+      "label": "4-Room (82-96 sqm)",
+      "master_bedroom": {
+        "sqm": 12.5,
+        "shape": 1.15,
+        "note": "11-14 sqm"
+      },
+      "bedroom": {
+        "sqm": 10,
+        "shape": 1.1,
+        "note": "9-11 sqm; the third can be 8"
+      },
+      "living": {
+        "sqm": 30,
+        "shape": 1.3,
+        "note": "28-38 sqm, living and dining together"
+      },
+      "kitchen": {
+        "sqm": 8.5,
+        "shape": 1.8,
+        "note": "7-10 sqm, 1.9-2.4 m wide"
+      },
+      "master_bathroom": {
+        "sqm": 4.5,
+        "shape": 1.4,
+        "note": "4-5 sqm"
+      },
+      "bathroom": {
+        "sqm": 4,
+        "shape": 1.4,
+        "note": "4-5 sqm"
+      },
+      "service_yard": {
+        "sqm": 3,
+        "shape": 1.4,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "shelter": {
+        "sqm": 2,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources"
+      }
+    },
+    "hdb_5room": {
+      "label": "5-Room (110-130 sqm)",
+      "master_bedroom": {
+        "sqm": 15,
+        "shape": 1.15,
+        "note": "14-16 sqm"
+      },
+      "bedroom": {
+        "sqm": 10.5,
+        "shape": 1.1,
+        "note": "9-11 sqm"
+      },
+      "living": {
+        "sqm": 36,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources (sources: larger than 4-room)"
+      },
+      "kitchen": {
+        "sqm": 10,
+        "shape": 1.8,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "master_bathroom": {
+        "sqm": 5.5,
+        "shape": 1.4,
+        "note": "5-6 sqm"
+      },
+      "bathroom": {
+        "sqm": 5,
+        "shape": 1.4,
+        "note": "5-6 sqm"
+      },
+      "service_yard": {
+        "sqm": 3.5,
+        "shape": 1.4,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "shelter": {
+        "sqm": 2.2,
+        "shape": 1.3,
+        "note": "estimate from typical floor plans; not in the sources"
+      },
+      "study": {
+        "sqm": 9,
+        "shape": 1.1,
+        "note": "estimate from typical floor plans; not in the sources"
+      }
+    }
+  }
+}

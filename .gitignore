@@ -8,7 +8,11 @@ venv/
 .env
 .env.local
 _env.local
-*.local
+
+# Tooling
+.claude/
+.impeccable/
+.ipynb_checkpoints/
 
 # Runtime user uploads and generated output
 uploads/

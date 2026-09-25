@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}FORMA — Welcome{% endblock %}
 {% block content %}
 
@@ -20,19 +21,19 @@
 
   <div class="hero__features">
     <div class="hero__feature">
-      <div class="hero__feature-icon">◈</div>
+      <div class="hero__feature-icon">{{ icon("brief") }}</div>
       <div class="hero__feature-label">Smart Room Mapping</div>
     </div>
     <div class="hero__feature">
-      <div class="hero__feature-icon">◉</div>
+      <div class="hero__feature-icon">{{ icon("eye") }}</div>
       <div class="hero__feature-label">Inspiration Curation</div>
     </div>
     <div class="hero__feature">
-      <div class="hero__feature-icon">◫</div>
+      <div class="hero__feature-icon">{{ icon("palette") }}</div>
       <div class="hero__feature-label">AI Visual Generation</div>
     </div>
     <div class="hero__feature">
-      <div class="hero__feature-icon">◰</div>
+      <div class="hero__feature-icon">{{ icon("plan") }}</div>
       <div class="hero__feature-label">2D Floor Planning</div>
     </div>
   </div>

@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% from "_mover.html" import mover %}
+{% set current_step = 4 %}
+{% block title %}FORMA — Reading your project{% endblock %}
+{% block content %}
+
+<div class="step-wrap step-wrap--wide">
+  <div class="step-header">
+    <div class="step-header__tag">Step 04</div>
+    <h2 class="step-header__title">Your Design Vision</h2>
+    <p class="step-header__desc">FORMA is reading everything you gave it. This takes about a minute.</p>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Housing</span>
+      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Style</span>
+      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Palette</span>
+      <span class="summary-bar__val">
+        {% if project.colour_hex %}
+        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
+        {% endif %}
+        {{ project.colour_name }}
+      </span>
+    </div>
+    <div class="summary-bar__item">
+      <span class="summary-bar__label">Rooms</span>
+      <span class="summary-bar__val">{{ room_count }}</span>
+    </div>
+  </div>
+
+  <div class="working" id="working" role="status" aria-live="polite">
+    <div class="working__body">
+    <ol class="working__steps">
+      {% set steps = [
+        ('Reading your floor plan' if has_floor_plan else 'Sizing your rooms',
+         'finding each labelled room and fitting them together' if has_floor_plan
+         else 'a typical size for each room you confirmed'),
+        ('Studying your references', 'colour, material, light and form across every image'),
+        ('Checking for conflicts', 'where your references and requirements pull apart'),
+        ('Writing your brief', 'the direction, in plain language'),
+        ('Drafting ' ~ room_count ~ ' room concepts', 'each one furnished to scale, to general design guides')
+      ] %}
+      {% for title, detail in steps %}
+      <li class="working__step" data-index="{{ loop.index0 }}">
+        <span class="working__marker" aria-hidden="true">
+          <svg class="working__tick" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 8.5l3 3 6-7"/>
+          </svg>
+        </span>
+        <span class="working__text">
+          <span class="working__title">{{ title }}</span>
+          <span class="working__detail">{{ detail }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ol>
+
+    {# The brief being assembled: its five sections are written, then the
+       rooms are drafted. Each block is tied to the step it belongs to, so the
+       panel shows the same progress as the list — it never runs ahead. #}
+    <div class="draft" aria-hidden="true">
+      <h3 class="draft__title">Hold on — we're getting your brief ready</h3>
+
+      <div class="draft__block draft__sections" data-for="3">
+        {% for name in ['Project Overview', 'Design Direction', 'Material Story', 'Lighting Strategy', 'Key Considerations'] %}
+        <div class="draft__section" style="--i: {{ loop.index0 }}">
+          <span class="draft__label">{{ name }}</span>
+          <span class="draft__line"><span class="draft__ink"></span></span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="draft__block draft__rooms" data-for="4">
+        {% for room in project.rooms %}
+        <span class="draft__room" data-key="{{ room.key }}">
+          {# The liquid: a body that rises, two wave layers for its surface,
+             and a few bubbles while it pours. #}
+          <span class="liquid" aria-hidden="true">
+            <span class="liquid__wave liquid__wave--back"></span>
+            <span class="liquid__wave liquid__wave--front"></span>
+            <span class="liquid__bubble"></span><span class="liquid__bubble"></span><span class="liquid__bubble"></span>
+          </span>
+          <span class="draft__room-name">{{ room.label }}</span>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    </div>
+
+    {# Same mover as pages 2 and 3, but here it carries real progress: its
+       position along the track is which stage the agent is on. #}
+    {{ mover(determinate=true) }}
+
+    <p class="working__foot" id="working-foot">Leave this page open — it updates on its own.</p>
+  </div>
+
+  <div class="working-error" id="working-error" hidden>
+    <p class="working-error__msg" id="working-error-msg"></p>
+    <button type="button" class="btn btn--primary" id="working-retry">Try again</button>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+  const stepEls  = Array.from(document.querySelectorAll('.working__step'));
+  const moverEl  = document.querySelector('.mover--steps');
+  const draftEls = Array.from(document.querySelectorAll('.draft__block'));
+  const roomEls  = Array.from(document.querySelectorAll('.draft__room'));
+  const foot     = document.getElementById('working-foot');
+  const errBox   = document.getElementById('working-error');
+  const errMsg   = document.getElementById('working-error-msg');
+  const working  = document.getElementById('working');
+
+  // The figure's position on the track is how far through the run we are.
+  // It walks there over `ms`, rather than jumping and marking time: a CSS
+  // transition, so a new target mid-walk turns it smoothly from where it is.
+  function setProgress(fraction, ms, ease) {
+    if (!moverEl) return;
+    moverEl.style.setProperty('--mover-dur', ms + 'ms');
+    moverEl.style.setProperty('--mover-ease', ease || 'var(--ease-creep)');
+    moverEl.style.setProperty('--mover-progress', fraction.toFixed(3));
+  }
+
+  // The steps in order, and the server event that finishes each. The last
+  // step, drafting the rooms, finishes room by room.
+  const EVENTS = ['plan', 'references', 'conflicts', 'brief'];
+  const ROOMS  = EVENTS.length;              // index of the rooms step
+  // Roughly how long each step takes against the real gateway, so the figure
+  // walks at about the right pace between events.
+  const EXPECT = [20000, 26000, 2000, 9000];
+  const PER_ROOM = 6000;
+
+  let state = { steps: EVENTS.map(() => false), rooms: [] };
+  let lastKey = '';
+
+  function render() {
+    const roomsDone = roomEls.length && state.rooms.length >= roomEls.length;
+    const done = state.steps.concat([roomsDone]);
+    const active = done.indexOf(false);      // -1 when everything is done
+    stepEls.forEach((el, n) => {
+      el.classList.toggle('is-done', done[n]);
+      el.classList.toggle('is-active', n === active);
+    });
+    draftEls.forEach(el => {
+      const n = Number(el.dataset.for);
+      el.classList.toggle('is-done', done[n]);
+      el.classList.toggle('is-active', n === active);
+    });
+
+    // Each room fills as it is drafted: the one being written creeps
+    // towards full, and snaps full the moment the server says it is done.
+    const drafting = state.steps[ROOMS - 1];  // the brief is written
+    let current = null;
+    roomEls.forEach(el => {
+      const isDone = state.rooms.includes(el.dataset.key);
+      el.classList.toggle('is-done', isDone);
+      if (!isDone && drafting && !current) current = el;
+    });
+    roomEls.forEach(el => el.classList.toggle('is-drafting', el === current));
+
+    // Walk towards most of the way through the step in hand, over about as
+    // long as it usually takes; the event itself carries it the rest.
+    const units = done.length;
+    const roomShare = roomEls.length ? state.rooms.length / roomEls.length : 0;
+    const finished = state.steps.filter(Boolean).length + (roomsDone ? 1 : roomShare);
+    const inHand = active < 0 ? 0 :
+      active === ROOMS ? 0.8 / Math.max(roomEls.length, 1) : 0.8;
+    const ms = active < 0 ? 450 : active === ROOMS ? PER_ROOM : EXPECT[active];
+    setProgress(Math.min((finished + inHand) / units, 0.96), ms);
+  }
+
+  function apply(data) {
+    const key = JSON.stringify([data.events, data.rooms]);
+    if (key === lastKey) return;
+    lastKey = key;
+    state = {
+      steps: EVENTS.map(e => (data.events || []).includes(e)),
+      rooms: data.rooms || [],
+    };
+    render();
+  }
+
+  // Real progress, asked for while the run goes. Until the first answer —
+  // or if asking fails — a timed guess stands in, so the page never sits
+  // still: each step is assumed done after its usual time.
+  let live = false, guessTimer = null, pollTimer = null;
+  function guess(i) {
+    if (live || i > EVENTS.length) return;
+    state.steps = EVENTS.map((_, n) => n < i);
+    render();
+    if (i < EVENTS.length) guessTimer = setTimeout(() => guess(i + 1), EXPECT[i]);
+  }
+  function poll() {
+    fetch('{{ url_for("step4_progress") }}', { headers: { 'Accept': 'application/json' } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        if (!live) { live = true; clearTimeout(guessTimer); }
+        apply(data);
+      })
+      .catch(() => {})
+      .finally(() => { pollTimer = setTimeout(poll, 700); });
+  }
+
+  // After the first paint, so the figure has a start to walk from — a target
+  // set before it would simply be where it first appears.
+  requestAnimationFrame(() => requestAnimationFrame(() => { guess(0); poll(); }));
+
+  function finish() {
+    clearTimeout(guessTimer); clearTimeout(pollTimer);
+    state = { steps: EVENTS.map(() => true), rooms: roomEls.map(el => el.dataset.key) };
+    render();
+    setProgress(1, 450, 'var(--ease-out)');
+    working.classList.add('is-done');
+    foot.textContent = 'Done — opening your brief.';
+  }
+
+  function fail(message) {
+    clearTimeout(guessTimer); clearTimeout(pollTimer);
+    working.hidden = true;
+    errMsg.textContent = message;
+    errBox.hidden = false;
+  }
+
+  fetch('/step4/prepare', { method: 'POST', headers: { 'Accept': 'application/json' } })
+    .then(res => res.json().catch(() => ({ ok: false, error: 'The server sent back something unreadable.' })))
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'FORMA could not finish reading your project.');
+      finish();
+      // Let the last room fill and the final ticks land before the page turns over.
+      setTimeout(() => window.location.replace('{{ url_for("step4") }}'), 650);
+    })
+    .catch(err => fail(err.message || 'Something went wrong on the way to your brief.'));
+
+  document.getElementById('working-retry').addEventListener('click', () => {
+    window.location.reload();
+  });
+})();
+</script>
+{% endblock %}

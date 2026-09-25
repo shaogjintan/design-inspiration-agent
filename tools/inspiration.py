@@ -9,10 +9,10 @@ These are thin re-exports from app.py.
 """
 
 
-def analyse_inspiration(inspiration, rooms, memory=None):
+def analyse_inspiration(inspiration, rooms):
     """
     Send uploaded inspiration images to Claude (multimodal) and extract
-    structured visual characteristics, grounded in project memory.
+    structured visual characteristics.
 
     Returns dict with keys:
       dominant_styles, colours, materials, lighting, forms,
@@ -20,7 +20,7 @@ def analyse_inspiration(inspiration, rooms, memory=None):
       summary, source, confidence, image_count
     """
     import app
-    return app.analyse_inspiration(inspiration, rooms, memory=memory)
+    return app.analyse_inspiration(inspiration, rooms)
 
 
 def inspiration_analysis_fallback(style, palette, custom_colour, vibes, image_count):

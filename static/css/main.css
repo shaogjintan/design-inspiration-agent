@@ -12,7 +12,11 @@
   --stone-dark:   #B5AFA5;
   --ink:          #1C1B19;
   --ink-light:    #4A4844;
-  --ink-muted:    #8A8580;
+  /* 5.23:1 on cream. The previous #8A8580 was 3.36:1 — under the 4.5:1 body
+     floor — and this token carries nav, hints, labels and captions throughout,
+     so it was failing at the sizes that need contrast most. Warm-tinted from
+     the ink hue rather than a neutral grey. */
+  --ink-muted:    #6B6660;
   --gold:         #C9A96E;
   --gold-light:   #E8D5B0;
   --white:        #FFFFFF;
@@ -30,12 +34,19 @@
   --shadow-md:    0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
   --shadow-lg:    0 12px 40px rgba(0,0,0,.1), 0 4px 12px rgba(0,0,0,.06);
 
-  --transition:   all .2s ease;
+  /* Strong custom curves — the CSS keywords are too weak to feel intentional. */
+  --ease-out:     cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out:  cubic-bezier(.77, 0, .175, 1);
+
+  /* Named properties, never `all`: `all` also tweens layout properties and
+     anything a later rule happens to change. */
+  --transition:   color .2s ease, background-color .2s ease, border-color .2s ease,
+                  box-shadow .2s ease, opacity .2s ease, transform .2s var(--ease-out);
   --max-w:        1100px;
   --max-w-form:   720px;
 }
 
-html { font-size: 16px; scroll-behavior: smooth; }
+html { font-size: 16px; scroll-behavior: smooth; background: var(--cream); }
 
 body {
   background: var(--cream);
@@ -160,10 +171,14 @@ em { font-style: italic; color: var(--gold); }
 /* ── Flash messages ─────────────────────────────────────────────────────────── */
 .flash-wrap { max-width: var(--max-w-form); margin: 0 auto 1.5rem; }
 .flash {
+  animation: flash-in .3s var(--ease-out) both;
   padding: .75rem 1.25rem;
   border-radius: var(--radius-sm);
   font-size: .875rem;
   margin-bottom: .5rem;
+}
+@keyframes flash-in {
+  from { opacity: 0; transform: translateY(-6px); }
 }
 .flash--error   { background: #FEF0EE; color: var(--error); border-left: 3px solid var(--error); }
 .flash--success { background: #EEF8F2; color: var(--success); border-left: 3px solid var(--success); }
@@ -209,12 +224,16 @@ em { font-style: italic; color: var(--gold); }
   line-height: 1.7;
 }
 
+/* Four across, or two by two — never three and an orphan. */
 .hero__features {
-  display: flex;
-  justify-content: center;
-  gap: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem 1.5rem;
   margin-top: 3.5rem;
-  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .hero__features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .hero__feature {
@@ -425,7 +444,8 @@ em { font-style: italic; color: var(--gold); }
   background: var(--white);
 }
 
-.tile--selected {
+.tile--selected,
+.tile:has(input:checked) {
   border-color: var(--ink) !important;
   background: var(--white) !important;
   box-shadow: inset 0 0 0 1px var(--ink);
@@ -470,11 +490,21 @@ em { font-style: italic; color: var(--gold); }
   box-shadow: var(--shadow-sm);
 }
 
-.colour-swatch:hover .colour-swatch__chip,
-.colour-swatch--selected .colour-swatch__chip {
+.colour-swatch--selected .colour-swatch__chip,
+.colour-swatch:has(input:checked) .colour-swatch__chip {
   border-color: var(--ink);
   transform: scale(1.12);
 }
+
+/* Touch fires :hover on tap, which would leave a swatch looking picked. */
+@media (hover: hover) and (pointer: fine) {
+  .colour-swatch:hover .colour-swatch__chip {
+    border-color: var(--ink);
+    transform: scale(1.12);
+  }
+}
+
+.colour-swatch:active .colour-swatch__chip { transform: scale(1.04); }
 
 .colour-swatch__name {
   font-size: .65rem;
@@ -713,12 +743,22 @@ em { font-style: italic; color: var(--gold); }
   font-weight: 500;
   color: var(--ink);
   letter-spacing: .02em;
+  text-align: left;
+}
+
+.accordion-header__hint {
+  display: block;
+  font-size: .7rem;
+  font-weight: 400;
+  color: var(--ink-muted);
+  letter-spacing: .01em;
+  margin-top: .15rem;
 }
 
 .accordion-header__chevron {
   color: var(--ink-muted);
   font-size: .9rem;
-  transition: transform .2s ease;
+  transition: transform .25s var(--ease-out);
 }
 
 .accordion-item--open .accordion-header__chevron { transform: rotate(180deg); }
@@ -728,7 +768,15 @@ em { font-style: italic; color: var(--gold); }
   padding: 0 1.25rem 1.25rem;
 }
 
-.accordion-item--open .accordion-body { display: block; }
+.accordion-item--open .accordion-body {
+  display: block;
+  animation: accordion-in .22s var(--ease-out);
+}
+
+/* Opening only — closing stays instant, since the user is already moving on. */
+@keyframes accordion-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
 
 /* ── Check grid (fixtures checklist) ────────────────────────────────────────── */
 .check-grid {
@@ -755,13 +803,54 @@ em { font-style: italic; color: var(--gold); }
 
 .check-tile:hover { border-color: var(--stone-dark); color: var(--ink); }
 
-.check-tile--checked {
+/* The real input is visually hidden, so the tile's whole appearance came from
+   a class applied by a change listener — which never fires for boxes the
+   server rendered as checked. They looked unselected on every revisit, and
+   clicking one to "restore" it actually cleared it. :has() reads the input
+   directly; the class stays for anything that cannot do :has(). */
+.check-tile--checked,
+.check-tile:has(input:checked) {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--white);
 }
 
 .check-tile__label { pointer-events: none; }
+
+/* Items read out of the room's own description rather than offered by the
+   catalogue. Gold marks them as FORMA's reading of what was written, so an
+   untouched one is visibly a suggestion; ticked, it is an item like any
+   other and takes the solid fill above. */
+.check-tile--found {
+  border-color: var(--gold);
+  border-style: dashed;
+  background: var(--white);
+}
+
+.check-tile--found:has(input:checked),
+.check-tile--found.check-tile--checked {
+  border-style: solid;
+}
+
+.check-tile--new {
+  animation: tile-in .25s ease-out both;
+}
+
+@keyframes tile-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.items-note {
+  margin: .5rem 0 0;
+  font-size: .72rem;
+  color: var(--ink-muted);
+  min-height: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-tile--new { animation: none; }
+}
 
 /* ── Prompt counter ─────────────────────────────────────────────────────────── */
 .prompt-counter {
@@ -799,7 +888,10 @@ em { font-style: italic; color: var(--gold); }
   background: #333;
   border-color: #333;
   box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover { transform: translateY(-1px); }
 }
 
 .btn--ghost {
@@ -825,6 +917,15 @@ em { font-style: italic; color: var(--gold); }
 }
 
 .btn--lg { padding: .875rem 2.5rem; font-size: 1rem; }
+
+/* Press feedback: the interface heard you. Declared after the hovers so it
+   wins over the lift while the pointer is down. */
+.btn:active,
+.btn--primary:active { transform: scale(.97); transition-duration: .1s; }
+
+.tile:active,
+.check-tile:active,
+.room-tab:active { transform: scale(.98); }
 .btn--sm { padding: .5rem 1.1rem; font-size: .8rem; }
 
 .btn:disabled {
@@ -963,17 +1064,26 @@ em { font-style: italic; color: var(--gold); }
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity .4s ease, transform .4s ease, box-shadow .2s ease;
-}
-
-.room-result-card--visible {
-  opacity: 1;
-  transform: translateY(0);
+  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out), box-shadow .2s ease;
 }
 
 .room-result-card:hover { box-shadow: var(--shadow-lg); }
+
+/* The entrance starts hidden, so arm it only when JS is present to finish it —
+   otherwise a script error leaves every room concept invisible. */
+.js .room-result-card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.js .room-result-card--visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .room-result-card { opacity: 1; transform: none; }
+}
 
 .room-result-card__header {
   display: flex;
@@ -989,18 +1099,6 @@ em { font-style: italic; color: var(--gold); }
   color: var(--ink);
 }
 
-.room-result-card__badge {
-  font-size: .6rem;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  padding: .2rem .6rem;
-  border-radius: 20px;
-  font-weight: 500;
-}
-
-.room-result-card__badge--high   { background: #FEF0EE; color: #C0392B; }
-.room-result-card__badge--medium { background: #FEF9EE; color: #B7770D; }
-.room-result-card__badge--low    { background: #EEF8F2; color: #27AE60; }
 
 /* Render placeholder */
 .render-placeholder {
@@ -1066,6 +1164,44 @@ em { font-style: italic; color: var(--gold); }
   margin-bottom: .75rem;
 }
 
+.plan-observations {
+  margin: .35rem 0 0 1rem;
+  padding: 0;
+  font-size: .8rem;
+  color: var(--ink-light);
+  line-height: 1.6;
+}
+
+.plan-observations li { margin-bottom: .25rem; }
+
+.room-direction {
+  display: flex;
+  flex-direction: column;
+  /* Groups had no separation at all — only the label-to-tags gap inside each
+     one — so MATERIALS landed directly against the colour tags above it. */
+  gap: .8rem;
+  border-top: 1px solid var(--stone);
+  padding-top: .85rem;
+  margin-bottom: .75rem;
+}
+
+.room-direction .inspo-tag-group__label { margin-bottom: -.15rem; }
+
+.room-direction__text {
+  font-size: .8rem;
+  color: var(--ink-light);
+  line-height: 1.65;
+  margin-bottom: .6rem;
+}
+
+.room-direction__note {
+  font-size: .75rem;
+  color: var(--ink-muted);
+  font-style: italic;
+  line-height: 1.6;
+  margin-top: .6rem;
+}
+
 .room-result-card__items { display: flex; flex-wrap: wrap; gap: .35rem; }
 
 .room-result-card__items-label {
@@ -1105,7 +1241,16 @@ em { font-style: italic; color: var(--gold); }
   padding-top: .5rem;
 }
 
-.legend-item { display: flex; align-items: center; gap: .5rem; }
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0 -.5rem;
+  padding: .3rem .5rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: background-color .15s ease;
+}
 
 .legend-dot {
   width: 12px;
@@ -1223,9 +1368,21 @@ em { font-style: italic; color: var(--gold); }
 
 .inspo-analysis__summary {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   align-items: flex-start;
 }
+
+/* The meta block beside this holds its min-content width, so with min-width:0
+   the summary would shrink to a one-character column rather than wrapping the
+   meta below it. A real minimum forces the wrap instead; the min() keeps it
+   from overflowing on a phone. */
+.inspo-analysis__summary-text {
+  flex: 1 1 22rem;
+  min-width: min(100%, 18rem);
+}
+
+.inspo-analysis__meta { min-width: 0; }
 
 .inspo-analysis__summary-icon {
   font-size: 1.4rem;
@@ -1268,7 +1425,10 @@ em { font-style: italic; color: var(--gold); }
 .inspo-analysis__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 1rem;
+  /* Row gap well above the column gap: once a group's tags wrap to two lines
+     the next row's label would otherwise sit right on top of them. */
+  gap: 1.6rem 1rem;
+  align-items: start;
 }
 
 .inspo-tag-group {
@@ -1293,17 +1453,13 @@ em { font-style: italic; color: var(--gold); }
 
 .inspo-tag {
   display: inline-block;
-  max-width: 100%;
-  padding: .25em .7em;
+  padding: .2em .65em;
   background: var(--cream);
   border: 1px solid var(--stone);
-  border-radius: 14px;
+  border-radius: 99px;
   font-size: .78rem;
-  line-height: 1.35;
   color: var(--ink-light);
-  white-space: normal;          /* allow long descriptions to wrap */
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
 }
 
 .inspo-analysis__outliers {
@@ -1467,28 +1623,24 @@ em { font-style: italic; color: var(--gold); }
 
 .decision-item {
   display: flex;
-  flex-direction: column;
-  gap: .3rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .75rem;
   font-size: .875rem;
-  padding: .7rem 1rem;
+  padding: .6rem 1rem;
   background: var(--cream);
-  border-left: 3px solid var(--success);
   border-radius: var(--radius-md);
 }
 
-.decision-item__q {
-  color: var(--ink-muted);
-  font-size: .82rem;
-}
-
-.decision-item__a {
+.decision-item__title {
+  font-weight: 500;
   color: var(--ink);
 }
 
-.decision-item__check {
-  color: var(--success);
-  font-weight: 700;
-  margin-right: .2rem;
+.decision-item__answer {
+  color: var(--ink-light);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Agent Activity / Trace ──────────────────────────────────────────────────── */
@@ -1715,7 +1867,524 @@ em { font-style: italic; color: var(--gold); }
   font-weight: 500;
 }
 
-/* ── Room concept visual (Step 4) ────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Step 4 — working state
+   The agent run is genuinely slow, so the wait shows the real pipeline rather
+   than a spinner. Stages advance on measured timings, but the last one is only
+   marked done when the response actually lands.
+   ───────────────────────────────────────────────────────────────────────────── */
+.working {
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 2rem 1.75rem;
+  box-shadow: 0 1px 2px rgba(28, 27, 25, .04),
+              0 8px 24px -14px rgba(28, 27, 25, .16);
+}
+
+.working__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.working__step {
+  position: relative;
+  display: flex;
+  gap: .9rem;
+  padding-bottom: 1.4rem;
+}
+
+.working__step:last-child { padding-bottom: 0; }
+
+/* Connector between markers — the thread the run travels down. */
+.working__step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--stone);
+}
+
+.working__step.is-done:not(:last-child)::before { background: var(--gold-light); }
+
+.working__marker {
+  position: relative;
+  flex: none;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--stone-dark);
+  background: var(--white);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: border-color .3s cubic-bezier(.16, 1, .3, 1),
+              background-color .3s cubic-bezier(.16, 1, .3, 1),
+              color .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.working__tick {
+  width: 11px;
+  height: 11px;
+  transform: scale(.6);
+  transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Active: the ring breathes. One authored moment, bounded to 19px. */
+.working__step.is-active .working__marker {
+  border-color: var(--gold);
+}
+
+.working__step.is-active .working__marker::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold);
+  animation: working-pulse 1.9s cubic-bezier(.16, 1, .3, 1) infinite;
+}
+
+@keyframes working-pulse {
+  0%   { transform: scale(.72); opacity: .7; }
+  70%  { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+.working__step.is-done .working__marker {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--white);
+}
+
+.working__step.is-done .working__tick { transform: scale(1); }
+
+.working__text {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  min-width: 0;
+}
+
+.working__title {
+  font-size: .875rem;
+  color: var(--ink-muted);
+  letter-spacing: .01em;
+  transition: color .3s cubic-bezier(.16, 1, .3, 1),
+              font-weight .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.working__step.is-active .working__title {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.working__step.is-done .working__title { color: var(--ink-light); }
+
+.working__detail {
+  font-size: .75rem;
+  color: var(--ink-muted);
+  line-height: 1.55;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity .3s cubic-bezier(.16, 1, .3, 1),
+              max-height .35s cubic-bezier(.16, 1, .3, 1);
+}
+
+/* Only the stage in progress explains itself — the list stays scannable. */
+.working__step.is-active .working__detail {
+  opacity: 1;
+  max-height: 3rem;
+}
+
+.working__foot {
+  margin: 1rem 0 0;
+  font-size: .75rem;
+  color: var(--ink-muted);
+}
+
+.working-error {
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: center;
+}
+
+.working-error__msg {
+  font-size: .875rem;
+  color: var(--ink-light);
+  line-height: 1.6;
+  margin: 0 0 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .working { padding: 1.75rem 1.25rem 1.4rem; }
+}
+
+/* ── Browser surfaces ─────────────────────────────────────────────────────────
+   The parts we did not draw still carry the design: selection, caret, focus
+   ring, scrollbar and native control accents all ship grey by default.
+   ───────────────────────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--gold-light);
+  color: var(--ink);
+}
+
+:root {
+  accent-color: var(--gold);
+  caret-color: var(--gold);
+  scrollbar-color: var(--stone-dark) transparent;
+  scrollbar-width: thin;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+::-webkit-scrollbar-thumb {
+  background: var(--stone-dark);
+  border-radius: 99px;
+  border: 3px solid var(--cream);
+}
+
+::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+
+/* Figures read as a column, not ransom-note widths. */
+.summary-bar__val,
+.trace-entry__time,
+.priority-tag { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the state changes legible, drop the movement. */
+  .working__step.is-active .working__marker::after { animation: none; opacity: .5; }
+  .working__tick { transition: none; }
+
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LOADING SCENES
+   The waits between steps. Same cream/gold world as the rest of FORMA — the
+   character carrying a box is the only playful note, and it earns its place by
+   being the progress indicator rather than decoration beside one.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.mo-stage {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 2.75rem 2rem 2.25rem;
+  text-align: center;
+  max-width: 520px;
+  margin: 1rem auto 0;
+}
+
+.mo-plan {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin: 0 auto 1.75rem;
+  display: block;
+  overflow: visible;
+}
+
+.mo-plan__shell {
+  fill: none;
+  stroke: var(--stone);
+  stroke-width: 2;
+  stroke-dasharray: 9 7;
+}
+
+.mo-room {
+  stroke: var(--white);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mo-pop 2.6s cubic-bezier(.16, 1, .3, 1) infinite;
+}
+
+/* The app's own room tints, so the scene matches the floor plan on page 4. */
+.mo-room--1 { fill: #C9D4E0; animation-delay: 0s; }
+.mo-room--2 { fill: #D4C5B0; animation-delay: .12s; }
+.mo-room--3 { fill: #B8D4C8; animation-delay: .24s; }
+.mo-room--4 { fill: #E8D5C4; animation-delay: .36s; }
+.mo-room--5 { fill: #D5C9E0; animation-delay: .48s; }
+.mo-room--6 { fill: #C8D4B8; animation-delay: .60s; }
+
+@keyframes mo-pop {
+  0%, 4%   { transform: scale(.85); opacity: 0; }
+  16%      { transform: scale(1);   opacity: 1; }
+  20%, 86% { transform: scale(1);   opacity: 1; }
+  96%,100% { transform: scale(.85); opacity: 0; }
+}
+
+.mo-stage.is-done .mo-room {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+.mo-title {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+  color: var(--ink);
+  margin-bottom: .5rem;
+}
+
+.mo-sub {
+  font-size: .875rem;
+  color: var(--ink-muted);
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 36ch;
+}
+
+.mo-stage--error { padding-bottom: 2rem; }
+.mo-stage--error .btn { margin-top: 1.25rem; }
+
+/* ── The mover ────────────────────────────────────────────────────────────────
+   A figure carrying a box along the track. Where it stands IS the progress, so
+   the walk and the trail share one duration.
+   ───────────────────────────────────────────────────────────────────────────── */
+.mover {
+  position: relative;
+  margin-top: 2.25rem;
+  /* The walker box is full-width and translated along, so its far edge ran
+     past the page and gave every loading scene a sideways scroll. clip (not
+     hidden) keeps the vertical axis open for the hop. */
+  overflow-x: clip;
+}
+
+.mover__track {
+  position: relative;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--cream-dark);
+  overflow: hidden;
+}
+
+.mover__fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 99px;
+  background: var(--gold);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: mover-fill 2.8s cubic-bezier(.37, 0, .63, 1) infinite;
+}
+
+@keyframes mover-fill {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+.mover__walker {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  width: 100%;
+  margin-bottom: -1px;
+  animation: mover-walk 2.8s cubic-bezier(.37, 0, .63, 1) infinite;
+}
+
+@keyframes mover-walk {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(calc(100% - 44px)); }
+}
+
+.mover__figure {
+  width: 44px;
+  height: 36px;
+  display: block;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mover__box {
+  fill: var(--gold-light);
+  stroke: var(--ink);
+}
+
+/* A two-frame walk cycle — cheaper and more legible at this size than rotation. */
+.mover__legs { animation: mover-step .34s steps(1) infinite; }
+.mover__legs--b { animation-delay: .17s; }
+
+@keyframes mover-step {
+  0%,   49.9% { opacity: 1; }
+  50%, 100%   { opacity: 0; }
+}
+
+/* No bob: the walk moves the legs only. The figure's height changes when it
+   jumps and at no other time, so the jump reads as a jump. */
+
+/* Arrived: the walker parks at the end and the trail completes. */
+.mo-stage.is-done .mover__walker,
+.mo-stage.is-done .mover__fill {
+  animation-play-state: paused;
+}
+
+.mo-stage.is-done .mover__fill {
+  animation: none;
+  transform: scaleX(1);
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.mo-stage.is-done .mover__legs--b { animation: none; }
+
+.mo-stage.is-done .mover__legs--a { animation: none; opacity: 1; }
+
+@media (max-width: 640px) {
+  .mo-stage { padding: 2rem 1.25rem 1.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mo-room { animation: none; opacity: 1; transform: none; }
+  .mover__walker { animation: none; }
+  .mover__fill { animation: mover-fill 2.8s linear infinite; }
+  .mover__legs--b { animation: none; }
+}
+
+/* ── Busy submit ──────────────────────────────────────────────────────────────
+   Uploads take seconds; the button says so rather than going quiet.
+   ───────────────────────────────────────────────────────────────────────────── */
+.btn.is-busy {
+  cursor: progress;
+  opacity: .78;
+  pointer-events: none;
+}
+
+.btn.is-busy::after {
+  content: "";
+  display: inline-block;
+  width: .8em;
+  height: .8em;
+  margin-left: .55em;
+  vertical-align: -.08em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin .6s linear infinite;
+}
+
+@keyframes btn-spin { to { transform: rotate(360deg); } }
+
+/* ── Icon system ──────────────────────────────────────────────────────────────
+   Authored SVG on one 24px grid at a single stroke weight, replacing the
+   assorted geometric glyphs and the one colour emoji that previously stood in
+   for icons. They inherit colour, so they theme with everything else.
+   ───────────────────────────────────────────────────────────────────────────── */
+.icon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  vertical-align: -.125em;
+}
+
+.result-section__title .icon {
+  color: var(--gold);
+  width: .85em;
+  height: .85em;
+  margin-right: .1em;
+}
+
+.hero__feature-icon .icon { width: 1.5rem; height: 1.5rem; }
+.ai-banner__icon .icon,
+.inspo-analysis__summary-icon .icon { width: 1.25rem; height: 1.25rem; }
+.multi-upload__icon .icon,
+.render-placeholder__icon .icon { width: 1.5rem; height: 1.5rem; }
+
+/* ── Plan vs housing type notice ──────────────────────────────────────────────
+   Shown when the uploaded plan disagrees with the housing type the homeowner
+   picked. The plan wins, but never silently.
+   ───────────────────────────────────────────────────────────────────────────── */
+.plan-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--white);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-notice__body { flex: 1 1 22rem; min-width: 0; }
+
+.plan-notice__title {
+  display: block;
+  font-size: .8rem;
+  color: var(--ink);
+  margin-bottom: .3rem;
+}
+
+.plan-notice__text {
+  font-size: .8rem;
+  color: var(--ink-muted);
+  line-height: 1.6;
+  margin: 0;
+  max-width: 62ch;
+}
+
+.plan-notice__action { flex: none; }
+
+/* ── Page 4 layout corrections ────────────────────────────────────────────── */
+
+/* Section titles are .75rem, so an icon sized in em came out as an illegible
+   speck. Fix the size in px and align it optically to the cap height. */
+.result-section__title .icon {
+  width: 15px;
+  height: 15px;
+  margin-right: .15rem;
+}
+
+/* The step rail is wider than a phone; keep the numbered dots, drop the words. */
+@media (max-width: 560px) {
+  .nav__steps { flex-wrap: wrap; gap: .35rem .25rem; }
+  .nav__step-name { display: none; }
+  .nav__step-line { width: 14px; margin: 0 .1rem; }
+}
+
+@media (max-width: 480px) {
+  .inspo-analysis-card { padding: 1.25rem; }
+  .inspo-analysis__meta { width: 100%; }
+  .plan-notice { flex-direction: column; align-items: flex-start; }
+}
+
+/* Long unbroken strings wrap rather than widening their container. The page
+   width itself is set by .step-wrap further up — do not override it here. */
+.inspo-analysis__summary-text,
+.room-result-card__concept,
+.plan-notice__text { overflow-wrap: break-word; }
+
+/* ── Room concept visual (ported from main) ───────────────────────────────── */
 .room-concept-visual {
   position: relative;
   width: 100%;
@@ -1739,29 +2408,584 @@ em { font-style: italic; color: var(--gold); }
   border-radius: 99px;
 }
 
-/* ── Refine feasibility verdict ──────────────────────────────────────────────── */
-.refine-feasibility {
+/* Second line of the room analysis — the practical read on budget, priority
+   and constraints. Separated so the two lines do not run together. */
+.ai-banner__text--practical {
+  margin-top: .45rem;
+  padding-top: .45rem;
+  border-top: 1px solid var(--cream-dark);
+  color: var(--ink-muted);
+  font-size: .85rem;
+}
+
+/* ── Mover, determinate ───────────────────────────────────────────────────────
+   On page 4 the same figure carries real progress: --mover-progress (0-1) is
+   set from the stage the agent is on, and the figure walks there over about as
+   long as the stage takes (--mover-dur), so it is always moving while the run
+   is, never marking time. Its track is the card's footer rule — one line, not
+   a bar above a divider.
+   ───────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Most of each stage's walk early, then slowing — if a stage runs long the
+     figure is still inching forward, not stopped. */
+  --ease-creep: cubic-bezier(.25, .6, .35, 1);
+}
+
+.mover--steps {
+  /* The walker is absolutely positioned at bottom:100% of this box, so padding
+     here would push the track away from the figure rather than the figure away
+     from the text. The clearance has to be margin, outside the box: 36px of
+     figure plus its 30px hop, then a little air. */
+  margin-top: 4.75rem;
+}
+
+.mover--steps .mover__track {
+  height: 2px;
+}
+
+.mover--steps .mover__walker,
+.mover--steps .mover__fill {
+  animation: none;
+  transition: transform var(--mover-dur, .8s) var(--mover-ease, var(--ease-out));
+}
+
+.mover--steps .mover__walker {
+  transform: translateX(calc((100% - 44px) * var(--mover-progress, 0)));
+}
+
+.mover--steps .mover__fill {
+  transform: scaleX(var(--mover-progress, 0));
+}
+
+/* The legs keep stepping while there is still work to do. */
+.mover--steps .mover__legs { animation-play-state: running; }
+.working.is-done .mover--steps .mover__legs--b { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mover--steps .mover__walker,
+  .mover--steps .mover__fill { transition: none; }
+}
+
+/* The jump fires on a click anywhere on the page, not on a timer. Its own
+   element, so it never fights the walker's horizontal travel. No scaling —
+   the figure keeps its shape and simply leaves the ground and lands. */
+.mover__figure.is-hopping {
+  animation: mover-hop .72s cubic-bezier(.33, 0, .3, 1) 1;
+}
+
+@keyframes mover-hop {
+  0%   { transform: translateY(0); }
+  34%  { transform: translateY(-30px); }   /* up */
+  62%  { transform: translateY(0); }       /* land */
+  76%  { transform: translateY(-8px); }    /* bounce */
+  88%  { transform: translateY(0); }
+  94%  { transform: translateY(-2px); }    /* settle */
+  100% { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mover__figure.is-hopping { animation: none; }
+}
+
+/* A thumbnail restored from a previous visit, so it reads as already-saved
+   rather than as a file just picked in this session. */
+.thumb--saved { position: relative; }
+
+.thumb--saved::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--gold);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Autosave indicator — quiet by default, so it reassures without nagging. */
+.autosave-status {
+  margin-right: auto;
+  font-size: .75rem;
+  color: var(--ink-muted);
+  align-self: center;
+  min-height: 1em;
+}
+
+/* ── Page transitions ─────────────────────────────────────────────────────────
+   Every page is a real navigation, so the browser's cross-document View
+   Transitions carry the motion — no JS holding the click, and browsers without
+   support simply cut as before. The nav is lifted out as its own layer and
+   stays put; only the page content moves. main.js sets html[data-vt] to the
+   direction of travel through the brief:
+     forward — content slides left, the way a wizard advances
+     back    — the mirror of forward
+     intro   — leaving the landing page: the hero lifts away, the studio rises
+     (none)  — same step (loading scene → result, a re-post): a soft rise
+   ───────────────────────────────────────────────────────────────────────────── */
+@view-transition { navigation: auto; }
+
+.nav { view-transition-name: site-nav; }
+
+/* The filled step dot travels along the rail to its new step instead of one
+   dot fading out and another fading in. */
+.nav__step--active .nav__step-num { view-transition-name: step-dot; }
+
+::view-transition-group(site-nav),
+::view-transition-old(site-nav),
+::view-transition-new(site-nav) {
+  animation-duration: .3s;
+  animation-timing-function: var(--ease-out);
+}
+
+::view-transition-group(step-dot) {
+  animation-duration: .45s;
+  animation-timing-function: var(--ease-in-out);
+}
+
+/* Default: same step. Old content steps back quickly; new content rises. */
+::view-transition-old(root) {
+  animation: vt-out .18s var(--ease-out) both;
+}
+::view-transition-new(root) {
+  animation: vt-rise .36s var(--ease-out) .06s both;
+}
+
+html[data-vt="forward"]::view-transition-old(root) { animation-name: vt-out-left; }
+html[data-vt="forward"]::view-transition-new(root) { animation-name: vt-in-right; }
+html[data-vt="back"]::view-transition-old(root)    { animation-name: vt-out-right; }
+html[data-vt="back"]::view-transition-new(root)    { animation-name: vt-in-left; }
+
+/* Leaving the landing page is a one-time moment, so it can take a little
+   longer and carry a touch more depth than moving between steps. */
+html[data-vt="intro"]::view-transition-old(root) {
+  animation: vt-lift .3s var(--ease-out) both;
+}
+html[data-vt="intro"]::view-transition-new(root) {
+  animation: vt-rise-far .6s var(--ease-out) .12s both;
+}
+
+@keyframes vt-out       { to   { opacity: 0; transform: translateY(-6px); } }
+@keyframes vt-rise      { from { opacity: 0; transform: translateY(10px); } }
+@keyframes vt-out-left  { to   { opacity: 0; transform: translateX(-28px); } }
+@keyframes vt-out-right { to   { opacity: 0; transform: translateX(28px); } }
+/* A 2px blur on arrival blends the two snapshots, so the swap reads as one
+   motion rather than two pages overlapping. */
+@keyframes vt-in-right  { from { opacity: 0; transform: translateX(28px);  filter: blur(2px); } }
+@keyframes vt-in-left   { from { opacity: 0; transform: translateX(-28px); filter: blur(2px); } }
+@keyframes vt-lift {
+  to { opacity: 0; transform: translateY(-20px) scale(.985); filter: blur(3px); }
+}
+@keyframes vt-rise-far {
+  from { opacity: 0; transform: translateY(24px); filter: blur(3px); }
+}
+
+/* Reduced motion keeps the crossfade — it still explains the change — and
+   drops the travel. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*) { animation-duration: .01ms !important; }
+  ::view-transition-old(root),
+  html[data-vt]::view-transition-old(root) { animation: vt-fade-out .15s ease both !important; }
+  ::view-transition-new(root),
+  html[data-vt]::view-transition-new(root) { animation: vt-fade-in .15s ease both !important; }
+}
+@keyframes vt-fade-out { to   { opacity: 0; } }
+@keyframes vt-fade-in  { from { opacity: 0; } }
+
+/* Browsers without cross-document transitions (Firefox) get the arrival half
+   only, on the content, so pages still ease in rather than snapping. */
+html.vt-fallback .main {
+  animation: vt-rise .36s var(--ease-out) both;
+}
+
+/* ── Landing entrance ─────────────────────────────────────────────────────────
+   Seen once per visit, so it can afford a stagger. Short gaps (60ms) so the
+   CTA is readable almost immediately; nothing blocks clicking.
+   ───────────────────────────────────────────────────────────────────────────── */
+.js .hero > * {
+  animation: hero-in .7s var(--ease-out) both;
+}
+.js .hero > :nth-child(2) { animation-delay: .06s; }
+.js .hero > :nth-child(3) { animation-delay: .12s; }
+.js .hero > :nth-child(4) { animation-delay: .18s; }
+.js .hero > :nth-child(5) { animation-delay: .24s; }
+.js .hero > :nth-child(6) { animation-delay: .30s; }
+
+/* Arriving back on the landing via a page transition, the transition already
+   moves the page — a second entrance on top would feel like a stutter. */
+html[data-vt] .hero > * { animation: none; }
+
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(12px); }
+}
+
+/* ── Brief sections ───────────────────────────────────────────────────────────
+   The brief comes back as five <h4> sections. They take the site's eyebrow
+   treatment so the brief scans like the rest of the page rather than as one
+   block of prose.
+   ───────────────────────────────────────────────────────────────────────────── */
+.brief-card__body h4 {
+  font-family: var(--font-sans);
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 1.5rem 0 .45rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cream-dark);
+}
+
+.brief-card__body h4:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Model-written tags mix "electric magenta" with "Oiled Oak"; one case for all. */
+.inspo-tag { text-transform: capitalize; }
+
+/* ── Page 4 wait: the brief taking shape ──────────────────────────────────────
+   The step list only filled a third of the card. The rest shows the brief
+   being assembled: one bar per section, written in order while the brief is
+   being written, then the rooms settle in once they are drafted. Blocks follow
+   the same is-active / is-done states as the list. The walker below stays the
+   one moving thing; nothing here competes with it.
+   ───────────────────────────────────────────────────────────────────────────── */
+.working__body {
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: start;
+}
+
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-left: 2.5rem;
+  border-left: 1px solid var(--cream-dark);
+  min-width: 0;
+}
+
+.draft__title {
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+/* Brief sections: a label and a single bar each. */
+.draft__sections {
+  display: grid;
+  gap: 1rem;
+  max-width: 30rem;
+}
+
+.draft__section {
+  display: grid;
+  gap: .4rem;
+}
+
+.draft__label {
+  font-size: .75rem;
+  color: var(--ink-muted);
+  transition: color .3s ease;
+}
+
+.draft__line {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--cream-dark);
+  overflow: hidden;
+}
+
+.draft__ink {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* Written in order, about as long as the stage itself takes (~9s). */
+.draft__sections.is-active .draft__ink {
+  animation: draft-write 1.4s cubic-bezier(.37, 0, .63, 1) both;
+  animation-delay: calc(var(--i) * 1.7s);
+}
+.draft__sections.is-active .draft__label {
+  animation: draft-label .3s ease both;
+  animation-delay: calc(var(--i) * 1.7s);
+}
+
+.draft__sections.is-done .draft__ink { transform: none; }
+.draft__sections.is-done .draft__label { color: var(--ink-light); }
+
+@keyframes draft-write { to { transform: none; } }
+@keyframes draft-label { to { color: var(--ink); } }
+
+/* Rooms: quiet while pending, set once drafted. No motion of their own. */
+.draft__rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.draft__room {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: .25rem .7rem;
+  border: 1px solid var(--stone);
+  border-radius: 99px;
+  font-size: .75rem;
+  color: var(--ink-muted);
+  background: var(--cream);
+  /* A glass tube: light caught along the top, a little depth inside. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), inset 0 -1px 2px rgba(28, 27, 25, .06);
+  transition: border-color .3s ease, color .3s ease;
+}
+
+.draft__room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .55) 0%, rgba(255, 255, 255, 0) 48%);
+  pointer-events: none;
+}
+
+.draft__room-name { position: relative; z-index: 2; }
+
+/* ── The liquid ───────────────────────────────────────────────────────────────
+   A body that rises through the chip; its surface two wave layers sliding in
+   opposite directions at different speeds — the parallax is what reads as
+   depth — and a few bubbles while it pours. The level is real progress: it
+   creeps up slowly while the room is drafted and surges full the moment the
+   server says it is done, the surface rising out of sight over the top.
+   Only transforms move, so it stays smooth while the page is busy.
+   ───────────────────────────────────────────────────────────────────────────── */
+.liquid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  /* Empty: the body and the crest riding above it both below the chip. */
+  transform: translateY(calc(100% + 10px));
+  transition: transform .6s var(--ease-out);
+}
+
+.draft__room.is-drafting .liquid {
+  /* Settles a little over half full while drafting, so finishing still
+     shows a real surge to full. */
+  transform: translateY(62%);
+  transition: transform 6s var(--ease-creep);
+}
+
+/* Full: the body fills the chip and the surface sits just above its top,
+   out of sight. */
+.draft__room.is-done .liquid {
+  transform: translateY(0);
+  transition: transform .7s var(--ease-out);
+}
+
+.liquid__wave {
+  position: absolute;
+  left: 0;
+  top: -7px;
+  width: 200%;
+  height: calc(100% + 7px);
+  /* One period of the surface is half the chip; sliding the layer by its own
+     half (a whole chip) loops without a seam. */
+  background:
+    var(--wave) repeat-x 0 0 / 25% 8px,
+    linear-gradient(var(--liquid), var(--liquid)) no-repeat 0 7px / 100% 100%;
+  animation: liquid-flow 2.4s linear infinite;
+}
+
+.liquid__wave--back {
+  --liquid: #D9BE8A;
+  --wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4 Q10 0 20 4 T40 4 V8 H0 Z' fill='%23D9BE8A'/%3E%3C/svg%3E");
+  top: -9px;                               /* a little higher, behind */
+  opacity: .6;
+  animation-duration: 3.6s;
+  animation-direction: reverse;
+}
+
+.liquid__wave--front {
+  --liquid: #E8D5B0;
+  --wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4 Q10 0 20 4 T40 4 V8 H0 Z' fill='%23E8D5B0'/%3E%3C/svg%3E");
+}
+
+@keyframes liquid-flow {
+  to { transform: translateX(-50%); }
+}
+
+.liquid__bubble {
+  position: absolute;
+  bottom: 3px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .75);
+  opacity: 0;
+}
+.liquid__bubble:nth-of-type(3) { left: 22%; }
+.liquid__bubble:nth-of-type(4) { left: 57%; width: 2px; height: 2px; }
+.liquid__bubble:nth-of-type(5) { left: 80%; }
+
+.draft__room.is-drafting .liquid__bubble { animation: liquid-bubble 2.2s linear infinite; }
+.draft__room.is-drafting .liquid__bubble:nth-of-type(4) { animation-delay: .7s; animation-duration: 2.6s; }
+.draft__room.is-drafting .liquid__bubble:nth-of-type(5) { animation-delay: 1.4s; }
+
+@keyframes liquid-bubble {
+  0%   { opacity: 0;  transform: translateY(0); }
+  15%  { opacity: .9; }
+  60%  { opacity: .7; }
+  100% { opacity: 0;  transform: translateY(-9px); }
+}
+
+.draft__room.is-drafting,
+.draft__room.is-done {
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still fills — as a flat level, without waves or bubbles. */
+  .liquid__wave { animation: none; }
+  .draft__room .liquid__bubble { animation: none; opacity: 0; }
+}
+
+@media (max-width: 760px) {
+  .working__body { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .draft {
+    padding-left: 0;
+    padding-top: 1.75rem;
+    border-left: 0;
+    border-top: 1px solid var(--cream-dark);
+  }
+}
+
+
+/* ── Page 4: finding your way round ───────────────────────────────────────────
+   A long page, so a bar under the site nav to move between its sections,
+   marking the one in view. The floor plan and the room cards point at each
+   other: a room on the plan or in its key leads to its card, and each card's
+   "See on plan" lights its room in the drawing.
+   ───────────────────────────────────────────────────────────────────────────── */
+.page-nav {
+  position: sticky;
+  top: var(--site-nav-h, 66px);
+  z-index: 50;
+  margin: 0 0 2rem;
+  background: color-mix(in srgb, var(--cream) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--cream-dark);
+}
+
+.page-nav__inner {
+  display: flex;
+  gap: .25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: .5rem 0;
+}
+.page-nav__inner::-webkit-scrollbar { display: none; }
+
+.page-nav__link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .4rem .8rem;
+  border-radius: 99px;
+  font-size: .8rem;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.page-nav__link[aria-current="true"] {
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: inset 0 0 0 1px var(--stone);
+}
+
+.page-nav__count {
+  min-width: 1.2rem;
+  padding: 0 .35rem;
+  border-radius: 99px;
+  background: var(--gold);
+  color: var(--white);
+  font-size: .68rem;
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .page-nav__link:hover { color: var(--ink); }
+  .legend-item:hover { background: var(--cream); }
+  .room-result-card__plan-link:hover { color: var(--ink); }
+}
+
+/* Sections land below both sticky bars, not under them. */
+.result-section { scroll-margin-top: calc(var(--site-nav-h, 66px) + 4rem); }
+.room-result-card { scroll-margin-top: calc(var(--site-nav-h, 66px) + 5rem); }
+
+/* Room card header: name, then a quiet priority and the way to the plan. */
+.room-result-card__meta {
   display: flex;
   align-items: center;
-  gap: .6rem;
-  flex-wrap: wrap;
-  margin: .25rem 0 .5rem;
+  gap: .75rem;
+  flex: none;
 }
-.refine-feasibility__badge {
+
+.priority-tag {
+  font-size: .68rem;
+  color: var(--ink-muted);
+}
+.priority-tag--high { color: var(--ink-light); font-weight: 500; }
+
+.room-result-card__plan-link {
   font-size: .72rem;
-  font-weight: 600;
-  letter-spacing: .04em;
-  padding: .22em .7em;
-  border-radius: 99px;
-  white-space: nowrap;
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--gold-light);
+  transition: color .15s ease;
 }
-.refine-feasibility__badge--feasible    { background: #D4EDDA; color: #155724; }
-.refine-feasibility__badge--tradeoffs   { background: #FFF3CD; color: #856404; }
-.refine-feasibility__badge--notfeasible { background: #F8D7DA; color: #721C24; }
-.refine-feasibility__note {
-  font-size: .82rem;
-  color: var(--ink-light);
-  line-height: 1.4;
+
+/* A room arrived at from the plan says so, then settles. */
+.room-result-card.is-focused {
+  box-shadow: 0 0 0 2px var(--gold), var(--shadow-lg);
+}
+.room-result-card {
+  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out),
+              box-shadow .6s var(--ease-out);
+}
+
+/* The plan's rooms as targets: invisible until pointed at or asked for. */
+.plan-room { cursor: pointer; }
+.plan-room__floor {
+  fill: var(--gold);
+  fill-opacity: 0;
+  transition: fill-opacity .2s ease;
+}
+.plan-room__edge {
+  fill: none;
+  stroke: var(--gold);
+  stroke-opacity: 0;
+  stroke-width: 3;
+  stroke-linecap: square;
+  pointer-events: none;
+  transition: stroke-opacity .2s ease;
+}
+.plan-room.is-lit .plan-room__floor { fill-opacity: .18; }
+.plan-room.is-lit .plan-room__edge { stroke-opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .plan-room:hover .plan-room__floor { fill-opacity: .12; }
+  .plan-room:hover .plan-room__edge { stroke-opacity: .7; }
 }
 
 /* ── Inspirations grid (Step 4) ─────────────────────────────────────────────── */
