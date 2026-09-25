@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set current_step = 3 %}
 {% block title %}FORMA — Inspiration{% endblock %}
 {% block content %}
@@ -12,14 +13,17 @@
 
   <!-- AI Room Summary Banner -->
   <div class="ai-banner">
-    <div class="ai-banner__icon">◈</div>
+    <div class="ai-banner__icon">{{ icon("home") }}</div>
     <div class="ai-banner__body">
       <div class="ai-banner__label">AI Room Analysis</div>
       <div class="ai-banner__text">{{ ai_room_summary }}</div>
+      {% if ai_room_practical %}
+      <div class="ai-banner__text ai-banner__text--practical">{{ ai_room_practical }}</div>
+      {% endif %}
     </div>
   </div>
 
-  <form method="POST" action="{{ url_for('step3') }}" enctype="multipart/form-data" class="form-card">
+  <form method="POST" action="{{ url_for('step3') }}" data-autosave="step3" enctype="multipart/form-data" class="form-card">
 
     <!-- Overall Theme -->
     <div class="form-section">
@@ -36,9 +40,9 @@
           ('tropical',     'Tropical',     'Lush greens, natural fibres'),
         ] %}
         {% for val, label, desc in styles %}
-        <label class="tile tile--style {% if saved.get('design_style') == val %}tile--selected{% endif %}" for="style_{{ val }}">
-          <input type="radio" name="design_style" id="style_{{ val }}" value="{{ val }}" required
-                 {% if saved.get('design_style') == val %}checked{% endif %}>
+        <label class="tile tile--style" for="style_{{ val }}">
+          <input type="radio" name="design_style" id="style_{{ val }}" value="{{ val }}"
+                 {% if saved.get("design_style") == val %}checked{% endif %} required>
           <span class="tile__label">{{ label }}</span>
           <span class="tile__meta">{{ desc }}</span>
         </label>
@@ -61,9 +65,9 @@
           ('#1A1A2E', 'Midnight'),
         ] %}
         {% for hex, name in palettes %}
-        <label class="colour-swatch {% if saved.get('colour_palette') == hex ~ '|' ~ name %}colour-swatch--selected{% endif %}" for="pal_{{ loop.index }}" title="{{ name }}">
-          <input type="radio" name="colour_palette" id="pal_{{ loop.index }}" value="{{ hex }}|{{ name }}" required
-                 {% if saved.get('colour_palette') == hex ~ '|' ~ name %}checked{% endif %}>
+        <label class="colour-swatch" for="pal_{{ loop.index }}" title="{{ name }}">
+          <input type="radio" name="colour_palette" id="pal_{{ loop.index }}" value="{{ hex }}|{{ name }}"
+                 {% if saved.get("colour_palette") == hex ~ "|" ~ name %}checked{% endif %} required>
           <span class="colour-swatch__chip" style="background:{{ hex }};"></span>
           <span class="colour-swatch__name">{{ name }}</span>
         </label>
@@ -80,7 +84,7 @@
     <!-- Per-Room Inspiration Upload -->
     <div class="form-section">
       <label class="form-label">Room Inspiration Images</label>
-      <p class="form-hint">Upload 1–5 images per room. These guide the AI's visual suggestions.</p>
+      <p class="form-hint">Upload your own reference images for each room — these are what guide the AI most. You can also browse curated samples in your chosen style and tick any you like, but your own images matter most, so please still upload them.</p>
 
       <div class="room-tabs" id="room-tabs">
         <div class="room-tabs__nav">
@@ -93,18 +97,38 @@
 
         {% for room in rooms %}
         <div class="room-panel {% if loop.first %}room-panel--active{% endif %}" data-room="{{ room.key }}">
+
+          <!-- Sample inspirations from the curated library (chosen style) -->
+          <div class="sample-inspo" data-room="{{ room.key }}">
+            <div class="sample-inspo__head">
+              <div>
+                <div class="sample-inspo__title">Sample inspirations</div>
+                <div class="sample-inspo__hint">Curated {{ room.label }} references in your chosen style. Pick a design style above first, then tick any you like — these are examples to choose from, not your own room.</div>
+              </div>
+              <button type="button" class="btn btn--ghost btn--sm sample-inspo__btn" data-room="{{ room.key }}">
+                Show sample inspirations
+              </button>
+            </div>
+            <div class="sample-inspo__status" data-room="{{ room.key }}" aria-live="polite"></div>
+            <div class="sample-inspo__grid" id="samples_{{ room.key }}"></div>
+            <!-- Comma-separated library ids the homeowner ticked for this room. -->
+            <input type="hidden" name="samples_{{ room.key }}" id="samples_input_{{ room.key }}"
+                   value="{{ (saved.get('sample_ids', {}).get(room.key, [])) | join(',') }}">
+          </div>
+
+          <label class="form-label form-label--sm" style="margin-top:1rem;">Your own images for {{ room.label }}</label>
           <div class="multi-upload" id="upload_{{ room.key }}">
             <input type="file" name="inspo_{{ room.key }}" multiple accept="image/*"
                    class="multi-upload__input" id="input_{{ room.key }}">
             <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
+              <div class="multi-upload__icon">{{ icon("upload") }}</div>
               <div class="multi-upload__text">Drop images for <strong>{{ room.label }}</strong> or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Up to 5 images</div>
             </div>
             <div class="multi-upload__previews" id="prev_{{ room.key }}">
-              {% for p in saved.get('inspo_paths', {}).get(room.key, []) %}
-                {% set u = upload_url(p) %}
-                {% if u %}<div class="thumb thumb--saved"><img src="{{ u }}" alt="saved inspiration"></div>{% endif %}
+              {% for path in saved.get('inspo_paths', {}).get(room.key, []) %}
+                {% set src = upload_url(path) %}
+                {% if src and '/sample_' not in src %}<div class="thumb thumb--saved"><img src="{{ src }}" alt="Saved inspiration for {{ room.label }}"></div>{% endif %}
               {% endfor %}
             </div>
           </div>
@@ -123,14 +147,14 @@
             <input type="file" name="inspo_overall" multiple accept="image/*"
                    class="multi-upload__input" id="input_overall">
             <div class="multi-upload__zone">
-              <div class="multi-upload__icon">◉</div>
+              <div class="multi-upload__icon">{{ icon("upload") }}</div>
               <div class="multi-upload__text">Drop overall inspiration images or <span class="upload-zone__link">browse</span></div>
               <div class="multi-upload__hint">Mood boards, magazine cuts, etc.</div>
             </div>
             <div class="multi-upload__previews" id="prev_overall">
-              {% for p in saved.get('inspo_paths', {}).get('overall', []) %}
-                {% set u = upload_url(p) %}
-                {% if u %}<div class="thumb thumb--saved"><img src="{{ u }}" alt="saved inspiration"></div>{% endif %}
+              {% for path in saved.get('inspo_paths', {}).get('overall', []) %}
+                {% set src = upload_url(path) %}
+                {% if src %}<div class="thumb thumb--saved"><img src="{{ src }}" alt="Saved whole-home inspiration"></div>{% endif %}
               {% endfor %}
             </div>
           </div>
@@ -139,8 +163,9 @@
     </div>
 
     <div class="form-actions">
+      <span class="autosave-status" id="autosave-status" aria-live="polite"></span>
       <a href="{{ url_for('step2') }}" class="btn btn--ghost">← Back</a>
-      <button type="submit" class="btn btn--primary">Continue to Vision →</button>
+      <button type="submit" class="btn btn--primary" data-busy-label="Uploading your references…">Continue to Vision →</button>
     </div>
 
   </form>
@@ -205,6 +230,81 @@
     r.addEventListener('change', () => {
       document.querySelectorAll('.colour-swatch').forEach(s => s.classList.remove('colour-swatch--selected'));
       r.closest('.colour-swatch').classList.add('colour-swatch--selected');
+    });
+  });
+
+  // ── Sample inspirations ─────────────────────────────────────────────────
+  function selectedStyle() {
+    const r = document.querySelector('input[name="design_style"]:checked');
+    return r ? r.value : '';
+  }
+
+  function pickedIds(roomKey) {
+    const input = document.getElementById(`samples_input_${roomKey}`);
+    return new Set((input.value || '').split(',').map(s => s.trim()).filter(Boolean));
+  }
+
+  function writePicked(roomKey, set) {
+    const input = document.getElementById(`samples_input_${roomKey}`);
+    input.value = Array.from(set).join(',');
+  }
+
+  function renderSamples(roomKey, images) {
+    const grid = document.getElementById(`samples_${roomKey}`);
+    const picked = pickedIds(roomKey);
+    grid.innerHTML = '';
+    if (!images.length) {
+      grid.innerHTML = '<p class="sample-inspo__empty">No samples for this room in that style yet — please upload your own images below.</p>';
+      return;
+    }
+    images.forEach(img => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'sample-tile' + (picked.has(img.id) ? ' sample-tile--selected' : '');
+      tile.dataset.id = img.id;
+      tile.innerHTML = `
+        <img class="sample-tile__img" src="${img.url}" alt="${img.style} ${img.room} sample"
+             loading="lazy" style="background:${img.dominant_colour};">
+        <span class="sample-tile__check">✓</span>
+        ${img.photographer ? `<span class="sample-tile__credit">${img.photographer} · Unsplash</span>` : ''}
+      `;
+      tile.addEventListener('click', () => {
+        const set = pickedIds(roomKey);
+        if (set.has(img.id)) { set.delete(img.id); tile.classList.remove('sample-tile--selected'); }
+        else { set.add(img.id); tile.classList.add('sample-tile--selected'); }
+        writePicked(roomKey, set);
+      });
+      grid.appendChild(tile);
+    });
+  }
+
+  document.querySelectorAll('.sample-inspo__btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const roomKey = btn.dataset.room;
+      const style = selectedStyle();
+      const status = document.querySelector(`.sample-inspo__status[data-room="${roomKey}"]`);
+      if (!style) { status.textContent = 'Choose a design style above first.'; return; }
+      status.textContent = 'Finding samples…';
+      btn.disabled = true;
+      try {
+        const res = await fetch('{{ url_for("step3_samples") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ design_style: style }),
+        });
+        const data = await res.json();
+        if (!data.ok) { status.textContent = data.error || 'Could not load samples.'; return; }
+        const group = (data.groups || []).find(g => g.room_key === roomKey);
+        const images = group ? group.images : [];
+        renderSamples(roomKey, images);
+        status.textContent = images.length
+          ? `Showing ${images.length} ${style} samples — tick the ones you like.`
+          : '';
+      } catch (e) {
+        status.textContent = 'Could not load samples. Please try again.';
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
 </script>

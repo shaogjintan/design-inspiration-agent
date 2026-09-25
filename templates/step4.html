@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% set current_step = 4 %}
 {% block title %}FORMA — Your Vision{% endblock %}
 {% block content %}
@@ -18,7 +19,7 @@
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Style</span>
-      <span class="summary-bar__val">{{ project.design_style }}</span>
+      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
     </div>
     <div class="summary-bar__item">
       <span class="summary-bar__label">Palette</span>
@@ -35,14 +36,28 @@
     </div>
   </div>
 
+  {# A long page: a bar to move around it, marking the section in view. #}
+  <nav class="page-nav" aria-label="On this page">
+    <div class="page-nav__inner">
+      {% if inspo_analysis %}<a class="page-nav__link" href="#noticed">Overview</a>{% endif %}
+      {% if inspiration_used %}<a class="page-nav__link" href="#inspirations">Inspirations</a>{% endif %}
+      {% if open_conflicts %}<a class="page-nav__link page-nav__link--attention" href="#conflicts-section">Your input <span class="page-nav__count">{{ open_conflicts | length }}</span></a>{% endif %}
+      <a class="page-nav__link" href="#brief">Brief</a>
+      <a class="page-nav__link" href="#rooms">Rooms</a>
+      {% if floor_plan_svg %}<a class="page-nav__link" href="#plan">Floor plan</a>{% endif %}
+      <a class="page-nav__link" href="#share">Share</a>
+      <a class="page-nav__link" href="#refine-section">Refine</a>
+    </div>
+  </nav>
+
   <!-- FORMA Inspiration Analysis -->
   {% if inspo_analysis %}
-  <div class="result-section">
-    <h3 class="result-section__title">◉ What FORMA Noticed</h3>
+  <div class="result-section" id="noticed">
+    <h3 class="result-section__title">{{ icon("eye") }} What FORMA Noticed</h3>
     <div class="inspo-analysis-card">
 
       <div class="inspo-analysis__summary">
-        <div class="inspo-analysis__summary-icon">◈</div>
+        <div class="inspo-analysis__summary-icon">{{ icon("brief") }}</div>
         <p class="inspo-analysis__summary-text">{{ inspo_analysis.summary }}</p>
         <div class="inspo-analysis__meta">
           {% if inspo_analysis.image_count > 0 %}
@@ -113,13 +128,35 @@
         {% endif %}
       </div>
 
+      {% if inspo_analysis.floor_plan_observations %}
+      <div class="inspo-tag-group">
+        <div class="inspo-tag-group__label">From your floor plan</div>
+        <ul class="plan-observations">
+          {% for o in inspo_analysis.floor_plan_observations %}<li>{{ o }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if inspo_analysis.room_list_mismatches %}
+      <div class="inspo-analysis__outliers">
+        <div class="inspo-analysis__outlier-icon">!</div>
+        <div>
+          <strong>Your floor plan doesn't quite match your room list:</strong>
+          <ul class="plan-observations">
+            {% for m in inspo_analysis.room_list_mismatches %}<li>{{ m }}</li>{% endfor %}
+          </ul>
+          Your room list is unchanged — go back to step 2 if you want to adjust it.
+        </div>
+      </div>
+      {% endif %}
+
       {% if inspo_analysis.possible_outliers %}
       <div class="inspo-analysis__outliers">
         <div class="inspo-analysis__outlier-icon">!</div>
         <div>
           <strong>FORMA noticed something:</strong>
-          Some of your references differ from the overall direction —
-          {% for o in inspo_analysis.possible_outliers %}{{ o }}{% if not loop.last %}, {% endif %}{% endfor %}.
+          Some of your references differ from the overall direction.
+          {% for o in inspo_analysis.possible_outliers %}{{ o | trim | trim('.') }}.{% if not loop.last %} {% endif %}{% endfor %}
           You can address this in the refinement section below.
         </div>
       </div>
@@ -129,10 +166,53 @@
   </div>
   {% endif %}
 
+  <!-- Inspirations — the reference images FORMA actually read -->
+  {% if inspiration_used %}
+  <div class="result-section" id="inspirations">
+    <h3 class="result-section__title">{{ icon("eye") }} Inspirations</h3>
+    <p class="result-section__desc">
+      The reference images FORMA worked from — the ones you uploaded plus the
+      samples you picked, grouped by room.
+    </p>
+    {% for group in inspiration_used %}
+    <div class="inspiration-group">
+      <div class="inspiration-group__label">{{ group.room_label }}</div>
+      <div class="inspiration-grid">
+        {% for img in group.images %}
+        <figure class="inspiration-card">
+          {% if img.is_sample and img.page_url %}
+          <a class="inspiration-card__link" href="{{ img.page_url }}" target="_blank" rel="noopener">
+            <img class="inspiration-card__img" src="{{ img.url }}" alt="Reference image" loading="lazy">
+          </a>
+          {% else %}
+          <img class="inspiration-card__img" src="{{ img.url }}" alt="Reference image" loading="lazy">
+          {% endif %}
+          <figcaption class="inspiration-card__caption">
+            {% if img.is_sample %}
+              <span class="inspo-tag">Sample</span>
+              {% if img.photographer %}
+              <div class="inspiration-card__credit">
+                Photo by
+                <a href="{{ img.photographer_url }}" target="_blank" rel="noopener">{{ img.photographer }}</a>
+                on <a href="{{ img.page_url }}" target="_blank" rel="noopener">Unsplash</a>
+              </div>
+              {% endif %}
+            {% else %}
+              <span class="inspo-tag">Your upload</span>
+            {% endif %}
+          </figcaption>
+        </figure>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- FORMA Conflict Checkpoints -->
   {% if open_conflicts %}
   <div class="result-section" id="conflicts-section">
-    <h3 class="result-section__title">⚑ FORMA needs your input</h3>
+    <h3 class="result-section__title">{{ icon("flag") }} FORMA needs your input</h3>
     <p class="result-section__desc">Answer these questions so FORMA can give you a more accurate design direction.</p>
 
     {% for conflict in open_conflicts %}
@@ -171,13 +251,12 @@
 
   {% if closed_conflicts %}
   <div class="result-section">
-    <h3 class="result-section__title">✓ Decisions recorded</h3>
-    <p class="result-section__desc">These answers have been applied to your design brief below. FORMA won't ask them again.</p>
+    <h3 class="result-section__title">{{ icon("check") }} Decisions recorded</h3>
     <div class="decisions-list">
       {% for conflict in closed_conflicts %}
       <div class="decision-item">
-        <div class="decision-item__q">{{ conflict.question or conflict.title }}</div>
-        <div class="decision-item__a"><span class="decision-item__check">✓</span> You chose: <strong>{{ conflict.decision }}</strong></div>
+        <span class="decision-item__title">{{ conflict.title }}</span>
+        <span class="decision-item__answer">→ {{ conflict.decision }}</span>
       </div>
       {% endfor %}
     </div>
@@ -185,43 +264,68 @@
   {% endif %}
 
   <!-- AI Design Brief -->
-  <div class="result-section">
-    <h3 class="result-section__title">◈ AI Design Brief</h3>
+  <div class="result-section" id="brief">
+    <h3 class="result-section__title">{{ icon("brief") }} AI Design Brief</h3>
     <div class="brief-card">
-      <div class="brief-card__body">{{ ai_brief | safe }}</div>
+      <div class="brief-card__body">{{ ai_brief | brief_html }}</div>
     </div>
   </div>
 
   <!-- Room Suggestions -->
-  <div class="result-section">
-    <h3 class="result-section__title">◉ Room-by-Room Suggestions</h3>
+  <div class="result-section" id="rooms">
+    <h3 class="result-section__title">{{ icon("rooms") }} Room-by-Room Suggestions</h3>
 
     <div class="room-results">
       {% for room in room_results %}
-      <div class="room-result-card">
+      <div class="room-result-card" id="room-{{ room.key }}" data-room="{{ room.label }}">
         <div class="room-result-card__header">
           <div class="room-result-card__name">{{ room.label }}</div>
-          {% if room.priority %}<div class="room-result-card__badge room-result-card__badge--{{ room.priority }}">{{ room.priority }}</div>{% endif %}
+          <div class="room-result-card__meta">
+            {% if room.priority %}<span class="priority-tag priority-tag--{{ room.priority }}">{{ room.priority | capitalize }} priority</span>{% endif %}
+            {% if floor_plan_svg %}<a class="room-result-card__plan-link" href="#plan" data-show-room="{{ room.label }}">See on plan</a>{% endif %}
+          </div>
         </div>
 
-        <!-- Data-driven concept visual (stylised, not a photoreal render) -->
+        <!-- Drawn concept visual — stylised from the palette and items, not a
+             photoreal render. Falls back to a plain plate if it failed. -->
         <div class="room-concept-visual">
           {% if room.visual %}
             {{ room.visual | safe }}
           {% else %}
           <div class="render-placeholder">
             <div class="render-placeholder__inner">
-              <div class="render-placeholder__icon">◫</div>
+              <div class="render-placeholder__icon">{{ icon("image") }}</div>
               <div class="render-placeholder__text">{{ room.label }}</div>
             </div>
           </div>
           {% endif %}
-          <div class="room-concept-visual__tag">Concept impression</div>
         </div>
 
         <div class="room-result-card__desc">
           <div class="room-result-card__prompt-label">AI Concept</div>
           <p class="room-result-card__concept">{{ room.concept }}</p>
+
+          {% if room.direction %}
+          <div class="room-direction">
+            <div class="room-result-card__prompt-label">Design Direction</div>
+            {% if room.direction.style_interpretation %}
+            <p class="room-direction__text">{{ room.direction.style_interpretation }}</p>
+            {% endif %}
+            {% for label, key in [('Colours', 'colours'), ('Materials', 'materials'), ('Lighting', 'lighting'), ('Forms', 'forms')] %}
+              {% if room.direction[key] %}
+              <div class="inspo-tag-group">
+                <div class="inspo-tag-group__label">{{ label }}</div>
+                <div class="inspo-tag-group__tags">
+                  {% for item in room.direction[key] %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% if room.direction.note %}
+            <p class="room-direction__note">{{ room.direction.note }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
 
           {% if room["items"] %}
           <div class="room-result-card__items">
@@ -238,39 +342,39 @@
   </div>
 
   <!-- 2D Floor Plan -->
-  <div class="result-section">
-    <h3 class="result-section__title">◰ Space &amp; Furniture Overview</h3>
-    <p class="result-section__desc">A schematic of your detected rooms with indicative furniture placement based on your selections. Not a scaled reconstruction of your uploaded plan.</p>
+  <div class="result-section" id="plan">
+    <h3 class="result-section__title">{{ icon("plan") }} 2D Floor Plan</h3>
     <div class="floorplan-card">
       <div class="floorplan-render" id="floorplan-svg">
         {{ floor_plan_svg | safe }}
       </div>
       <div class="floorplan-legend">
         {% for room in room_results %}
-        <div class="legend-item">
+        <a class="legend-item" href="#room-{{ room.key }}" data-room="{{ room.label }}">
           <span class="legend-dot" style="background:{{ room.colour }};"></span>
           <span class="legend-label">{{ room.label }}</span>
-        </div>
+        </a>
         {% endfor %}
       </div>
     </div>
   </div>
 
   <!-- Designer Brief Export -->
-  <div class="result-section">
-    <h3 class="result-section__title">📋 Designer Brief</h3>
+  <div class="result-section" id="share">
+    <h3 class="result-section__title">{{ icon("clipboard") }} Designer Brief</h3>
     <div class="brief-export">
       <p class="brief-export__desc">A complete brief ready to share with your interior designer, including all preferences, requirements, and AI suggestions.</p>
       <div class="brief-export__actions">
         <button class="btn btn--outline" onclick="window.print()">Print / Save PDF</button>
         <a href="{{ url_for('export_brief') }}" class="btn btn--outline">Download Brief (.txt)</a>
+        <a href="{{ url_for('export_inputs') }}" class="btn btn--outline">Download your inputs (.json)</a>
       </div>
     </div>
   </div>
 
   <!-- ── Refine with FORMA ────────────────────────────────────────────────── -->
   <div class="result-section" id="refine-section">
-    <h3 class="result-section__title">✦ Refine with FORMA</h3>
+    <h3 class="result-section__title">{{ icon("spark") }} Refine with FORMA</h3>
     <p class="result-section__desc">
       Tell FORMA what you'd like to change — in plain language.
       FORMA will propose a targeted update and ask you to approve before applying it.
@@ -305,12 +409,8 @@
     <!-- Proposal box (hidden until agent responds) -->
     <div id="refine-proposal-box" class="refine-proposal-box" style="display:none;">
       <div class="refine-proposal-box__header">
-        <span class="refine-proposal-box__icon">◈</span>
+        <span class="refine-proposal-box__icon">{{ icon("spark") }}</span>
         <strong class="refine-proposal-box__title" id="refine-proposal-title"></strong>
-      </div>
-      <div class="refine-feasibility" id="refine-feasibility" style="display:none;">
-        <span class="refine-feasibility__badge" id="refine-feasibility-badge"></span>
-        <span class="refine-feasibility__note" id="refine-feasibility-note"></span>
       </div>
       <p class="refine-proposal-box__text" id="refine-proposal-text"></p>
       <div class="refine-proposal-box__changes" id="refine-proposal-changes"></div>
@@ -330,17 +430,12 @@
   {% if agent_trace %}
   <div class="result-section">
     <h3 class="result-section__title">
-      ◉ Agent Activity
-      {% if overall_confidence %}
-      <span class="confidence-badge confidence-badge--{{ overall_confidence }}" style="margin-left:.6rem;vertical-align:middle;">
-        overall confidence: {{ overall_confidence }}
-      </span>
-      {% endif %}
+      {{ icon("activity") }} Agent Activity
       <button type="button" class="trace-toggle-btn" id="trace-toggle" aria-expanded="false">
         Show
       </button>
     </h3>
-    <p class="result-section__desc">Every action FORMA took to produce this brief, each with a confidence signal.</p>
+    <p class="result-section__desc">Every action FORMA took to produce this brief.</p>
 
     <div class="agent-trace" id="agent-trace" style="display:none;">
       {% for entry in agent_trace %}
@@ -398,6 +493,101 @@
     });
   }, { threshold: 0.1 });
   cards.forEach(c => observer.observe(c));
+
+  // ── Finding your way round ───────────────────────────────────────────────
+  (function () {
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior = calm ? 'auto' : 'smooth';
+    const root = document.documentElement;
+
+    // The section bar sits under the site nav, whatever height that wraps to.
+    const siteNav = document.querySelector('.nav');
+    const setNavH = () => root.style.setProperty('--site-nav-h', (siteNav ? siteNav.offsetHeight : 0) + 'px');
+    setNavH();
+    if (siteNav && 'ResizeObserver' in window) new ResizeObserver(setNavH).observe(siteNav);
+
+    // Mark the section in view: the last one whose top has passed the bars.
+    const links = Array.from(document.querySelectorAll('.page-nav__link'));
+    const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    function spy() {
+      const line = (siteNav ? siteNav.offsetHeight : 0) + 90;
+      let current = sections[0];
+      sections.forEach(sec => { if (sec.getBoundingClientRect().top <= line) current = sec; });
+      // At the very bottom the last sections cannot reach the bar: the last
+      // one is then the one in view.
+      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) {
+        current = sections[sections.length - 1];
+      }
+      links.forEach(a => a.setAttribute('aria-current',
+        String(current && a.getAttribute('href') === '#' + current.id)));
+      // Keep the marked link in view in the bar on narrow screens.
+      const on = links.find(a => a.getAttribute('aria-current') === 'true');
+      if (on && on.parentElement.scrollWidth > on.parentElement.clientWidth) {
+        const bar = on.parentElement;
+        const left = on.offsetLeft - bar.clientWidth / 2 + on.offsetWidth / 2;
+        bar.scrollTo({ left, behavior });
+      }
+    }
+    let ticking = false;
+    addEventListener('scroll', () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(() => { spy(); ticking = false; }); }
+    }, { passive: true });
+    spy();
+
+    // The plan and the room cards, each pointing at the other.
+    const planRooms = new Map(Array.from(document.querySelectorAll('.plan-room'))
+      .map(el => [el.dataset.room, el]));
+    const cards = new Map(Array.from(document.querySelectorAll('.room-result-card[data-room]'))
+      .map(el => [el.dataset.room, el]));
+
+    function light(label, on) {
+      const el = planRooms.get(label);
+      if (el) el.classList.toggle('is-lit', on);
+    }
+    function flash(el, cls, ms) {
+      el.classList.add(cls);
+      clearTimeout(el._flash);
+      el._flash = setTimeout(() => el.classList.remove(cls), ms);
+    }
+
+    // The key: pointing at a room lights it on the plan; choosing it goes to its card.
+    document.querySelectorAll('.legend-item[data-room]').forEach(item => {
+      const label = item.dataset.room;
+      item.addEventListener('mouseenter', () => light(label, true));
+      item.addEventListener('mouseleave', () => light(label, false));
+      item.addEventListener('focus', () => light(label, true));
+      item.addEventListener('blur', () => light(label, false));
+      item.addEventListener('click', e => {
+        const card = cards.get(label);
+        if (!card) return;
+        e.preventDefault();
+        card.scrollIntoView({ behavior, block: 'start' });
+        flash(card, 'is-focused', 1800);
+      });
+    });
+
+    // A room on the plan goes to its card.
+    planRooms.forEach((el, label) => {
+      el.addEventListener('click', () => {
+        const card = cards.get(label);
+        if (!card) return;
+        card.scrollIntoView({ behavior, block: 'start' });
+        flash(card, 'is-focused', 1800);
+      });
+    });
+
+    // "See on plan" goes to the plan and lights the room there for a moment.
+    document.querySelectorAll('[data-show-room]').forEach(a => {
+      a.addEventListener('click', e => {
+        const plan = document.getElementById('plan');
+        const el = planRooms.get(a.dataset.showRoom);
+        if (!plan || !el) return;
+        e.preventDefault();
+        plan.scrollIntoView({ behavior, block: 'start' });
+        flash(el, 'is-lit', 2400);
+      });
+    });
+  })();
 
   // ── Agent trace toggle ────────────────────────────────────────────────────
   const traceToggle = document.getElementById('trace-toggle');
@@ -495,29 +685,6 @@
           document.getElementById('refine-proposal-text').textContent =
             data.proposal.raw_text || '';
 
-          // Feasibility verdict
-          const feasEl   = document.getElementById('refine-feasibility');
-          const feasBadge = document.getElementById('refine-feasibility-badge');
-          const feasNote = document.getElementById('refine-feasibility-note');
-          const feas = data.proposal.feasibility || 'feasible';
-          const feasMap = {
-            'feasible':                { label: '✓ Feasible',            cls: 'feasible' },
-            'feasible_with_tradeoffs': { label: '~ Feasible with trade-offs', cls: 'tradeoffs' },
-            'not_feasible':            { label: '✗ Not feasible as-is',  cls: 'notfeasible' },
-          };
-          const fm = feasMap[feas] || feasMap['feasible'];
-          feasBadge.textContent = fm.label;
-          feasBadge.className = 'refine-feasibility__badge refine-feasibility__badge--' + fm.cls;
-          feasNote.textContent = data.proposal.feasibility_note || '';
-          feasEl.style.display = 'flex';
-
-          // If not feasible, reframe the Apply button (still allowed, but muted)
-          if (feas === 'not_feasible') {
-            refineApplyBtn.textContent = 'Apply anyway';
-          } else {
-            refineApplyBtn.textContent = 'Apply changes';
-          }
-
           const changesEl = document.getElementById('refine-proposal-changes');
           changesEl.innerHTML = '';
           (data.proposal.changes || []).forEach(c => {
@@ -529,9 +696,18 @@
 
           const affectedEl = document.getElementById('refine-proposal-affected');
           if (data.proposal.affected_areas && data.proposal.affected_areas.length) {
-            affectedEl.innerHTML = '<span class="refine-label">Affects:</span> '
-              + data.proposal.affected_areas.map(a =>
-                  `<span class="inspo-tag">${a}</span>`).join(' ');
+            // Built as nodes, not HTML: the areas are model-written text.
+            affectedEl.replaceChildren();
+            const label = document.createElement('span');
+            label.className = 'refine-label';
+            label.textContent = 'Affects:';
+            affectedEl.appendChild(label);
+            data.proposal.affected_areas.forEach(a => {
+              const tag = document.createElement('span');
+              tag.className = 'inspo-tag';
+              tag.textContent = a;
+              affectedEl.appendChild(tag);
+            });
             affectedEl.style.display = 'flex';
           } else {
             affectedEl.style.display = 'none';
