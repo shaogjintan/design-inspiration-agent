@@ -21,7 +21,7 @@ The reasoning loop:
     RESPOND  — return result + any clarification questions
 
 This loop runs end-to-end in run_agent(). app.py calls run_agent() from
-the step4 route; it no longer calls each AI function individually.
+the step5 route; it no longer calls each AI function individually.
 
 Agent trace format (each entry):
     {
@@ -40,6 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import furniture_layout
+import style_match
 
 logger = logging.getLogger(__name__)
 
@@ -615,6 +616,9 @@ def run_agent(
                 prompt_text     = requirements.get(f"{key}_prompt", ""),
                 inspo_analysis  = inspo_analysis,
                 room_inspo_note = room_inspo_note,
+                picked_refs     = style_match.picks_summary(
+                    {key: (inspiration.get("style_picks") or {}).get(key, [])},
+                    {key: room["label"]}).get(key, ""),
             )
         except Exception as e:
             logger.warning(f"Room concept failed for {room['label']}: {e}")

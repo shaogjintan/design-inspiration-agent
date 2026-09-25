@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from werkzeug.utils import secure_filename
 
 import clients
+import style_match
 import agent as forma_agent
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -72,7 +73,23 @@ SOCLAAS_BASE_URL = os.environ.get("SOCLAAS_BASE_URL")
 SOCLAAS_API_KEY = os.environ.get("SOCLAAS_API_KEY")
 SOCLAAS_MODEL = os.environ.get("SOCLAAS_MODEL")
 USE_SOCLAAS = bool(SOCLAAS_BASE_URL and SOCLAAS_API_KEY and SOCLAAS_MODEL)
+
+
+def model_label(model_id: str | None) -> str:
+    """A model id as the footer names it: "qwen3.8:27b" -> "Qwen3.8 27B"."""
+    if not model_id:
+        return ""
+    name, _, size = model_id.split("/")[-1].partition(":")
+    return f"{name[:1].upper()}{name[1:]} {size.upper()}".strip()
 LLM_CONFIGURED = USE_SOCLAAS or bool(LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY and LLM_MODEL)
+
+
+@app.context_processor
+def _footer_model():
+    """The footer names the model actually answering, not a hard-coded one."""
+    if not LLM_CONFIGURED:
+        return {"ai_model_label": ""}
+    return {"ai_model_label": model_label(SOCLAAS_MODEL if USE_SOCLAAS else LLM_MODEL)}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Room definitions — keyed by housing type
@@ -181,6 +198,25 @@ def save_upload(file_obj, subfolder: str = "") -> str | None:
         file_obj.save(str(path))
         return str(path)
     return None
+
+
+def file_digest(path: str | None) -> str | None:
+    """A file's contents as a hash, or None if there is no file."""
+    if not path or not Path(path).exists():
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha1(f.read()).hexdigest()
+
+
+def same_upload(new_path: str | None, old_path: str | None) -> str | None:
+    """The upload to keep. Every upload gets a fresh file name, so re-picking
+    the same file looked like a new plan and threw the old read away; when the
+    contents match, the new copy is dropped and the old path kept."""
+    if new_path and old_path and new_path != old_path \
+            and file_digest(new_path) == file_digest(old_path):
+        Path(new_path).unlink(missing_ok=True)
+        return old_path
+    return new_path
 
 
 def match_catalogue_room(label: str) -> str:
@@ -1408,6 +1444,18 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
 - Analysis confidence: {ia.get('confidence', 'unknown')}
 """
 
+    # The library photos the homeowner picked in step 4, described in full —
+    # their taste confirmed against real rooms, room by room.
+    picks = style_match.picks_summary(project.get("style_picks") or {},
+                                      {r["key"]: r["label"] for r in project.get("rooms", [])})
+    picks_section = ""
+    if picks:
+        picks_section = (
+            "\n\nREFERENCE PHOTOS THE HOMEOWNER PICKED (from FORMA's style library, "
+            "after seeing their style read back to them):\n"
+            + "\n".join(f"- {text}" for text in picks.values())
+        )
+
     project_notes = project.get("project_notes", "")
 
     # Answers to FORMA's clarifying questions and applied refinements. The agent
@@ -1437,7 +1485,7 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
 
         ROOM REQUIREMENTS:
         {requirements_text or 'Not provided'}
-        {ia_section}{decisions_section}
+        {ia_section}{picks_section}{decisions_section}
 
         IMPORTANT INSTRUCTIONS:
         - Where inspiration analysis is available, reference it specifically.
@@ -1447,6 +1495,10 @@ Visual Inspiration Analysis (from {ia.get('image_count', 0)} uploaded image(s)):
           or visually observed preferences. Show your reasoning.
         - Any HOMEOWNER DECISIONS above override conflicting defaults — reflect
           them explicitly.
+        - Reference photos the homeowner picked are their most specific word on
+          taste: carry their materials, palette and lighting into the rooms they
+          were picked for, by name. They are library photos, never the
+          homeowner's own home — do not describe them as such.
         - Where a room's own references pull against the overall direction, say
           so plainly and back the room's references — smoothing that tension
           over makes the brief useless.
@@ -1508,8 +1560,10 @@ def format_room_direction(entry) -> str:
 
 def generate_room_concept(room: dict, style: str, palette: str, prompt_text: str,
                           inspo_analysis: dict | None = None,
-                          room_inspo_note: dict | str = "") -> str:
-    """Generate a short room concept paragraph, grounded in inspiration analysis."""
+                          room_inspo_note: dict | str = "",
+                          picked_refs: str = "") -> str:
+    """Generate a short room concept paragraph, grounded in inspiration analysis
+    and any library references the homeowner picked for the room."""
     ia = inspo_analysis or {}
     room_direction = format_room_direction(room_inspo_note)
 
@@ -1525,6 +1579,15 @@ THIS ROOM'S OWN REFERENCES — the homeowner uploaded these FOR {room['label']}:
 
 That is the brief for this room. It overrides the chosen style, the palette and
 the whole-home preferences below. Write the room those references describe.
+"""
+
+    if picked_refs:
+        ia_context += f"""
+REFERENCE PHOTOS PICKED FOR THIS ROOM — library photos (not the homeowner's home)
+the homeowner chose as closest to what they want:
+{picked_refs}
+
+Name their materials, palette and lighting in the concept.
 """
 
     if ia.get("dominant_styles"):
@@ -4309,6 +4372,179 @@ def extract_room_style(room_label: str, image_paths: list[str],
     return data
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Style extraction — step 4
+# ─────────────────────────────────────────────────────────────────────────────
+# The homeowner's inspiration photos read into the reference library's own tag
+# vocabulary, so the library can be ranked against them (style_match.py). One
+# vision call per set of photos: the result is keyed by the photos' contents
+# and the chosen style, and reused until either changes.
+STYLE_EXTRACT_VERSION = 1
+MAX_STYLE_IMAGES = 8
+
+STYLE_EXTRACT_SYSTEM = (
+    "You are an interior designer reading a homeowner's inspiration photos. "
+    "You describe only what is visible, using the fixed vocabulary you are given, "
+    "and reply with bare JSON."
+)
+
+
+def _inspo_images(inspiration: dict) -> dict[str, list[str]]:
+    """{room key or "overall": [path, ...]} for the photos still on disk."""
+    out = {}
+    for key, paths in (inspiration.get("inspo_paths") or {}).items():
+        valid = [p for p in (paths or []) if p and Path(p).exists()]
+        if valid:
+            out[key] = valid
+    return out
+
+
+def style_profile_key(inspiration: dict, rooms: list[dict]) -> str:
+    """Changes whenever the photos, the chosen style or palette, or the rooms do."""
+    h = hashlib.sha1(f"v{STYLE_EXTRACT_VERSION}".encode())
+    for key, paths in sorted(_inspo_images(inspiration).items()):
+        h.update(key.encode())
+        for p in paths:
+            with open(p, "rb") as f:
+                h.update(hashlib.sha1(f.read()).digest())
+    for part in (inspiration.get("design_style", ""), inspiration.get("colour_name", ""),
+                 ",".join(r["key"] for r in rooms)):
+        h.update(b"|" + str(part).encode())
+    return h.hexdigest()[:16]
+
+
+def default_style_profile(inspiration: dict, rooms: list[dict], note: str = "") -> dict:
+    """The theme from the style and palette picked in step 3 — used when there
+    are no photos to read, or they could not be read."""
+    tags = style_match.default_tags(inspiration.get("design_style", ""),
+                                    inspiration.get("colour_name", ""))
+    return {
+        "key":     style_profile_key(inspiration, rooms),
+        "source":  "default",
+        "overall": tags,
+        "rooms":   {},
+        "summary": note,
+        "gap":     style_match.style_gap(inspiration.get("design_style", "")),
+    }
+
+
+def extract_style(inspiration: dict, rooms: list[dict]) -> dict:
+    """Read the homeowner's inspiration photos into the library's vocabulary.
+
+    Returns {"key", "source": "images" | "default", "overall": tags,
+    "rooms": {room key: tags}, "summary", "gap"}. Rooms with photos of their
+    own get their own tags; the rest follow "overall". Tags the model gives
+    outside the vocabulary are dropped, and the style picked in step 3 fills
+    anything the photos do not say.
+    """
+    images = _inspo_images(inspiration)
+    if not images:
+        return default_style_profile(inspiration, rooms)
+
+    # Every room with photos gets one in before any gets a second.
+    picked: list[tuple[str, str]] = []
+    depth = 0
+    while len(picked) < MAX_STYLE_IMAGES and any(len(v) > depth for v in images.values()):
+        for key, paths in images.items():
+            if depth < len(paths) and len(picked) < MAX_STYLE_IMAGES:
+                picked.append((key, paths[depth]))
+        depth += 1
+
+    label_for = {r["key"]: r["label"] for r in rooms}
+    encoded, manifest = [], []
+    for key, path in picked:
+        try:
+            data, _media = image_to_base64(path)
+        except Exception as e:
+            app.logger.warning(f"Could not encode inspiration image {path}: {e}")
+            continue
+        encoded.append(data)
+        where = ("the whole home" if key == "overall"
+                 else f"{label_for.get(key, key)} (room key {key})")
+        manifest.append(f"  IMAGE {len(encoded)}: a reference for {where}")
+    if not encoded:
+        return default_style_profile(inspiration, rooms)
+
+    vocab = style_match.vocabulary()
+    fields = ("style", "palette_family", "materials", "lighting",
+              "texture", "furniture_style", "mood", "layout")
+    vocab_lines = "\n".join(f"  {f}: {' | '.join(vocab.get(f, []))}" for f in fields)
+    room_keys = sorted(k for k in images if k != "overall" and k in label_for)
+    tag_shape = ('{"style": ["strongest", "second"], "palette_family": "...", '
+                 '"materials": ["...", "..."], "lighting": ["..."], "texture": "...", '
+                 '"furniture_style": "...", "mood": "...", "layout": "..."}')
+
+    prompt = textwrap.dedent(f"""
+        These are a homeowner's inspiration photos:
+        {{MANIFEST}}
+
+        Describe the style they show using ONLY these values, spelt exactly:
+        {{VOCAB}}
+
+        - style: one or two values, strongest first.
+        - materials: up to three; lighting: up to two.
+        - palette_family, texture, furniture_style, mood, layout: one value each.
+        - Describe what is in the photos, not what would suit the home.
+        - "overall" reads every photo together. "rooms" reads each room's own
+          photos on their own terms, even if they clash with the rest: give an
+          entry only for these room keys: {', '.join(room_keys) or 'none'}.
+        - summary: one sentence to the homeowner on what their photos share,
+          in plain words, 25 words at most.
+
+        Reply with ONLY this JSON:
+        {{"overall": {tag_shape}, "rooms": {{"room_key": {tag_shape}}}, "summary": "..."}}
+    """).strip()
+    prompt = prompt.replace("{MANIFEST}", "\n".join(manifest)).replace("{VOCAB}", vocab_lines)
+
+    fallback_note = ("We could not read your photos just now, so these follow "
+                     "the style you picked.")
+    try:
+        raw = call_llm([{"role": "user", "content": prompt, "images": encoded}],
+                       system=STYLE_EXTRACT_SYSTEM,
+                       max_tokens=500 + 150 * len(room_keys),
+                       timeout=120 + 10 * len(encoded),
+                       fallback_to_mock=False, images_sent=len(encoded))
+        data = _loads_salvaging_truncation(strip_code_fence(raw))
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+    except Exception as e:
+        app.logger.warning(f"Style extraction failed ({e}) — using the chosen style")
+        return default_style_profile(inspiration, rooms, note=fallback_note)
+
+    default = style_match.default_tags(inspiration.get("design_style", ""),
+                                       inspiration.get("colour_name", ""))
+
+    def with_default(tags: dict) -> dict:
+        merged = style_match.merge_tags(tags, default)
+        # The style they picked stays in the running behind what the photos show.
+        styles = list(dict.fromkeys((tags.get("style") or []) + (default.get("style") or [])))
+        if styles:
+            merged["style"] = styles[:3]
+        return merged
+
+    overall = style_match.clean_tags(data.get("overall"))
+    if not overall:
+        return default_style_profile(inspiration, rooms, note=fallback_note)
+    overall = with_default(overall)
+    room_tags = {}
+    for k, v in (data.get("rooms") or {}).items() if isinstance(data.get("rooms"), dict) else []:
+        k = str(k).strip()
+        if k in room_keys:
+            tags = style_match.clean_tags(v)
+            if tags:
+                room_tags[k] = style_match.merge_tags(tags, overall)
+
+    return {
+        "key":     style_profile_key(inspiration, rooms),
+        "source":  "images",
+        "overall": overall,
+        "rooms":   room_tags,
+        "summary": str(data.get("summary", "")).strip()[:300],
+        "gap":     "",
+        "image_count": len(encoded),
+    }
+
+
 def analyse_inspiration(inspiration: dict, rooms: list[dict],
                         step1: dict | None = None,
                         requirements: dict | None = None) -> dict:
@@ -4865,10 +5101,39 @@ def step1():
         # A file input is empty on re-submit, so taking the form's word for it
         # wiped a plan the homeowner had already uploaded. Keep the previous one
         # unless they actually pick a new file.
-        previous_plan = (project_get("step1") or {}).get("floor_plan_path")
-        floor_plan_path = save_upload(request.files.get("floor_plan"), "floorplans")
-        if not floor_plan_path and previous_plan and Path(previous_plan).exists():
+        prev = project_get("step1") or {}
+        previous_plan = prev.get("floor_plan_path")
+        if previous_plan and not Path(previous_plan).exists():
+            previous_plan = None
+        floor_plan_path = same_upload(
+            save_upload(request.files.get("floor_plan"), "floorplans"), previous_plan)
+        if not floor_plan_path and previous_plan:
             floor_plan_path = previous_plan
+
+        new_step1 = {
+            "housing_type":       housing_type,
+            "housing_type_label": HOUSING_LABELS.get(housing_type, housing_type),
+            "floor_size":         request.form.get("floor_size", ""),
+            "num_floors":         request.form.get("num_floors", "1"),
+            "space_notes":        request.form.get("space_notes", ""),
+            "floor_plan_path":    floor_plan_path,
+        }
+
+        # The room list comes from the plan, or from the housing type when there
+        # is no plan. Unless whichever it came from changed, it stays exactly as
+        # it was — including the homeowner's own edits on step 2 — and the plan
+        # is not read again.
+        plan_changed = floor_plan_path != previous_plan
+        rooms_stay = bool(prev and project_get("ai_rooms")) and not plan_changed and (
+            floor_plan_path or housing_type == prev.get("housing_type"))
+        if rooms_stay:
+            if new_step1 != prev:
+                project_set(step1=new_step1)
+                # Size, floors and notes feed the brief, not the room list.
+                project_clear("agent_result", "agent_trace")
+            if floor_plan_path and project_get("ai_room_source") != "floorplan":
+                return redirect(url_for("step1_reading"))   # never read yet
+            return redirect(url_for("step2"))
 
         # Seed from the housing-type catalogue so there is always a usable room
         # list. When a plan was uploaded the next screen reads it and replaces
@@ -4882,14 +5147,7 @@ def step1():
         )
 
         project_set(
-            step1 = {
-                "housing_type":       housing_type,
-                "housing_type_label": HOUSING_LABELS.get(housing_type, housing_type),
-                "floor_size":         request.form.get("floor_size", ""),
-                "num_floors":         request.form.get("num_floors", "1"),
-                "space_notes":        request.form.get("space_notes", ""),
-                "floor_plan_path":    floor_plan_path,
-            },
+            step1 = new_step1,
             ai_rooms           = room_data.get("rooms", ROOM_CATALOGUE.get(housing_type, [])),
             ai_room_summary    = room_data.get("summary", ""),
             ai_room_source     = room_data.get("source", "housing_type_only"),
@@ -4980,6 +5238,7 @@ def save_step2_form(housing_type: str) -> None:
     # label, so removed cards vanish from this list and renamed/added ones
     # arrive with their new names. Order is DOM order.
     kept = [r.strip() for r in request.form.getlist("kept_rooms") if r.strip()]
+    rooms_before = list(project_get("ai_rooms") or [])
     rooms = get_rooms_for_type(housing_type)
     if kept:
         seen, unique = set(), []
@@ -5000,22 +5259,25 @@ def save_step2_form(housing_type: str) -> None:
         req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
 
     req_data["project_notes"] = request.form.get("project_notes", "")
+    if req_data == project_get("requirements") and rooms_before == project_get("ai_rooms"):
+        return                          # nothing changed: keep the result
     project_set(requirements=req_data)
     # Rooms or requirements just changed — the brief and the step-1 room
     # summary both describe the old list now.
     project_clear("agent_result", "rooms_summarised")
 
 
-def save_step3_form() -> None:
+def save_step3_form() -> bool:
     """Persist step 3's choices. Files are deliberately excluded — a file input
-    cannot be re-read by script, so uploads only travel on a real submit."""
+    cannot be re-read by script, so uploads only travel on a real submit.
+    Returns whether anything changed."""
     style   = request.form.get("design_style", "")
     palette = request.form.get("colour_palette", "")
     colour_hex, colour_name = (palette.split("|") + ["", ""])[:2]
     rooms = get_rooms_for_type(project_get("step1", {}).get("housing_type", ""))
     prev = project_get("inspiration") or {}
 
-    project_set(inspiration={
+    new = {
         **prev,
         "design_style":   style,
         "colour_palette": palette,
@@ -5025,8 +5287,12 @@ def save_step3_form() -> None:
         "inspo_paths":    prev.get("inspo_paths", {}),
         "vibes":          {r["key"]: request.form.get(f"vibe_{r['key']}", "")
                            for r in rooms},
-    })
+    }
+    if new == prev:
+        return False
+    project_set(inspiration=new)
     project_clear("agent_result")
+    return True
 
 
 @app.route("/autosave/<step>", methods=["POST"])
@@ -5210,13 +5476,18 @@ def step3():
         kept_overall = [p for p in prev_inspo.get("overall", []) if p and Path(p).exists()]
         saved_inspo["overall"] = kept_overall + [p for p in new_overall if p]
 
-        save_step3_form()                       # style, palette, vibes
-        project_set(inspiration={**(project_get("inspiration") or {}),
-                                 "inspo_paths": saved_inspo})
-        # The analysis itself runs in step 4, where the agent has the full
+        form_changed = save_step3_form()        # style, palette, vibes
+        photos_changed = ({k: v for k, v in saved_inspo.items() if v}
+                          != {k: v for k, v in prev_inspo.items() if v})
+        if photos_changed:
+            project_set(inspiration={**(project_get("inspiration") or {}),
+                                     "inspo_paths": saved_inspo})
+        # The analysis itself runs in step 5, where the agent has the full
         # project to reason over. Drop any earlier result so it can't be
-        # reused against the images and style just submitted.
-        project_clear("agent_result", "inspiration_analysis", "agent_trace")
+        # reused against the images and style just submitted — but only if
+        # something was submitted: an unchanged page keeps the same result.
+        if form_changed or photos_changed:
+            project_clear("agent_result", "inspiration_analysis", "agent_trace")
         return redirect(url_for("step4"))
 
     return render_template("step3.html", current_step=3, rooms=rooms,
@@ -5225,9 +5496,103 @@ def step3():
                            saved=project_get("inspiration", {}))
 
 
-# ── Step 4: Results ────────────────────────────────────────────────────────────
-@app.route("/step4")
+# ── Step 4: Style match ───────────────────────────────────────────────────────
+STYLE_REFS_PER_ROOM = 6
+MAX_PICKS_PER_ROOM = 3
+
+
+def style_rooms(rooms: list[dict], profile: dict, requirements: dict,
+                housing_type: str) -> list[dict]:
+    """Each room the library covers, with its reference photos ranked against
+    the homeowner's style — the room's own if its photos were read, else the
+    whole home's."""
+    housing = style_match.HOUSING_MAP.get(housing_type)
+    out = []
+    for room in rooms:
+        key = room["key"]
+        tags = (profile.get("rooms") or {}).get(key) or profile.get("overall") or {}
+        tier = style_match.BUDGET_MAP.get(requirements.get(f"{key}_budget", ""))
+        refs = style_match.rank_for_room(room["label"], tags, housing, tier,
+                                         count=STYLE_REFS_PER_ROOM)
+        if refs:
+            out.append({"key": key, "label": room["label"], "tags": tags,
+                        "own": key in (profile.get("rooms") or {}), "refs": refs})
+    return out
+
+
+def _step4_guard():
+    for step, route in (("step1", "step1"), ("requirements", "step2"),
+                        ("inspiration", "step3")):
+        if not project_get(step):
+            return redirect(url_for(route))
+    return None
+
+
+@app.route("/step4", methods=["GET", "POST"])
 def step4():
+    """Step 4 — the homeowner's style, read from their photos (or the style
+    they picked), shown as library references to choose from."""
+    if (redirected := _step4_guard()):
+        return redirected
+
+    s1 = project_get("step1")
+    inspiration = project_get("inspiration")
+    rooms = get_rooms_for_type(s1["housing_type"])
+
+    if request.method == "POST":
+        library = style_match.images_by_id()
+        picks = {}
+        for room in rooms:
+            ids = [i for i in request.form.getlist(f"pick_{room['key']}") if i in library]
+            if ids:
+                picks[room["key"]] = list(dict.fromkeys(ids))[:MAX_PICKS_PER_ROOM]
+        if picks != (project_get("style_picks") or {}):
+            project_set(style_picks=picks)
+            # The brief and room concepts are written from these; the plan
+            # trace and furniture are kept apart and reused.
+            project_clear("agent_result", "agent_trace")
+        return redirect(url_for("step5"))
+
+    profile = project_get("style_profile")
+    if not profile or profile.get("key") != style_profile_key(inspiration, rooms):
+        if _inspo_images(inspiration):
+            profile = None          # the page reads the photos, then reloads
+        else:
+            profile = default_style_profile(inspiration, rooms)
+            project_set(style_profile=profile)
+
+    return render_template(
+        "step4.html", current_step=4,
+        profile=profile,
+        style_rooms=(style_rooms(rooms, profile, project_get("requirements") or {},
+                                 s1["housing_type"]) if profile else []),
+        picks=project_get("style_picks") or {},
+        max_picks=MAX_PICKS_PER_ROOM,
+        chosen_style=style_label(inspiration.get("design_style", "")),
+        photo_count=sum(len(v) for v in _inspo_images(inspiration).values()),
+    )
+
+
+@app.route("/step4/extract", methods=["POST"])
+def step4_extract():
+    """Read the homeowner's photos into library tags. The page calls this,
+    then reloads into the references."""
+    for step in ("step1", "requirements", "inspiration"):
+        if not project_get(step):
+            return jsonify({"ok": False, "error": "No active project"}), 400
+    inspiration = project_get("inspiration")
+    rooms = get_rooms_for_type(project_get("step1")["housing_type"])
+    profile = project_get("style_profile")
+    if profile and profile.get("key") == style_profile_key(inspiration, rooms):
+        return jsonify({"ok": True, "cached": True})
+    profile = extract_style(inspiration, rooms)
+    project_set(style_profile=profile)
+    return jsonify({"ok": True, "source": profile["source"]})
+
+
+# ── Step 5: Results ────────────────────────────────────────────────────────────
+@app.route("/step5")
+def step5():
     for step, route in (("step1", "step1"), ("requirements", "step2"),
                         ("inspiration", "step3")):
         if not project_get(step):
@@ -5245,7 +5610,7 @@ def step4():
     # now and let it fetch the result itself.
     result = project_get("agent_result")
     if not result:
-        return render_template("step4_loading.html", current_step=4,
+        return render_template("step5_loading.html", current_step=5,
                                project=project,
                                room_count=len(rooms_base),
                                has_floor_plan=bool(s1.get("floor_plan_path")))
@@ -5256,7 +5621,7 @@ def step4():
     # the snapshot taken when the agent finished.
     conflicts = project_get("conflicts", result["conflicts"])
 
-    return render_template("step4.html", current_step=4,
+    return render_template("step5.html", current_step=5,
                            project=project,
                            ai_brief=result["ai_brief"],
                            room_results=result["room_results"],
@@ -5271,7 +5636,16 @@ def step4():
                            closed_conflicts=[c for c in conflicts if c.get("resolved")],
                            agent_trace=result["agent_trace"],
                            needs_input=result["needs_input"],
-                           refinements=project_get("refinements", []))
+                           refinements=project_get("refinements", []),
+                           room_picks=picked_references(project_get("style_picks") or {}))
+
+
+def picked_references(picks: dict) -> dict[str, list[dict]]:
+    """The library photos picked in step 4, by room key, in the order picked.
+    Ids the library no longer has are dropped."""
+    library = style_match.images_by_id()
+    return {key: [library[i] for i in ids if i in library]
+            for key, ids in picks.items() if any(i in library for i in ids)}
 
 
 # What the agent has finished for each client's run in progress, so the
@@ -5290,8 +5664,8 @@ def _progress_event(cid: str, event: str, **data) -> None:
             state["events"].append(event)
 
 
-@app.route("/step4/progress")
-def step4_progress():
+@app.route("/step5/progress")
+def step5_progress():
     """What the agent has finished so far in this client's run."""
     with _progress_lock:
         state = dict(_PROGRESS.get(current_client_id()) or {"events": [], "rooms": []})
@@ -5299,8 +5673,8 @@ def step4_progress():
     return jsonify(state)
 
 
-@app.route("/step4/prepare", methods=["POST"])
-def step4_prepare():
+@app.route("/step5/prepare", methods=["POST"])
+def step5_prepare():
     """Run the agent and store the result. The loading page calls this, then
     reloads into the cached render above."""
     for step in ("step1", "requirements", "inspiration"):
@@ -5320,7 +5694,9 @@ def step4_prepare():
         result = forma_agent.run_agent(
             step1                         = s1,
             requirements                  = project_get("requirements"),
-            inspiration                   = project_get("inspiration"),
+            # The references picked in step 4 travel with the inspiration.
+            inspiration                   = {**project_get("inspiration"),
+                                             "style_picks": project_get("style_picks") or {}},
             rooms                         = rooms_base,
             existing_inspiration_analysis = project_get("inspiration_analysis"),
             existing_conflicts            = project_get("conflicts"),
@@ -5349,9 +5725,9 @@ def step4_prepare():
 # ── Regenerate ────────────────────────────────────────────────────────────────
 @app.route("/regenerate", methods=["POST"])
 def regenerate():
-    """Throw away the stored result so step 4 runs the agent again."""
+    """Throw away the stored result so step 5 runs the agent again."""
     project_clear("agent_result", "inspiration_analysis", "agent_trace")
-    return redirect(url_for("step4"))
+    return redirect(url_for("step5"))
 
 
 # ── Resolve a conflict ─────────────────────────────────────────────────────────
@@ -5609,6 +5985,9 @@ def export_inputs():
     paths = s2.get("inspo_paths") or {}
     vibes = s2.get("vibes") or {}
 
+    picks = project_get("style_picks") or {}
+    library = style_match.images_by_id()
+
     def names(ps):
         return [Path(p).name for p in ps or [] if p]
 
@@ -5623,6 +6002,10 @@ def export_inputs():
             "priority":    s3.get(f"{key}_priority", ""),
             "must_avoid":  s3.get(f"{key}_constraints", ""),
             "inspiration": {"vibe": vibes.get(key, ""), "images": names(paths.get(key))},
+            "picked_references": [
+                {"id": i, "description": style_match.describe(library[i]),
+                 "photo": library[i]["source"].get("page_url", "")}
+                for i in picks.get(key, []) if i in library],
         })
 
     data = {
@@ -5678,6 +6061,7 @@ def export_brief():
         "ROOM REQUIREMENTS",
         "-" * 60,
     ]
+    room_picks = picked_references(project_get("style_picks") or {})
     for room in rooms_base:
         key = room["key"]
         lines += [
@@ -5688,6 +6072,9 @@ def export_brief():
             f"  Priority    : {s3.get(f'{key}_priority', 'N/A')}",
             f"  Constraints : {s3.get(f'{key}_constraints', 'N/A')}",
         ]
+        for ref in room_picks.get(key, []):
+            lines.append(f"  Picked      : {style_match.describe(ref)} "
+                         f"(photo: {ref['source'].get('page_url', '')})")
 
     lines += [
         "",
@@ -5695,7 +6082,8 @@ def export_brief():
         "-" * 60,
         s3.get("project_notes", "None"),
         "",
-        "Generated by FORMA — Powered by AWS Bedrock / Claude Sonnet 4.5",
+        "Generated by FORMA" + (f" — Powered by {_footer_model()['ai_model_label']}"
+                                if _footer_model()["ai_model_label"] else ""),
     ]
 
     brief_text = "\n".join(lines)

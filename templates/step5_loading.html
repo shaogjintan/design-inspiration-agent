@@ -1,12 +1,11 @@
 {% extends "base.html" %}
 {% from "_mover.html" import mover %}
-{% set current_step = 4 %}
+{% set current_step = 5 %}
 {% block title %}FORMA — Reading your project{% endblock %}
 {% block content %}
 
 <div class="step-wrap step-wrap--wide">
   <div class="step-header">
-    <div class="step-header__tag">Step 04</div>
     <h2 class="step-header__title">Your Design Vision</h2>
     <p class="step-header__desc">FORMA is reading everything you gave it. This takes about a minute.</p>
   </div>
@@ -201,7 +200,7 @@
     if (i < EVENTS.length) guessTimer = setTimeout(() => guess(i + 1), EXPECT[i]);
   }
   function poll() {
-    fetch('{{ url_for("step4_progress") }}', { headers: { 'Accept': 'application/json' } })
+    fetch('{{ url_for("step5_progress") }}', { headers: { 'Accept': 'application/json' } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => {
         if (!live) { live = true; clearTimeout(guessTimer); }
@@ -231,13 +230,13 @@
     errBox.hidden = false;
   }
 
-  fetch('/step4/prepare', { method: 'POST', headers: { 'Accept': 'application/json' } })
+  fetch('{{ url_for("step5_prepare") }}', { method: 'POST', headers: { 'Accept': 'application/json' } })
     .then(res => res.json().catch(() => ({ ok: false, error: 'The server sent back something unreadable.' })))
     .then(data => {
       if (!data.ok) throw new Error(data.error || 'FORMA could not finish reading your project.');
       finish();
       // Let the last room fill and the final ticks land before the page turns over.
-      setTimeout(() => window.location.replace('{{ url_for("step4") }}'), 650);
+      setTimeout(() => window.location.replace('{{ url_for("step5") }}'), 650);
     })
     .catch(err => fail(err.message || 'Something went wrong on the way to your brief.'));
 

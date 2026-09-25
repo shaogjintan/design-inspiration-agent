@@ -10,7 +10,7 @@
     '/': 0, '/start': 0.5,
     '/step1': 1, '/step1/reading': 1.5,
     '/step2': 2, '/step2/reviewing': 2.5,
-    '/step3': 3, '/step4': 4,
+    '/step3': 3, '/step4': 4, '/step5': 5,
   };
   const KEY = 'forma:from';
   const root = document.documentElement;

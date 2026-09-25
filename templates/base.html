@@ -22,7 +22,7 @@
     <a href="{{ url_for('index') }}" class="nav__logo">FORMA</a>
     <div class="nav__tagline">Design Intelligence Studio</div>
     <div class="nav__steps">
-      {% set steps = [('Step 1', 'Space'), ('Step 2', 'Requirements'), ('Step 3', 'Inspiration'), ('Step 4', 'Vision')] %}
+      {% set steps = [('Step 1', 'Space'), ('Step 2', 'Requirements'), ('Step 3', 'Inspiration'), ('Step 4', 'Style'), ('Step 5', 'Vision')] %}
       {% for label, name in steps %}
         {% set i = loop.index %}
         <div class="nav__step {% if current_step == i %}nav__step--active{% elif current_step > i %}nav__step--done{% endif %}">
@@ -52,7 +52,7 @@
   <footer class="footer">
     <span>FORMA &copy; 2026</span>
     <span class="footer__sep">·</span>
-    <span>Powered by AWS Bedrock &amp; Claude Sonnet 4.5</span>
+    <span>{% if ai_model_label %}Powered by {{ ai_model_label }}{% else %}Demo mode{% endif %}</span>
   </footer>
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>

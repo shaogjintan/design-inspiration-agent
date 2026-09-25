@@ -272,14 +272,6 @@ em { font-style: italic; color: var(--gold); }
   border-bottom: 1px solid var(--cream-dark);
 }
 
-.step-header__tag {
-  font-size: .68rem;
-  letter-spacing: .2em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: .6rem;
-}
-
 .step-header__title { margin-bottom: .6rem; }
 
 .step-header__desc {
@@ -2986,4 +2978,332 @@ html[data-vt] .hero > * { animation: none; }
 @media (hover: hover) and (pointer: fine) {
   .plan-room:hover .plan-room__floor { fill-opacity: .12; }
   .plan-room:hover .plan-room__edge { stroke-opacity: .7; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 4 — Style match
+   Built from the site's own parts: the profile reads like the brief card, the
+   picks select like the tiles on steps 2–3 (ink border plus inset ring), the
+   room bar is page 5's page-nav, and the wait is the shared mover scene.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.style-profile {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-md);
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.style-profile__title { font-size: 1.6rem; margin-bottom: .5rem; }
+
+.style-profile__summary {
+  color: var(--ink-light);
+  max-width: 65ch;
+  margin-bottom: 1rem;
+}
+
+.style-profile__gap {
+  margin-top: .9rem;
+  font-size: .85rem;
+  color: var(--ink-muted);
+}
+
+.style-tags {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.style-tag {
+  padding: .3rem .75rem;
+  border-radius: 99px;
+  background: var(--cream);
+  border: 1px solid var(--cream-dark);
+  font-size: .8rem;
+  color: var(--ink-light);
+}
+
+.style-tag::first-letter { text-transform: uppercase; }
+
+.style-tag--strong {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--white);
+}
+
+/* One room's references. */
+.style-room {
+  border: 0;
+  padding: 0;
+  margin: 0 0 3rem;
+  min-width: 0;
+  scroll-margin-top: calc(var(--site-nav-h, 66px) + 4.5rem);
+}
+
+.style-room__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding-bottom: .6rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--cream-dark);
+}
+
+.style-room__name { font-family: var(--font-serif); font-size: 1.45rem; }
+
+.style-room__count {
+  font-size: .8rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.style-room__note {
+  font-size: .85rem;
+  color: var(--ink-muted);
+  margin: -.5rem 0 1rem;
+}
+
+.ref-grid {
+  /* Six a room: three across keeps them in two even rows. */
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+/* A reference card selects like a tile: stone at rest, ink when picked. */
+.ref-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .2s ease, box-shadow .2s ease, transform .16s var(--ease-out);
+}
+
+.ref-card:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink), var(--shadow-sm);
+}
+
+.ref-card:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.ref-card:has(.ref-card__pick:active) { transform: scale(.98); }
+
+@media (hover: hover) and (pointer: fine) {
+  .ref-card:hover { border-color: var(--stone-dark); box-shadow: var(--shadow-md); }
+  .ref-card:has(input:checked):hover { border-color: var(--ink); }
+  .ref-card__pick:hover .ref-card__frame img { transform: scale(1.03); }
+}
+
+.ref-card__pick { display: block; cursor: pointer; }
+
+.ref-card__pick input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.ref-card__frame {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+}
+
+.ref-card__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity .3s ease, transform .3s var(--ease-out);
+}
+
+/* Set by script only, so a script failure never leaves a photo hidden. */
+.ref-card__frame img.is-waiting { opacity: 0; }
+
+.ref-card__tick {
+  position: absolute;
+  top: .6rem;
+  right: .6rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.88);
+  border: 1.5px solid rgba(28,27,25,.25);
+  color: transparent;
+  transform: scale(.9);
+  transition: background-color .2s ease, border-color .2s ease, color .15s ease,
+              transform .2s var(--ease-out);
+}
+
+.ref-card:has(input:checked) .ref-card__tick {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--white);
+  transform: scale(1);
+}
+
+.ref-card__alt {
+  position: absolute;
+  left: .6rem;
+  bottom: .6rem;
+  padding: .2rem .6rem;
+  border-radius: 99px;
+  background: rgba(28,27,25,.74);
+  color: var(--white);
+  font-size: .72rem;
+}
+
+.ref-card__body {
+  display: block;
+  padding: .8rem 1rem 0;
+}
+
+.ref-card__style {
+  display: block;
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-transform: capitalize;
+}
+
+.ref-card__meta {
+  display: block;
+  font-size: .78rem;
+  color: var(--ink-muted);
+}
+
+.ref-card__meta::first-letter { text-transform: uppercase; }
+
+.ref-card__credit {
+  align-self: flex-start;
+  margin: .35rem 1rem .85rem;
+  padding: .15rem 0;
+  font-size: .72rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--stone);
+  text-underline-offset: 3px;
+  transition: color .15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ref-card__credit:hover { color: var(--ink); }
+}
+
+/* A full room: the rest step back until one is unticked. */
+.ref-card--full .ref-card__pick { cursor: not-allowed; }
+.ref-card--full .ref-card__frame { opacity: .55; transition: opacity .2s ease; }
+
+.style-form__disclaimer,
+.style-empty {
+  font-size: .85rem;
+  color: var(--ink-muted);
+}
+
+.mo-stage--error .btn { display: inline-flex; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ref-card, .ref-card__tick, .ref-card__frame img { transition: opacity .2s ease, border-color .2s ease, background-color .2s ease; }
+  .ref-card:has(.ref-card__pick:active) { transform: none; }
+}
+
+@media (max-width: 760px) {
+  .ref-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  .style-profile { padding: 1.25rem; }
+  .ref-card__body { padding: .65rem .75rem 0; }
+  .ref-card__credit { margin: .3rem .75rem .7rem; }
+}
+
+/* ── Page 5: the references picked on page 4, inside each room card ─────────
+   Same block rhythm as the concept and the direction around it: a gold label,
+   then content, divided by the stone rule the direction uses. */
+.room-picks {
+  border-top: 1px solid var(--stone);
+  padding-top: .85rem;
+  margin: .9rem 0 .85rem;
+}
+
+.room-picks__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.room-picks__change {
+  font-size: .72rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--stone);
+  text-underline-offset: 3px;
+  padding: .2rem 0;
+  transition: color .15s ease;
+}
+
+.room-picks__grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+  margin-top: .2rem;
+}
+
+.room-pick { min-width: 0; }
+
+.room-pick__frame {
+  display: block;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--cream-dark);
+  transition: transform .16s var(--ease-out), box-shadow .2s ease;
+}
+
+.room-pick__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.room-pick__frame:active { transform: scale(.97); }
+
+.room-pick__style {
+  display: block;
+  margin-top: .3rem;
+  font-size: .7rem;
+  color: var(--ink-light);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-picks__credit {
+  margin-top: .5rem;
+  font-size: .68rem;
+  color: var(--ink-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .room-picks__change:hover { color: var(--ink); }
+  .room-pick__frame:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-pick__frame, .room-pick__frame:hover, .room-pick__frame:active { transform: none; }
 }

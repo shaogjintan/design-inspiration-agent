@@ -612,6 +612,22 @@
       "rule": "General storage access",
       "source": "model estimate",
       "added": "2026-09-24"
+    },
+    {
+      "name": "Shoe Rack",
+      "match": [
+        "shoe rack"
+      ],
+      "w": 0.4,
+      "d": 0.3,
+      "place": "corner",
+      "anchor": "",
+      "clearance": 0.9,
+      "side": 0.0,
+      "align": "end",
+      "rule": "Standard circulation width 900 mm",
+      "source": "model estimate",
+      "added": "2026-09-26"
     }
   ]
 }

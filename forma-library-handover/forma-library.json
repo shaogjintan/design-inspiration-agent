@@ -1,0 +1,5147 @@
+{
+  "name": "Forma reference library",
+  "version": "1.0",
+  "generated": "2026-09-25",
+  "count": 102,
+  "tag_vocabulary": {
+    "room": [
+      "living",
+      "master bedroom",
+      "secondary bedroom",
+      "kitchen",
+      "dining",
+      "bathroom",
+      "study",
+      "balcony",
+      "entryway"
+    ],
+    "housing_fit": [
+      "HDB",
+      "condo",
+      "landed"
+    ],
+    "style": [
+      "Scandinavian",
+      "Japandi",
+      "modern minimalist",
+      "industrial",
+      "mid-century",
+      "contemporary",
+      "tropical",
+      "modern luxe"
+    ],
+    "palette_family": [
+      "warm neutral",
+      "cool neutral",
+      "monochrome",
+      "earthy",
+      "pastel",
+      "bold"
+    ],
+    "materials": [
+      "light wood",
+      "dark wood",
+      "rattan",
+      "marble",
+      "terrazzo",
+      "concrete",
+      "metal",
+      "fabric-heavy"
+    ],
+    "lighting": [
+      "natural-led",
+      "warm ambient",
+      "cool task",
+      "feature pendant",
+      "cove"
+    ],
+    "layout": [
+      "open concept",
+      "semi-open",
+      "closed"
+    ],
+    "texture": [
+      "smooth",
+      "soft layered",
+      "woven",
+      "raw"
+    ],
+    "furniture_style": [
+      "low-profile",
+      "built-in heavy",
+      "freestanding",
+      "statement piece"
+    ],
+    "mood": [
+      "calm",
+      "cosy",
+      "airy",
+      "dramatic",
+      "playful"
+    ],
+    "budget_tier": [
+      "Essential",
+      "Mid-range",
+      "Premium"
+    ]
+  },
+  "budget_tiers": [
+    {
+      "tier": "Essential",
+      "sgd_min": 0,
+      "sgd_max": 40000
+    },
+    {
+      "tier": "Mid-range",
+      "sgd_min": 40000,
+      "sgd_max": 80000
+    },
+    {
+      "tier": "Premium",
+      "sgd_min": 80000,
+      "sgd_max": null
+    }
+  ],
+  "budget_note": "Tiers describe the finish level shown in the photo, not the cost of the client's home. Boundaries are indicative, from 2026 Singapore contractor guides.",
+  "images": [
+    {
+      "id": "FL-0001",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "grey",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "soft layered",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "living-dining layout close to a SG condo",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1712928247899-2932f4c7dea3?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1712928247899-2932f4c7dea3?w=400&q=80&fm=jpg&fit=max",
+        "width": 3200,
+        "height": 2133,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "RDg0Xz_KBdY",
+        "page_url": "https://unsplash.com/photos/RDg0Xz_KBdY",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0002",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "oak",
+          "navy"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "long narrow plan similar to HDB living-dining",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1665522558736-b11b6f2da8a6?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1665522558736-b11b6f2da8a6?w=400&q=80&fm=jpg&fit=max",
+        "width": 5777,
+        "height": 3851,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "mqEuPwpEvuE",
+        "page_url": "https://unsplash.com/photos/mqEuPwpEvuE",
+        "photographer": "Fred Kleber",
+        "photographer_url": "https://unsplash.com/@flaken",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0003",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "cream"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [
+        "floor lamp"
+      ],
+      "layout": "semi-open",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=400&q=80&fm=jpg&fit=max",
+        "width": 5688,
+        "height": 4166,
+        "dominant_colour": "#d9d9c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "c0JoR_-2x3E",
+        "page_url": "https://unsplash.com/photos/c0JoR_-2x3E",
+        "photographer": "Spacejoy",
+        "photographer_url": "https://unsplash.com/@spacejoy",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0004",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral with pastel accents",
+        "colours": [
+          "white",
+          "sage",
+          "orange"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "playful",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1588471980726-8346cb477a33?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1588471980726-8346cb477a33?w=400&q=80&fm=jpg&fit=max",
+        "width": 3859,
+        "height": 2910,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "raxI_EcyfGw",
+        "page_url": "https://unsplash.com/photos/raxI_EcyfGw",
+        "photographer": "Yehleen gaffney",
+        "photographer_url": "https://unsplash.com/@yanagirl2020",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0005",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral with bold art",
+        "colours": [
+          "charcoal",
+          "slate",
+          "brown"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "dramatic",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "sculptural chairs and abstract art",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1646987916641-1f3c8992daa2?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1646987916641-1f3c8992daa2?w=400&q=80&fm=jpg&fit=max",
+        "width": 5000,
+        "height": 3600,
+        "dominant_colour": "#402626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "8ccOqbNdp1A",
+        "page_url": "https://unsplash.com/photos/8ccOqbNdp1A",
+        "photographer": "mahmoud azmy",
+        "photographer_url": "https://unsplash.com/@mahmoud_azmy",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0006",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "tan",
+          "walnut",
+          "grey"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "tray ceiling with cove and panelled TV wall, close to Asian apartment styling; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1720247520862-7e4b14176fa8?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1720247520862-7e4b14176fa8?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 2500,
+        "dominant_colour": "#262626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "nAFuA8t5K9Y",
+        "page_url": "https://unsplash.com/photos/nAFuA8t5K9Y",
+        "photographer": "Naksha Banwao",
+        "photographer_url": "https://unsplash.com/@nakshabanwao",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0007",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "grey",
+          "white",
+          "black"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1758957701419-2c6e266f7988?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1758957701419-2c6e266f7988?w=400&q=80&fm=jpg&fit=max",
+        "width": 3500,
+        "height": 1980,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "ugIfsN9l_q4",
+        "page_url": "https://unsplash.com/photos/ugIfsN9l_q4",
+        "photographer": "Aalo Lens",
+        "photographer_url": "https://unsplash.com/@aalolens",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0008",
+      "room": "living",
+      "housing_fit": [
+        "landed"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "navy",
+          "brick red",
+          "grey"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy",
+        "concrete"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "exposed brick; loft volume unlike SG flats",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1524061662617-6a29d732e3ef?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1524061662617-6a29d732e3ef?w=400&q=80&fm=jpg&fit=max",
+        "width": 2048,
+        "height": 1536,
+        "dominant_colour": "#262626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "FKZsWsFiNDs",
+        "page_url": "https://unsplash.com/photos/FKZsWsFiNDs",
+        "photographer": "Anna Sullivan",
+        "photographer_url": "https://unsplash.com/@aesullivan2010",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0009",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "brick red",
+          "black",
+          "teal"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "warm ambient"
+      ],
+      "fixtures": [
+        "floor lamp"
+      ],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "brick feature wall at apartment scale (tile or wallpaper can replicate)",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1650091009622-4cbe6def4d2e?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1650091009622-4cbe6def4d2e?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#594026"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "G88ehihe6wQ",
+        "page_url": "https://unsplash.com/photos/G88ehihe6wQ",
+        "photographer": "MAHZA D'BRATA",
+        "photographer_url": "https://unsplash.com/@mahza_dbrata",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0010",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "olive green",
+          "burnt orange"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "playful",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "gallery wall, colour-led rather than build-led",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1618221381711-42ca8ab6e908?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1618221381711-42ca8ab6e908?w=400&q=80&fm=jpg&fit=max",
+        "width": 8000,
+        "height": 4500,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "q3Qd86sfaoU",
+        "page_url": "https://unsplash.com/photos/q3Qd86sfaoU",
+        "photographer": "Spacejoy",
+        "photographer_url": "https://unsplash.com/@spacejoy",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0011",
+      "room": "living",
+      "housing_fit": [
+        "landed"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "tan leather",
+          "sage",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "high ceiling, open plan",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1554995207-c18c203602cb?w=400&q=80&fm=jpg&fit=max",
+        "width": 4708,
+        "height": 3139,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "L7EwHkq1B2s",
+        "page_url": "https://unsplash.com/photos/L7EwHkq1B2s",
+        "photographer": "Kara Eads",
+        "photographer_url": "https://unsplash.com/@karaeads",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0012",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral with black stone",
+        "colours": [
+          "cream",
+          "black marble",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "marble",
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "black marble fireplace wall",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1704040686413-2c607dbd2f06?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1704040686413-2c607dbd2f06?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "gBqNmxSxnAM",
+        "page_url": "https://unsplash.com/photos/gBqNmxSxnAM",
+        "photographer": "Ariel Domenden",
+        "photographer_url": "https://unsplash.com/@hypvisual",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0013",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "cream",
+          "gold",
+          "grey"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "feature pendant",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "crystal chandelier",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1758448755952-42b404bc6f39?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1758448755952-42b404bc6f39?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 1688,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "-QCjahEjubY",
+        "page_url": "https://unsplash.com/photos/-QCjahEjubY",
+        "photographer": "Aalo Lens",
+        "photographer_url": "https://unsplash.com/@aalolens",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0014",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral with gold",
+        "colours": [
+          "grey",
+          "white",
+          "brass"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "feature pendant",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "panelled walls and marble floor; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1648881806148-e5c51179c826?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1648881806148-e5c51179c826?w=400&q=80&fm=jpg&fit=max",
+        "width": 3200,
+        "height": 2450,
+        "dominant_colour": "#595959"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "nhzhEZvhZ1M",
+        "page_url": "https://unsplash.com/photos/nhzhEZvhZ1M",
+        "photographer": "Ali Moradi",
+        "photographer_url": "https://unsplash.com/@3dartistmoradi",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0015",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "charcoal",
+          "grey",
+          "black"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "full-height glazing",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1724582586529-62622e50c0b3?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1724582586529-62622e50c0b3?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 2500,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "vIbxvHj9m9g",
+        "page_url": "https://unsplash.com/photos/vIbxvHj9m9g",
+        "photographer": "Prydumano Design",
+        "photographer_url": "https://unsplash.com/@prydumanodesign",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0016",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "beige",
+          "cream"
+        ]
+      },
+      "materials": [
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "low-profile",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "curved boucle furniture and cove ceiling, a common SG condo look",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1705326701287-346fc37a2c86?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1705326701287-346fc37a2c86?w=400&q=80&fm=jpg&fit=max",
+        "width": 6616,
+        "height": 3676,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "SZ-DsEZxzlg",
+        "page_url": "https://unsplash.com/photos/SZ-DsEZxzlg",
+        "photographer": "Pipcke",
+        "photographer_url": "https://unsplash.com/@pipcke",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0017",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "taupe",
+          "grey",
+          "blush"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "light wood"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "feature wall panel",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1745429523617-0d837856ca35?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1745429523617-0d837856ca35?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2880,
+        "dominant_colour": "#a68c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "-jk2BBoQxSk",
+        "page_url": "https://unsplash.com/photos/-jk2BBoQxSk",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0018",
+      "room": "living",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "white",
+          "green",
+          "tan"
+        ]
+      },
+      "materials": [
+        "rattan",
+        "fabric-heavy",
+        "concrete"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "woven",
+      "furniture_style": "low-profile",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "breeze-block screen wall and indoor planting, strong local relevance; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1717140370275-7d847544b27b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1717140370275-7d847544b27b?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "p2oz7Bkk5t4",
+        "page_url": "https://unsplash.com/photos/p2oz7Bkk5t4",
+        "photographer": "Jejo Jose",
+        "photographer_url": "https://unsplash.com/@tomjejojose",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0019",
+      "room": "living",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "honey wood"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [
+        "ceiling fan"
+      ],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "ceiling fan and open living-dining, suits SG climate",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1668698029314-5ad261bcbca0?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1668698029314-5ad261bcbca0?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 2670,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "5OWwWbutc_g",
+        "page_url": "https://unsplash.com/photos/5OWwWbutc_g",
+        "photographer": "Jose Gonzalez",
+        "photographer_url": "https://unsplash.com/@gdesignc",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0020",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "beige",
+          "walnut",
+          "green"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "warm ambient",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "slatted feature wall behind bed; image may be a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1699869653495-fe26f4c70b3e?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1699869653495-fe26f4c70b3e?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#735940"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "OihXclRy8n0",
+        "page_url": "https://unsplash.com/photos/OihXclRy8n0",
+        "photographer": "Thufeil M",
+        "photographer_url": "https://unsplash.com/@thufeilm23",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0021",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "light wood"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "sloped attic ceiling, not typical of SG flats",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1556020685-ae41abfc9365?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1556020685-ae41abfc9365?w=400&q=80&fm=jpg&fit=max",
+        "width": 3902,
+        "height": 5853,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "7pCFUybP_P8",
+        "page_url": "https://unsplash.com/photos/7pCFUybP_P8",
+        "photographer": "Minh Pham",
+        "photographer_url": "https://unsplash.com/@minhphamdesign",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0022",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "olive",
+          "beige",
+          "grey"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "dark wood"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "compact room with integrated desk, close to an HDB bedroom footprint; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1720420021124-4e18564e070f?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1720420021124-4e18564e070f?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 2500,
+        "dominant_colour": "#a68c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "b0DHABrkRcM",
+        "page_url": "https://unsplash.com/photos/b0DHABrkRcM",
+        "photographer": "Naksha Banwao",
+        "photographer_url": "https://unsplash.com/@nakshabanwao",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0023",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "grey",
+          "white",
+          "charcoal"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "backlit panelled headboard wall; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1642541070065-3912f347e7c6?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1642541070065-3912f347e7c6?w=400&q=80&fm=jpg&fit=max",
+        "width": 6494,
+        "height": 5285,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "IUTewwzaFeM",
+        "page_url": "https://unsplash.com/photos/IUTewwzaFeM",
+        "photographer": "mahmoud azmy",
+        "photographer_url": "https://unsplash.com/@mahmoud_azmy",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0024",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "brick red",
+          "white",
+          "black"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "iron bed and gallery wall; eclectic, weak industrial fit (library gap: few industrial bedrooms)",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1739571281844-42223f09eedc?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1739571281844-42223f09eedc?w=400&q=80&fm=jpg&fit=max",
+        "width": 3024,
+        "height": 4032,
+        "dominant_colour": "#8c7359"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "8FzQn08ukM8",
+        "page_url": "https://unsplash.com/photos/8FzQn08ukM8",
+        "photographer": "Daria Doroshenko",
+        "photographer_url": "https://unsplash.com/@melodic_owl",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0025",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "teal",
+          "mustard",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "playful",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "geometric wallpaper feature wall",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1640109478916-f445f8f19b11?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1640109478916-f445f8f19b11?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "RnAo-ha4bpM",
+        "page_url": "https://unsplash.com/photos/RnAo-ha4bpM",
+        "photographer": "Lotus Design N Print",
+        "photographer_url": "https://unsplash.com/@lotusdnp",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0026",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "honey wood",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "timber-clad walls",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1718717621302-a359be21a111?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1718717621302-a359be21a111?w=400&q=80&fm=jpg&fit=max",
+        "width": 3200,
+        "height": 2133,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "r8i3RwrVcRk",
+        "page_url": "https://unsplash.com/photos/r8i3RwrVcRk",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0027",
+      "room": "master bedroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "charcoal",
+          "black",
+          "grey"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal",
+        "dark wood"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "dark panelled walls and upholstered bed; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1644057501622-dfa7dd26dbfb?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1644057501622-dfa7dd26dbfb?w=400&q=80&fm=jpg&fit=max",
+        "width": 3500,
+        "height": 2600,
+        "dominant_colour": "#262626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "vz9IbCAXHKQ",
+        "page_url": "https://unsplash.com/photos/vz9IbCAXHKQ",
+        "photographer": "Ali Moradi",
+        "photographer_url": "https://unsplash.com/@3dartistmoradi",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0028",
+      "room": "master bedroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "grey",
+          "silver"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "chandelier, large room with seating area",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1598928334118-f86743750cd8?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1598928334118-f86743750cd8?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "NLl4DIDCQFM",
+        "page_url": "https://unsplash.com/photos/NLl4DIDCQFM",
+        "photographer": "Lotus Design N Print",
+        "photographer_url": "https://unsplash.com/@lotusdnp",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0029",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "beige",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "arched timber headboard niche",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1750420556288-d0e32a6f517b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1750420556288-d0e32a6f517b?w=400&q=80&fm=jpg&fit=max",
+        "width": 5208,
+        "height": 4092,
+        "dominant_colour": "#d9c0a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "0tVimluL_ls",
+        "page_url": "https://unsplash.com/photos/0tVimluL_ls",
+        "photographer": "Spl Interiors",
+        "photographer_url": "https://unsplash.com/@spl_interiors",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0030",
+      "room": "master bedroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "charcoal",
+          "grey",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1696762932825-2737db830bbe?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1696762932825-2737db830bbe?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "ErDrzSvSNv4",
+        "page_url": "https://unsplash.com/photos/ErDrzSvSNv4",
+        "photographer": "Le Quan",
+        "photographer_url": "https://unsplash.com/@mrkheu",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0031",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "grey",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "built-in shelving beside the bed",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1757344454333-cc666252e596?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1757344454333-cc666252e596?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "u-RIsXlI8Q8",
+        "page_url": "https://unsplash.com/photos/u-RIsXlI8Q8",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0032",
+      "room": "master bedroom",
+      "housing_fit": [
+        "landed"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "dark teak",
+          "cream",
+          "teal"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "warm ambient",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "resort style with garden view",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1611892440504-42a792e24d32?w=400&q=80&fm=jpg&fit=max",
+        "width": 5775,
+        "height": 3850,
+        "dominant_colour": "#260c0c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "T5pL6ciEn-I",
+        "page_url": "https://unsplash.com/photos/T5pL6ciEn-I",
+        "photographer": "visualsofdana",
+        "photographer_url": "https://unsplash.com/@visualsofdana",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0033",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "rattan",
+          "blush"
+        ]
+      },
+      "materials": [
+        "rattan",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "rattan headboard and jute rug, low-cost look",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1721738861237-3e804f0c9bcc?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1721738861237-3e804f0c9bcc?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "W-wNHts_g3I",
+        "page_url": "https://unsplash.com/photos/W-wNHts_g3I",
+        "photographer": "Alex Tyson",
+        "photographer_url": "https://unsplash.com/@alextyson195",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0034",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "marble"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "reclassified from Japandi, reads as modern minimalist; marble floor and full-height cabinetry",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1709747820806-057272eddd5d?w=400&q=80&fm=jpg&fit=max",
+        "width": 5500,
+        "height": 3385,
+        "dominant_colour": "#a68c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "lE7pmNZZ3Fw",
+        "page_url": "https://unsplash.com/photos/lE7pmNZZ3Fw",
+        "photographer": "Brian Zajac",
+        "photographer_url": "https://unsplash.com/@brianzajac",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0035",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "greige",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "rattan",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "cove",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "woven",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "compact dining-kitchen, close to a condo layout",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1764080582659-652c0000ff1d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1764080582659-652c0000ff1d?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2557,
+        "dominant_colour": "#735940"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "cmuuvD2osWs",
+        "page_url": "https://unsplash.com/photos/cmuuvD2osWs",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0036",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with light wood",
+        "colours": [
+          "black",
+          "white",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1778272618522-665a8af7382e?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1778272618522-665a8af7382e?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 3396,
+        "dominant_colour": "#d9d9c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "j6MCxix3o2c",
+        "page_url": "https://unsplash.com/photos/j6MCxix3o2c",
+        "photographer": "krishna kumar c",
+        "photographer_url": "https://unsplash.com/@krishna_147",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0037",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with wood",
+        "colours": [
+          "black",
+          "oak",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "fluted island, open to dining",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1725257928373-dc6d2ac7b145?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1725257928373-dc6d2ac7b145?w=400&q=80&fm=jpg&fit=max",
+        "width": 4096,
+        "height": 2304,
+        "dominant_colour": "#404040"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "AgHJm3uKr4U",
+        "page_url": "https://unsplash.com/photos/AgHJm3uKr4U",
+        "photographer": "Anand Kumar",
+        "photographer_url": "https://unsplash.com/@elathi",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0038",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "walnut",
+          "black",
+          "brass"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1759147960461-b74a7e9a75d4?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1759147960461-b74a7e9a75d4?w=400&q=80&fm=jpg&fit=max",
+        "width": 3508,
+        "height": 2119,
+        "dominant_colour": "#262626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "kAa2xEs_jZo",
+        "page_url": "https://unsplash.com/photos/kAa2xEs_jZo",
+        "photographer": "Alina Tramontana",
+        "photographer_url": "https://unsplash.com/@render_innovate3d",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0039",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "charcoal",
+          "concrete",
+          "oak"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "metal",
+        "light wood"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1610177534644-34d881503b83?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1610177534644-34d881503b83?w=400&q=80&fm=jpg&fit=max",
+        "width": 3456,
+        "height": 5184,
+        "dominant_colour": "#8c8c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "4jxGry4pXtc",
+        "page_url": "https://unsplash.com/photos/4jxGry4pXtc",
+        "photographer": "Jean-Philippe Delberghe",
+        "photographer_url": "https://unsplash.com/@jipy32",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0040",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "black",
+          "honey wood",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "built-in heavy",
+      "mood": "playful",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "open shelving; may be a cafe counter rather than a home kitchen",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1631248387231-e5ca9ae29a86?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1631248387231-e5ca9ae29a86?w=400&q=80&fm=jpg&fit=max",
+        "width": 3648,
+        "height": 5472,
+        "dominant_colour": "#f3d9c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Obh4ZS_bbno",
+        "page_url": "https://unsplash.com/photos/Obh4ZS_bbno",
+        "photographer": "Petr",
+        "photographer_url": "https://unsplash.com/@mpetrucho",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0041",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral with bold accent",
+        "colours": [
+          "walnut",
+          "white",
+          "red"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "marble"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "walnut upper cabinets, statement red range",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1560562125-ab512e4d9d29?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1560562125-ab512e4d9d29?w=400&q=80&fm=jpg&fit=max",
+        "width": 4240,
+        "height": 2832,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "sZ5CteK2r6E",
+        "page_url": "https://unsplash.com/photos/sZ5CteK2r6E",
+        "photographer": "André François McKenzie",
+        "photographer_url": "https://unsplash.com/@silverhousehd",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0042",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "globe pendants over a walnut island",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1556912167-f556f1f39fdf?w=400&q=80&fm=jpg&fit=max",
+        "width": 5616,
+        "height": 3699,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "RryFk4n-vOs",
+        "page_url": "https://unsplash.com/photos/RryFk4n-vOs",
+        "photographer": "roam in color",
+        "photographer_url": "https://unsplash.com/@roamincolor",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0043",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "greige",
+          "white marble"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "book-matched marble backsplash with backlit display cabinets; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1671197244266-73129c97c096?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1671197244266-73129c97c096?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 1687,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "1jy1WNfqHos",
+        "page_url": "https://unsplash.com/photos/1jy1WNfqHos",
+        "photographer": "Medea Dzagnidze",
+        "photographer_url": "https://unsplash.com/@medeadza",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0044",
+      "room": "kitchen",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with gold",
+        "colours": [
+          "black",
+          "white marble",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "marble",
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1644395175647-7fc09bdae7c1?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1644395175647-7fc09bdae7c1?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#404040"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "c318EdSUtK4",
+        "page_url": "https://unsplash.com/photos/c318EdSUtK4",
+        "photographer": "Murat Demircan",
+        "photographer_url": "https://unsplash.com/@muratdemircan",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0045",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "walnut",
+          "white",
+          "grey"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1684928365167-e91916573122?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1684928365167-e91916573122?w=400&q=80&fm=jpg&fit=max",
+        "width": 3500,
+        "height": 2333,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "80DAbtNfh4k",
+        "page_url": "https://unsplash.com/photos/80DAbtNfh4k",
+        "photographer": "SPurno Animation Studio",
+        "photographer_url": "https://unsplash.com/@spurno",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0046",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "grey",
+          "white"
+        ]
+      },
+      "materials": [
+        "metal",
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "compact kitchen with dining nook, HDB-scale",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1689043528099-2ba014dd7c64?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1689043528099-2ba014dd7c64?w=400&q=80&fm=jpg&fit=max",
+        "width": 3600,
+        "height": 2880,
+        "dominant_colour": "#595959"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "E7yGIdzNE3k",
+        "page_url": "https://unsplash.com/photos/E7yGIdzNE3k",
+        "photographer": "taufiq triadi",
+        "photographer_url": "https://unsplash.com/@mochamadtaufiq23",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0047",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "white"
+        ]
+      },
+      "materials": [
+        "metal",
+        "marble"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "white galley layout, close to an HDB kitchen",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1610276173132-c47d148ab626?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1610276173132-c47d148ab626?w=400&q=80&fm=jpg&fit=max",
+        "width": 5365,
+        "height": 3577,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "gijwI4X-7ig",
+        "page_url": "https://unsplash.com/photos/gijwI4X-7ig",
+        "photographer": "Simona Sergi",
+        "photographer_url": "https://unsplash.com/@i_am_simoesse",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0048",
+      "room": "kitchen",
+      "housing_fit": [
+        "landed"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "teak",
+          "black",
+          "green"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "opens directly to garden, landed only",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1721222203546-eda8036736cd?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1721222203546-eda8036736cd?w=400&q=80&fm=jpg&fit=max",
+        "width": 8256,
+        "height": 5504,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "_yynzKwlZOw",
+        "page_url": "https://unsplash.com/photos/_yynzKwlZOw",
+        "photographer": "Sanju Pandita",
+        "photographer_url": "https://unsplash.com/@spxclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0049",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "light wood",
+          "terracotta"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "rattan pendants and open shelving at apartment scale",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1747336754979-cb1078ce73f5?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1747336754979-cb1078ce73f5?w=400&q=80&fm=jpg&fit=max",
+        "width": 5869,
+        "height": 3903,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "8R_eeyi5bFg",
+        "page_url": "https://unsplash.com/photos/8R_eeyi5bFg",
+        "photographer": "Luis J. Corniel",
+        "photographer_url": "https://unsplash.com/@luisjcorniel",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0050",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "oak",
+          "black accents"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "compact wall-hung layout, workable in HDB",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1733425844220-feab971190ff?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1733425844220-feab971190ff?w=400&q=80&fm=jpg&fit=max",
+        "width": 8334,
+        "height": 7083,
+        "dominant_colour": "#8c8c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Ofidz3G8k0Y",
+        "page_url": "https://unsplash.com/photos/Ofidz3G8k0Y",
+        "photographer": "Murad Kerimli",
+        "photographer_url": "https://unsplash.com/@frankkip",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0051",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "stone grey",
+          "walnut",
+          "green"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "dark wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "freestanding tub needs a large bathroom",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1688786219616-598ed96aa19d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1688786219616-598ed96aa19d?w=400&q=80&fm=jpg&fit=max",
+        "width": 4930,
+        "height": 3287,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "59YYIR-20xs",
+        "page_url": "https://unsplash.com/photos/59YYIR-20xs",
+        "photographer": "Rebecca Chandler",
+        "photographer_url": "https://unsplash.com/@rebecca_luckyducks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0052",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "white",
+          "black"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "compact footprint similar to an HDB common bathroom; tile type is subway",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1635247049694-0269c357ab69?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1635247049694-0269c357ab69?w=400&q=80&fm=jpg&fit=max",
+        "width": 2500,
+        "height": 2123,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "LSKfjiXsbUU",
+        "page_url": "https://unsplash.com/photos/LSKfjiXsbUU",
+        "photographer": "Hemant Kanojiya",
+        "photographer_url": "https://unsplash.com/@thehk1",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0053",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "grey",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "concrete",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "freestanding tub and large floor area, unlikely in HDB",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1770941450515-50f2b8ca380b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1770941450515-50f2b8ca380b?w=400&q=80&fm=jpg&fit=max",
+        "width": 3400,
+        "height": 2267,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "j7Uv1Y_A7dY",
+        "page_url": "https://unsplash.com/photos/j7Uv1Y_A7dY",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0054",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "white marble",
+          "black marble"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": true,
+      "notes": "compact wall-hung layout with fluted vanity",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1667550177753-52b318cd4d40?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1667550177753-52b318cd4d40?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 1688,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "SWSY0NEicIs",
+        "page_url": "https://unsplash.com/photos/SWSY0NEicIs",
+        "photographer": "Medea Dzagnidze",
+        "photographer_url": "https://unsplash.com/@medeadza",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0055",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "beige",
+          "grey",
+          "patterned tile"
+        ]
+      },
+      "materials": [
+        "marble",
+        "terrazzo",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "patterned floor tiles and glass shower screen",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1776525433347-13ffc965601a?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1776525433347-13ffc965601a?w=400&q=80&fm=jpg&fit=max",
+        "width": 5760,
+        "height": 3836,
+        "dominant_colour": "#a68c73"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "q-LqibnwN8Y",
+        "page_url": "https://unsplash.com/photos/q-LqibnwN8Y",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0056",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "charcoal",
+          "grey",
+          "black"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "metal",
+        "dark wood"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "raw",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "backlit mirror, walk-in shower",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1651951646668-46562cfb4518?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1651951646668-46562cfb4518?w=400&q=80&fm=jpg&fit=max",
+        "width": 4981,
+        "height": 3277,
+        "dominant_colour": "#595959"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "yH1k2Qp86Tk",
+        "page_url": "https://unsplash.com/photos/yH1k2Qp86Tk",
+        "photographer": "Mohammad Najjar",
+        "photographer_url": "https://unsplash.com/@arche7vn",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0057",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "charcoal",
+          "black"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "metal"
+      ],
+      "lighting": [
+        "cool task",
+        "cove"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "washing machine sits in the bathroom, a common SG layout",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1720430499886-8943f89990e1?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1720430499886-8943f89990e1?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#404040"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "trSptCbWxAo",
+        "page_url": "https://unsplash.com/photos/trSptCbWxAo",
+        "photographer": "Alex Tyson",
+        "photographer_url": "https://unsplash.com/@alextyson195",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0058",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "teak",
+          "black"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "playful",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "teak double vanity with pill mirrors",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1613849925352-96348d26bc51?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1613849925352-96348d26bc51?w=400&q=80&fm=jpg&fit=max",
+        "width": 6240,
+        "height": 4160,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "d5yfKfMSk9o",
+        "page_url": "https://unsplash.com/photos/d5yfKfMSk9o",
+        "photographer": "Zac Gudakov",
+        "photographer_url": "https://unsplash.com/@zacgudakov",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0059",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "teak",
+          "green"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "compact footprint, round mirror",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1771681278369-e2a5480b8c29?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1771681278369-e2a5480b8c29?w=400&q=80&fm=jpg&fit=max",
+        "width": 3400,
+        "height": 2267,
+        "dominant_colour": "#c0c0a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Fuguvv3goCA",
+        "page_url": "https://unsplash.com/photos/Fuguvv3goCA",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0060",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral with gold",
+        "colours": [
+          "white marble",
+          "grey",
+          "brass"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "marble walls with brass round mirrors",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1564540579594-0930edb6de43?w=400&q=80&fm=jpg&fit=max",
+        "width": 8256,
+        "height": 5504,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "yb9b2wbhxG4",
+        "page_url": "https://unsplash.com/photos/yb9b2wbhxG4",
+        "photographer": "Christian Mackie",
+        "photographer_url": "https://unsplash.com/@mackiec",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0061",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "cream marble",
+          "white",
+          "brass"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "clawfoot tub and wall sconces, classic leaning",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1572742482459-e04d6cfdd6f3?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1572742482459-e04d6cfdd6f3?w=400&q=80&fm=jpg&fit=max",
+        "width": 5472,
+        "height": 3648,
+        "dominant_colour": "#a67359"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "m78oBvRHBm0",
+        "page_url": "https://unsplash.com/photos/m78oBvRHBm0",
+        "photographer": "Ronnie George",
+        "photographer_url": "https://unsplash.com/@realestateron",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0062",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral with dark stone",
+        "colours": [
+          "brown marble",
+          "grey",
+          "white"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "cove",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "dramatic",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "LED mirror and recessed niches; compact wet area similar to a condo bathroom",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1742134131017-44d377a611b1?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1742134131017-44d377a611b1?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2880,
+        "dominant_colour": "#8c7359"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "lXHnEe5AGVo",
+        "page_url": "https://unsplash.com/photos/lXHnEe5AGVo",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0063",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "grey",
+          "white",
+          "black fittings"
+        ]
+      },
+      "materials": [
+        "metal",
+        "marble"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "double vanity",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1774578341998-d1e9a74e82f6?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1774578341998-d1e9a74e82f6?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "iI2VvS1Prwk",
+        "page_url": "https://unsplash.com/photos/iI2VvS1Prwk",
+        "photographer": "Franco Debartolo",
+        "photographer_url": "https://unsplash.com/@francotheshooter",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0064",
+      "room": "bathroom",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "concrete grey",
+          "white",
+          "green"
+        ]
+      },
+      "materials": [
+        "concrete"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "freestanding tub with planting",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1507652313519-d4e9174996dd?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1507652313519-d4e9174996dd?w=400&q=80&fm=jpg&fit=max",
+        "width": 6547,
+        "height": 4365,
+        "dominant_colour": "#a68c73"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "PibraWHb4h8",
+        "page_url": "https://unsplash.com/photos/PibraWHb4h8",
+        "photographer": "Jared Rice",
+        "photographer_url": "https://unsplash.com/@jareddrice",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0065",
+      "room": "bathroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with green",
+        "colours": [
+          "white",
+          "black",
+          "leaf print"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "playful",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "botanical wallpaper feature wall, cheap route to the look",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1620633464616-648f7aeb109b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1620633464616-648f7aeb109b?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#8c8c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "W1YxJ_CkpZo",
+        "page_url": "https://unsplash.com/photos/W1YxJ_CkpZo",
+        "photographer": "Albert Vincent Wu",
+        "photographer_url": "https://unsplash.com/@albertvincentwu",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0066",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "walnut",
+          "tan"
+        ]
+      },
+      "materials": [
+        "dark wood"
+      ],
+      "lighting": [
+        "natural-led",
+        "cool task"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "raw",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "full timber wall panelling",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1598016677484-ad34c3fd766e?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1598016677484-ad34c3fd766e?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 6000,
+        "dominant_colour": "#260c0c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "5684tm9pat8",
+        "page_url": "https://unsplash.com/photos/5684tm9pat8",
+        "photographer": "Ryan Ancill",
+        "photographer_url": "https://unsplash.com/@ryanancill",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0067",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "light wood"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "low-profile",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "very sparse, suits a small HDB study",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1655988940601-7702d8685f95?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1655988940601-7702d8685f95?w=400&q=80&fm=jpg&fit=max",
+        "width": 5748,
+        "height": 3832,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Z_pg_rltaKE",
+        "page_url": "https://unsplash.com/photos/Z_pg_rltaKE",
+        "photographer": "Andrew Neel",
+        "photographer_url": "https://unsplash.com/@andrewtneel",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0068",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "forest green",
+          "white",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1600494603989-9650cf6ddd3d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1600494603989-9650cf6ddd3d?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 3000,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "UUsQk_9bdR8",
+        "page_url": "https://unsplash.com/photos/UUsQk_9bdR8",
+        "photographer": "Collov Home Design",
+        "photographer_url": "https://unsplash.com/@collovhome",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0069",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "grey"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "simple WFH corner",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1606223226320-fc37669d0a4d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1606223226320-fc37669d0a4d?w=400&q=80&fm=jpg&fit=max",
+        "width": 4587,
+        "height": 3440,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "sSJ44vZRTHw",
+        "page_url": "https://unsplash.com/photos/sSJ44vZRTHw",
+        "photographer": "Arthur Lambillotte",
+        "photographer_url": "https://unsplash.com/@artlambi",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0070",
+      "room": "study",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "grey",
+          "marble"
+        ]
+      },
+      "materials": [
+        "marble",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "smooth",
+      "furniture_style": "statement piece",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "marble desk; image is dim and cropped",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1778731525532-d2ab833c8463?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1778731525532-d2ab833c8463?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "A7dlCce015A",
+        "page_url": "https://unsplash.com/photos/A7dlCce015A",
+        "photographer": "Franco Debartolo",
+        "photographer_url": "https://unsplash.com/@francotheshooter",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0071",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "bold",
+        "description": "bold",
+        "colours": [
+          "teal",
+          "walnut",
+          "grey"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led",
+        "cool task"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "playful",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "velvet accent chairs, track lighting",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1595846723416-99a641e1231a?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1595846723416-99a641e1231a?w=400&q=80&fm=jpg&fit=max",
+        "width": 4888,
+        "height": 3258,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "EJSNrTzz6xk",
+        "page_url": "https://unsplash.com/photos/EJSNrTzz6xk",
+        "photographer": "Gian Paolo Aliatis",
+        "photographer_url": "https://unsplash.com/@gianpaoloaliatis",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0072",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "teak",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "small footprint, suits a spare HDB bedroom",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1697807665472-908cfe732b8e?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1697807665472-908cfe732b8e?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 2000,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "wDFwfdH6aEA",
+        "page_url": "https://unsplash.com/photos/wDFwfdH6aEA",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0073",
+      "room": "study",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "cream",
+          "grey"
+        ]
+      },
+      "materials": [
+        "metal",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "calm",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "wall panelling, glass-top desk, window seat",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1776482128000-14cda1ad9e3f?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1776482128000-14cda1ad9e3f?w=400&q=80&fm=jpg&fit=max",
+        "width": 6000,
+        "height": 4000,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "jwpuanZNwg8",
+        "page_url": "https://unsplash.com/photos/jwpuanZNwg8",
+        "photographer": "Franco Debartolo",
+        "photographer_url": "https://unsplash.com/@francotheshooter",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0074",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "concrete grey",
+          "white"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "overlaps with industrial",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1622128082634-1f9742839291?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1622128082634-1f9742839291?w=400&q=80&fm=jpg&fit=max",
+        "width": 5000,
+        "height": 2697,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "9qaKxU20GjY",
+        "page_url": "https://unsplash.com/photos/9qaKxU20GjY",
+        "photographer": "TheStandingDesk",
+        "photographer_url": "https://unsplash.com/@thestandingdesk",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0075",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "cherry wood"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "built-in desk under window with bookshelves",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1777896193454-8b4863264f0b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1777896193454-8b4863264f0b?w=400&q=80&fm=jpg&fit=max",
+        "width": 3386,
+        "height": 2257,
+        "dominant_colour": "#c0c0a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Mb-lGau6K5U",
+        "page_url": "https://unsplash.com/photos/Mb-lGau6K5U",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0076",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral with green",
+        "colours": [
+          "white",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "plant-heavy styling does most of the work",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1650346910154-ed2b112fb83b?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1650346910154-ed2b112fb83b?w=400&q=80&fm=jpg&fit=max",
+        "width": 7622,
+        "height": 5081,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "krEX3ehhezs",
+        "page_url": "https://unsplash.com/photos/krEX3ehhezs",
+        "photographer": "Annie Spratt",
+        "photographer_url": "https://unsplash.com/@anniespratt",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0077",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "honey wood",
+          "white"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "cove",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "full timber built-ins with wall-mounted aircon, SG-typical; weak tropical fit; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1765371514615-495c20659e3a?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1765371514615-495c20659e3a?w=400&q=80&fm=jpg&fit=max",
+        "width": 12306,
+        "height": 7973,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "IAKubWDzTQA",
+        "page_url": "https://unsplash.com/photos/IAKubWDzTQA",
+        "photographer": "Caroline Badran",
+        "photographer_url": "https://unsplash.com/@___atmos",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0078",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome",
+        "colours": [
+          "white",
+          "concrete grey",
+          "black"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "exposed concrete ceiling at apartment scale; easiest industrial look for a flat",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1704428382583-c9c7c1e55d94?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1704428382583-c9c7c1e55d94?w=400&q=80&fm=jpg&fit=max",
+        "width": 6016,
+        "height": 4016,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "l_SQo7xwJGk",
+        "page_url": "https://unsplash.com/photos/l_SQo7xwJGk",
+        "photographer": "Suzanne Rushton",
+        "photographer_url": "https://unsplash.com/@suzanne_ella",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0079",
+      "room": "master bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "concrete grey",
+          "charcoal",
+          "walnut"
+        ]
+      },
+      "materials": [
+        "concrete",
+        "dark wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "cove",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "full concrete-finish walls; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1765279333918-949ddcb655ba?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1765279333918-949ddcb655ba?w=400&q=80&fm=jpg&fit=max",
+        "width": 3840,
+        "height": 2160,
+        "dominant_colour": "#404040"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Dua0qvBmBtY",
+        "page_url": "https://unsplash.com/photos/Dua0qvBmBtY",
+        "photographer": "Puscas Adryan",
+        "photographer_url": "https://unsplash.com/@adryan_studio",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0080",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "oak",
+          "white",
+          "stainless"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "light oak cabinets and open shelving on a single wall, very achievable in an HDB kitchen",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1699870798609-b5c3e7e5900d?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1699870798609-b5c3e7e5900d?w=400&q=80&fm=jpg&fit=max",
+        "width": 5400,
+        "height": 4500,
+        "dominant_colour": "#595959"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "E2XW7BvfRQg",
+        "page_url": "https://unsplash.com/photos/E2XW7BvfRQg",
+        "photographer": "Le Quan",
+        "photographer_url": "https://unsplash.com/@mrkheu",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0081",
+      "room": "kitchen",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "low oak run with a single open shelf, very sparse",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1718876331083-95db24a9f335?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1718876331083-95db24a9f335?w=400&q=80&fm=jpg&fit=max",
+        "width": 4996,
+        "height": 6245,
+        "dominant_colour": "#f3f3f3"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "uhv5wEZiz0M",
+        "page_url": "https://unsplash.com/photos/uhv5wEZiz0M",
+        "photographer": "Nord Est Studio",
+        "photographer_url": "https://unsplash.com/@nordeststudio",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0082",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "brick red",
+          "rust",
+          "grey"
+        ]
+      },
+      "materials": [
+        "metal",
+        "light wood",
+        "concrete"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "exposed brick and arched window; sparse styling",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1609740700118-ba62b87fbeab?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1609740700118-ba62b87fbeab?w=400&q=80&fm=jpg&fit=max",
+        "width": 2873,
+        "height": 2154,
+        "dominant_colour": "#735940"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "GbTDqXJ5jbs",
+        "page_url": "https://unsplash.com/photos/GbTDqXJ5jbs",
+        "photographer": "Sunguk Kim",
+        "photographer_url": "https://unsplash.com/@sunyu",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0083",
+      "room": "study",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "whitewashed brick",
+          "walnut",
+          "black"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "warm ambient",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "raw",
+      "furniture_style": "built-in heavy",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "long wall desk with cage lamp; may be a shared workspace rather than a home",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1599579138409-6db5b0fdbfb6?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1599579138409-6db5b0fdbfb6?w=400&q=80&fm=jpg&fit=max",
+        "width": 4032,
+        "height": 3024,
+        "dominant_colour": "#260c0c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "iGSVkM_6Bfk",
+        "page_url": "https://unsplash.com/photos/iGSVkM_6Bfk",
+        "photographer": "Doug Greenman",
+        "photographer_url": "https://unsplash.com/@digndoug",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0084",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Japandi",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "oak",
+          "cream",
+          "green"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "woven",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "lattice shelving used as a room divider between dining and living, works in an open HDB plan",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1772797583328-f83bc3f94f80?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1772797583328-f83bc3f94f80?w=400&q=80&fm=jpg&fit=max",
+        "width": 2208,
+        "height": 2760,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "2cfj0Y5ch00",
+        "page_url": "https://unsplash.com/photos/2cfj0Y5ch00",
+        "photographer": "Puscas Adryan",
+        "photographer_url": "https://unsplash.com/@adryan_studio",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0085",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with wood",
+        "colours": [
+          "white",
+          "black",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "wishbone-style chairs round a black table",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1723750290151-164cb19ebab7?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1723750290151-164cb19ebab7?w=400&q=80&fm=jpg&fit=max",
+        "width": 3200,
+        "height": 2133,
+        "dominant_colour": "#8c8c73"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "aYjdg6wZrOU",
+        "page_url": "https://unsplash.com/photos/aYjdg6wZrOU",
+        "photographer": "Clay Banks",
+        "photographer_url": "https://unsplash.com/@claybanks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0086",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "grey",
+          "white",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": false,
+      "notes": "long table for eight with upholstered chairs",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1658280024253-34cafdfbb002?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1658280024253-34cafdfbb002?w=400&q=80&fm=jpg&fit=max",
+        "width": 6170,
+        "height": 3085,
+        "dominant_colour": "#a6a6a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "fE3kcMhB1oc",
+        "page_url": "https://unsplash.com/photos/fE3kcMhB1oc",
+        "photographer": "Rebecca Chandler",
+        "photographer_url": "https://unsplash.com/@rebecca_luckyducks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0087",
+      "room": "dining",
+      "housing_fit": [
+        "landed"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "walnut",
+          "black steel",
+          "brick"
+        ]
+      },
+      "materials": [
+        "metal",
+        "dark wood"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "dramatic",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "double-height loft with steel stair, landed or penthouse only",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1783990349147-906f62b882c1?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1783990349147-906f62b882c1?w=400&q=80&fm=jpg&fit=max",
+        "width": 3641,
+        "height": 2048,
+        "dominant_colour": "#402626"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "tqCfLSHgaIo",
+        "page_url": "https://unsplash.com/photos/tqCfLSHgaIo",
+        "photographer": "ULISES RAMIREZ",
+        "photographer_url": "https://unsplash.com/@ulises_rplt",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0088",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "walnut",
+          "white",
+          "black"
+        ]
+      },
+      "materials": [
+        "dark wood",
+        "metal"
+      ],
+      "lighting": [
+        "feature pendant",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "walnut table and sideboard under dome pendants, open to kitchen",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1600488999806-8efb986d87b1?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1600488999806-8efb986d87b1?w=400&q=80&fm=jpg&fit=max",
+        "width": 3000,
+        "height": 4000,
+        "dominant_colour": "#c0a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "v9096DgeVeA",
+        "page_url": "https://unsplash.com/photos/v9096DgeVeA",
+        "photographer": "Collov Home Design",
+        "photographer_url": "https://unsplash.com/@collovhome",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0089",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "monochrome",
+        "description": "monochrome with brass",
+        "colours": [
+          "white",
+          "black",
+          "brass"
+        ]
+      },
+      "materials": [
+        "metal",
+        "marble"
+      ],
+      "lighting": [
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "statement piece",
+      "mood": "playful",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "sputnik chandelier and moulded shell chairs",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1673300881006-3bd384aa1949?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1673300881006-3bd384aa1949?w=400&q=80&fm=jpg&fit=max",
+        "width": 6960,
+        "height": 4640,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "-yJ-99VvnfE",
+        "page_url": "https://unsplash.com/photos/-yJ-99VvnfE",
+        "photographer": "Lotus Design N Print",
+        "photographer_url": "https://unsplash.com/@lotusdnp",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0090",
+      "room": "dining",
+      "housing_fit": [
+        "condo",
+        "landed"
+      ],
+      "style": "modern luxe",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "cream",
+          "white marble",
+          "gold"
+        ]
+      },
+      "materials": [
+        "marble",
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "soft layered",
+      "furniture_style": "statement piece",
+      "mood": "airy",
+      "budget_tier": "Premium",
+      "likely_render": false,
+      "notes": "crystal pendant and marble floor, wall-mounted aircon typical of SG condos",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1572297259518-0974576b6738?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1572297259518-0974576b6738?w=400&q=80&fm=jpg&fit=max",
+        "width": 3648,
+        "height": 5472,
+        "dominant_colour": "#f3d9c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "4a-xheeuZA0",
+        "page_url": "https://unsplash.com/photos/4a-xheeuZA0",
+        "photographer": "Jonathan Borba",
+        "photographer_url": "https://unsplash.com/@jonathanborba",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0091",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "black",
+          "oak"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "single pendant over a simple table, low cost to replicate",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1657524398377-567034729507?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1657524398377-567034729507?w=400&q=80&fm=jpg&fit=max",
+        "width": 3024,
+        "height": 3780,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "zGKRmwzplVc",
+        "page_url": "https://unsplash.com/photos/zGKRmwzplVc",
+        "photographer": "ONNO",
+        "photographer_url": "https://unsplash.com/@onnostudio",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0092",
+      "room": "dining",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "tropical",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "cream",
+          "rattan",
+          "green"
+        ]
+      },
+      "materials": [
+        "rattan",
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led",
+        "warm ambient"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "rattan chairs and botanical art, cheap to replicate",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1769541072159-81a0ad69b66a?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1769541072159-81a0ad69b66a?w=400&q=80&fm=jpg&fit=max",
+        "width": 2880,
+        "height": 3840,
+        "dominant_colour": "#f3d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Y4mBZQ240Vc",
+        "page_url": "https://unsplash.com/photos/Y4mBZQ240Vc",
+        "photographer": "POOJAN THANEKAR",
+        "photographer_url": "https://unsplash.com/@poojanclicks",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0093",
+      "room": "secondary bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "beige",
+          "grey"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "nursery with cot and single bed, suits a growing family",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1600493505500-afac3fc363e6?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1600493505500-afac3fc363e6?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 3000,
+        "dominant_colour": "#a6a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "wN63YFU_JXk",
+        "page_url": "https://unsplash.com/photos/wN63YFU_JXk",
+        "photographer": "Collov Home Design",
+        "photographer_url": "https://unsplash.com/@collovhome",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0094",
+      "room": "secondary bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "cream",
+          "rust",
+          "pale wood"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "playful",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "child's room with canopy and low desk",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1763478958800-3a2a6321f645?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1763478958800-3a2a6321f645?w=400&q=80&fm=jpg&fit=max",
+        "width": 5676,
+        "height": 3784,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "iSO22I2l5uc",
+        "page_url": "https://unsplash.com/photos/iSO22I2l5uc",
+        "photographer": "Shoham Avisrur",
+        "photographer_url": "https://unsplash.com/@shoham_avisrur",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0095",
+      "room": "secondary bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "grey"
+        ]
+      },
+      "materials": [
+        "fabric-heavy"
+      ],
+      "lighting": [
+        "warm ambient",
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "plain guest room with upholstered headboard and wall sconce",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1759264244726-adde4e4318fc?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1759264244726-adde4e4318fc?w=400&q=80&fm=jpg&fit=max",
+        "width": 5100,
+        "height": 3400,
+        "dominant_colour": "#8c8c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "wItbwu49Wdc",
+        "page_url": "https://unsplash.com/photos/wItbwu49Wdc",
+        "photographer": "ubeyonroad",
+        "photographer_url": "https://unsplash.com/@ubeyonroad",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0096",
+      "room": "secondary bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "mid-century",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "olive",
+          "burnt orange",
+          "beige"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "study desk under window beside the bed",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1697899131342-2f311347f1c5?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1697899131342-2f311347f1c5?w=400&q=80&fm=jpg&fit=max",
+        "width": 3704,
+        "height": 2086,
+        "dominant_colour": "#d9d9d9"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "jM-dZdFtnbk",
+        "page_url": "https://unsplash.com/photos/jM-dZdFtnbk",
+        "photographer": "Aim | @photobypitcha",
+        "photographer_url": "https://unsplash.com/@aimpitcha",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0097",
+      "room": "secondary bedroom",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "greige",
+          "sage",
+          "white"
+        ]
+      },
+      "materials": [
+        "fabric-heavy",
+        "metal",
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led",
+        "feature pendant"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "soft layered",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "bed plus compact desk, fits a common HDB bedroom; likely a 3D render",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1622127922040-13cab637ee78?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1622127922040-13cab637ee78?w=400&q=80&fm=jpg&fit=max",
+        "width": 5100,
+        "height": 3400,
+        "dominant_colour": "#c0c0c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "PhOABIwQrRE",
+        "page_url": "https://unsplash.com/photos/PhOABIwQrRE",
+        "photographer": "TheStandingDesk",
+        "photographer_url": "https://unsplash.com/@thestandingdesk",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0098",
+      "room": "balcony",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "grey",
+          "oak",
+          "charcoal"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan",
+        "metal"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Mid-range",
+      "likely_render": true,
+      "notes": "hanging egg chair and timber decking on a high-rise balcony, close to a SG condo",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1776363116182-51694a04a1d5?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1776363116182-51694a04a1d5?w=400&q=80&fm=jpg&fit=max",
+        "width": 5000,
+        "height": 2812,
+        "dominant_colour": "#8ca6c0"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "iqGUN6GIl78",
+        "page_url": "https://unsplash.com/photos/iqGUN6GIl78",
+        "photographer": "Aalo Lens",
+        "photographer_url": "https://unsplash.com/@aalolens",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0099",
+      "room": "balcony",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "industrial",
+      "palette": {
+        "family": "earthy",
+        "description": "earthy",
+        "colours": [
+          "brick red",
+          "black",
+          "green"
+        ]
+      },
+      "materials": [
+        "metal",
+        "concrete"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "raw",
+      "furniture_style": "freestanding",
+      "mood": "cosy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "black metal bistro set with potted plants",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1730204880386-1587173e16e7?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1730204880386-1587173e16e7?w=400&q=80&fm=jpg&fit=max",
+        "width": 2362,
+        "height": 3543,
+        "dominant_colour": "#8c8c8c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "PykCR7AajYc",
+        "page_url": "https://unsplash.com/photos/PykCR7AajYc",
+        "photographer": "Kateryna Melnyk",
+        "photographer_url": "https://unsplash.com/@katranos",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0100",
+      "room": "balcony",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "modern minimalist",
+      "palette": {
+        "family": "cool neutral",
+        "description": "cool neutral",
+        "colours": [
+          "white",
+          "black",
+          "teak"
+        ]
+      },
+      "materials": [
+        "metal",
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "open concept",
+      "texture": "smooth",
+      "furniture_style": "freestanding",
+      "mood": "airy",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "two-seat bistro set with a high-rise city view",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1719266084633-24981ecdc417?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1719266084633-24981ecdc417?w=400&q=80&fm=jpg&fit=max",
+        "width": 5842,
+        "height": 3895,
+        "dominant_colour": "#737373"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "Szi36WVr7M4",
+        "page_url": "https://unsplash.com/photos/Szi36WVr7M4",
+        "photographer": "Frugal Flyer",
+        "photographer_url": "https://unsplash.com/@frugalflyer",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0101",
+      "room": "entryway",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "Scandinavian",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "cream"
+        ]
+      },
+      "materials": [
+        "light wood"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "closed",
+      "texture": "smooth",
+      "furniture_style": "built-in heavy",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": false,
+      "notes": "full-height louvred shoe and storage cabinets along a narrow corridor, HDB-style",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1635108197511-8e6046f191f3?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1635108197511-8e6046f191f3?w=400&q=80&fm=jpg&fit=max",
+        "width": 6720,
+        "height": 4480,
+        "dominant_colour": "#a6a68c"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "e0ReP2ZWIMw",
+        "page_url": "https://unsplash.com/photos/e0ReP2ZWIMw",
+        "photographer": "Point3D Commercial Imaging Ltd.",
+        "photographer_url": "https://unsplash.com/@3dottawa",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    },
+    {
+      "id": "FL-0102",
+      "room": "entryway",
+      "housing_fit": [
+        "HDB",
+        "condo"
+      ],
+      "style": "contemporary",
+      "palette": {
+        "family": "warm neutral",
+        "description": "warm neutral",
+        "colours": [
+          "white",
+          "oak",
+          "black"
+        ]
+      },
+      "materials": [
+        "light wood",
+        "rattan"
+      ],
+      "lighting": [
+        "natural-led"
+      ],
+      "fixtures": [],
+      "layout": "semi-open",
+      "texture": "woven",
+      "furniture_style": "freestanding",
+      "mood": "calm",
+      "budget_tier": "Essential",
+      "likely_render": true,
+      "notes": "console, round mirror and bench, gallery wall",
+      "image": {
+        "url": "https://images.unsplash.com/photo-1600494448868-9fbd1ac2d9f5?w=1080&q=80&fm=jpg&fit=max",
+        "thumb_url": "https://images.unsplash.com/photo-1600494448868-9fbd1ac2d9f5?w=400&q=80&fm=jpg&fit=max",
+        "width": 4000,
+        "height": 3000,
+        "dominant_colour": "#c0c0a6"
+      },
+      "source": {
+        "provider": "Unsplash",
+        "photo_id": "xJ14RuLV9zI",
+        "page_url": "https://unsplash.com/photos/xJ14RuLV9zI",
+        "photographer": "Collov Home Design",
+        "photographer_url": "https://unsplash.com/@collovhome",
+        "licence": "Unsplash License",
+        "licence_url": "https://unsplash.com/license"
+      }
+    }
+  ]
+}
