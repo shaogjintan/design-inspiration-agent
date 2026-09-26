@@ -169,13 +169,16 @@ class PlanEditor(unittest.TestCase):
 
     def test_edits_are_clamped_to_the_plan(self):
         geo = app.stamp_plan_geometry(traced(), self.plan, LABELS)
-        new = app.apply_plan_edit(geo, self.edit({"Kitchen": [[-50, 400, 9000, 2]]}),
+        new = app.apply_plan_edit(geo, self.edit({"Kitchen": [[-50, 400, 9000, 200]]}),
                                   LABELS, self.plan)
         p = new["rooms"]["Kitchen"]["parts"][0]
         self.assertGreaterEqual(p["x"], 0)
         self.assertLessEqual(p["x"] + p["w"], 700)
         self.assertLessEqual(p["y"] + p["h"], 450)
-        self.assertGreaterEqual(p["h"], 7)
+        # A sliver beside a room's part is dropped, never widened into a room.
+        new = app.apply_plan_edit(geo, self.edit({"Kitchen": [[410, 100, 60, 120], [404, 100, 0.5, 120]]}),
+                                  LABELS, self.plan)
+        self.assertEqual(len(new["rooms"]["Kitchen"]["parts"]), 1)
         self.assertIsNone(app.apply_plan_edit(geo, "not json", LABELS, self.plan))
 
     # ── Page 5 ────────────────────────────────────────────────────────────────

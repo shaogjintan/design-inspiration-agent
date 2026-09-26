@@ -303,7 +303,7 @@ class WalkwaysAndScale(unittest.TestCase):
         d = self._reply(walkways=[[436, 407, 621, 493]])
         g = app.parse_plan_geometry(d, LABELS, SIZE)
         svg = app.generate_floor_plan_svg([{"label": l, "items": []} for l in LABELS], geometry=g)
-        self.assertIn('fill="#E6E0D5"', svg)
+        self.assertIn('fill="#EDE8DF"', svg)                   # the corridor, as plain floor
         self.assertNotIn("Walkway", svg)
 
     def test_scale_read_off_a_drawn_bed(self):
@@ -351,7 +351,8 @@ class Doors(unittest.TestCase):
         g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
         # The model's own door first; the yard door the kitchen gains by
         # convention comes after it.
-        self.assertEqual(g["rooms"]["Kitchen"]["doors"][0], {"wall": "top", "at": 0.5, "part": 0})
+        self.assertEqual(g["rooms"]["Kitchen"]["doors"][0],
+                         {"wall": "top", "at": 0.5, "part": 0, "hinge": "start", "opens": "in"})
         self.assertEqual(len(g["rooms"]["Bedroom 2"]["doors"]), 1)
 
     def test_prompt_asks_for_doors_not_windows(self):
@@ -421,7 +422,7 @@ class Doors(unittest.TestCase):
         r["rooms"][4]["doors"] = [{"box": 0, "wall": "top", "at": 300}]       # Master Bathroom
         g = app.parse_plan_geometry(app._normalise_trace(r), LABELS, SIZE)
         self.assertEqual(g["rooms"]["Master Bathroom"]["doors"],
-                         [{"wall": "top", "at": 0.3, "part": 0}])
+                         [{"wall": "top", "at": 0.3, "part": 0, "hinge": "start", "opens": "in"}])
 
     def test_prompt_describes_how_doors_are_drawn(self):
         import tempfile as _t
@@ -436,7 +437,10 @@ class Doors(unittest.TestCase):
             app.call_llm = real
             tmp.cleanup()
         self.assertIn("quarter-circle arc, often dotted or dashed", seen[0])
-        self.assertIn("List only doors you can see drawn on the plan", seen[0])
+        flat = " ".join(seen[0].split())
+        self.assertIn("List only doors you can see drawn on the plan", flat)
+        self.assertIn('"hinge" is "start" when the hinge is at the gap', flat)
+        self.assertIn('"dimensions"', flat)
         self.assertIn("list each door ONCE", seen[0])
         self.assertNotIn("en suite opens from", seen[0])
         self.assertNotIn("Every room has at least one", seen[0])
@@ -501,10 +505,18 @@ class OutlineFirst(unittest.TestCase):
                 iy = min(w["y"] + w["h"], p["y"] + p["h"]) - max(w["y"], p["y"])
                 self.assertFalse(ix > 0.5 and iy > 0.5)
 
-    def test_scale_from_floor_area_uses_the_outline(self):
+    def test_floor_area_is_shared_between_the_spaces(self):
+        # Each room's area is its share of the total, not a size scaled off the
+        # outer walls: rooms and walkways together cover the floor area.
         g = app.parse_plan_geometry(self._reply(), LABELS, SIZE)
         m = app.plan_metres_per_px(g, 67)
-        self.assertAlmostEqual(app.union_area(g["outline"]) * m * m, 67 * 0.93, places=6)
+        rooms_px = sum(app.union_area(app.room_parts(r)) for r in g["rooms"].values())
+        walk_px = sum(w["w"] * w["h"] for w in g["walkways"])
+        coverage = 0.95 if walk_px else app._ROOM_COVERAGE
+        self.assertAlmostEqual((rooms_px + walk_px) * m * m, 67 * coverage, places=6)
+        # Moving the outline changes nothing.
+        wider = {**g, "outline": [{"x": 0, "y": 0, "w": 700, "h": 467}]}
+        self.assertAlmostEqual(app.plan_metres_per_px(wider, 67), m)
 
     def test_bathroom_joined_to_master_bedroom_is_the_master_bathroom(self):
         # Swap the two bathrooms' boxes: the one under the master bedroom is
@@ -828,7 +840,8 @@ class Drawing(unittest.TestCase):
         for item in ("Bed", "Wardrobe", "Vanity", "Shower", "Cooktop"):
             self.assertNotIn(f">{item}<", svg)
         # One outline per room, plus one round the walkways.
-        self.assertEqual(svg.count('class="room-wall"'), 8 + (1 if self.geo["walkways"] else 0))
+        # One wall outline per room; walkways are plain floor with none.
+        self.assertEqual(svg.count('class="room-wall"'), 8)
 
     def test_traced_plan_matches_the_plan_aspect(self):
         svg = app.generate_floor_plan_svg(self.rooms, geometry=self.geo)

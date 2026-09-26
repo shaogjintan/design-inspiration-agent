@@ -625,15 +625,22 @@ def place_room(W: float, D: float, pieces: list[dict], doors: list[dict] = ()) -
     return {"placed": out, "skipped": skipped}
 
 
-def door_zone(point: tuple, wall: str, width: float) -> tuple:
+# Clear floor kept in front of a door that swings away from the room: enough
+# to step through it without walking into something.
+DOORWAY_DEPTH = 0.6
+
+
+def door_zone(point: tuple, wall: str, width: float, approach: float = 0.0) -> tuple:
     """A door's swing as clear floor: as wide as the door, as deep as it is
-    wide, on the room side of the wall it is in. point is the door's centre."""
+    wide, on the room side of the wall it is in — and `approach` deeper, the
+    way in past the swing, so nothing stands just beyond the open door either.
+    point is the door's centre."""
     x, y = point
-    half = width / 2
-    return {"top":    (x - half, y, width, width),
-            "bottom": (x - half, y - width, width, width),
-            "left":   (x, y - half, width, width),
-            "right":  (x - width, y - half, width, width)}[wall]
+    half, deep = width / 2, width + approach
+    return {"top":    (x - half, y, width, deep),
+            "bottom": (x - half, y - deep, width, deep),
+            "left":   (x, y - half, deep, width),
+            "right":  (x - deep, y - half, deep, width)}[wall]
 
 
 def place_parts(parts: list[tuple], pieces: list[dict], doors: list[dict] = ()) -> dict:
@@ -649,7 +656,18 @@ def place_parts(parts: list[tuple], pieces: list[dict], doors: list[dict] = ()) 
             break
         local = []
         for dr in doors:
-            zx, zy, zw, zh = door_zone(dr["point"], dr["wall"], dr["width"])
+            if dr.get("swings_in", True):
+                zx, zy, zw, zh = door_zone(dr["point"], dr["wall"], dr["width"], dr.get("approach", 0.0))
+            else:
+                # It swings the other way: only the doorway itself, and a
+                # step in front of it, need to stay clear on this side.
+                depth = dr.get("doorway", DOORWAY_DEPTH)
+                zx, zy, zw, zh = door_zone(dr["point"], dr["wall"], dr["width"])
+                zw, zh = ((zw, depth) if dr["wall"] in ("top", "bottom") else (depth, zh))
+                if dr["wall"] == "bottom":
+                    zy = dr["point"][1] - depth
+                if dr["wall"] == "right":
+                    zx = dr["point"][0] - depth
             px, py = dr["point"][0] - ox, dr["point"][1] - oy
             # The wall it is in, if that wall is one of this part's own.
             on = {"top": abs(py) < 0.05, "bottom": abs(py - d) < 0.05,

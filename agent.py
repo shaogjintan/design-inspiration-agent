@@ -67,6 +67,30 @@ def _trace_entry(step: str, action: str, reason: str,
 # Main agent entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+def clamp_m(v: float, hi: float) -> float:
+    return min(max(v, 0.0), hi)
+
+
+def shrink_part(part: tuple, W: float, D: float) -> tuple:
+    """A part of a room, in metres from the floor's inside corner, cut back to
+    the floor: a part's outer sides lose half a wall, its inner ones — where
+    it meets the room's other parts — nothing."""
+    x, y, w, h = part
+    x1, y1 = min(x + w, W), min(y + h, D)
+    x, y = max(x, 0.0), max(y, 0.0)
+    return (x, y, max(x1 - x, 0.0), max(y1 - y, 0.0))
+
+
+def door_approach(label: str) -> float:
+    """Clear floor kept past a door's swing, so the way in is not blocked by
+    something standing just beyond the open door. Wet rooms and cupboards are
+    too tight for it: their fittings sit beside the swing by design."""
+    n = label.lower()
+    if any(k in n for k in ("bath", "wc", "toilet", "shelter", "store", "yard")):
+        return 0.0
+    return 0.3
+
+
 def _prepare_space(_app, rooms, step1, requirements,
                    existing_geometry, existing_furniture, emit=lambda *a, **k: None) -> dict:
     """Trace the plan, size the rooms, and plan their furniture. Runs in the
@@ -97,13 +121,24 @@ def _prepare_space(_app, rooms, step1, requirements,
         # The plan's scale, most trustworthy first: the floor area the
         # homeowner gave; the standard furniture drawn on the plan itself;
         # a typical flat of this type; typical rooms of these kinds.
-        m = None
-        if step1.get("floor_size"):
+        # Printed dimension lines first: they are the plan's own scale, exact
+        # where the floor area the homeowner gave includes walls and ledges.
+        m = geo.get("m_per_px_dims")
+        if not m and step1.get("floor_size"):
             m = _app.plan_metres_per_px(geo, step1["floor_size"])
+        typical_sqm = _app.TYPICAL_FLOOR_SQM.get(step1.get("housing_type"))
         if not m:
             m = geo.get("m_per_px_ref")
+            # The furniture drawn on a plan is not always drawn to its scale.
+            # A flat that comes out far from the typical size for its type
+            # means the reference is off, and the typical size is the safer
+            # guess — it is what made doors look oversized in shrunken rooms.
+            if m and typical_sqm:
+                typical_m = _app.plan_metres_per_px(geo, typical_sqm)
+                if typical_m and not (0.85 <= (m / typical_m) ** 2 <= 1.2):
+                    m = typical_m
         if not m:
-            m = _app.plan_metres_per_px(geo, _app.TYPICAL_FLOOR_SQM.get(step1.get("housing_type")))
+            m = _app.plan_metres_per_px(geo, typical_sqm)
         if not m:
             # No floor area to scale by: scale so the traced rooms add up to
             # what rooms of their kinds typically measure.
@@ -115,27 +150,56 @@ def _prepare_space(_app, rooms, step1, requirements,
         out["px_per_m"] = m
         geo["m_per_px"] = m                  # for drawing doors at their real width
 
+    # Rooms are traced to wall centre lines; the floor stops at the wall's
+    # face. Half a wall comes off every side before anything is measured or
+    # furnished: the thickness the image shows, within what walls are built to.
+    wall_m = 0.0
+    if geo and out["px_per_m"]:
+        wall_px = geo.get("wall_px")
+        if not wall_px and plan_path:
+            wall_px = (_app.detect_plan_walls(plan_path) or {}).get("thickness")
+        wall_m = min(max((wall_px or 0) * out["px_per_m"], 0.1), 0.3) if wall_px else 0.12
+    out["inset"] = wall_m / 2
+
     for room in rooms:
         g = (geo or {}).get("rooms", {}).get(room["label"])
         m = out["px_per_m"]
         if g and m:
             main = _app._main_part(g)
-            out["sizes"][room["key"]] = (main["w"] * m, main["h"] * m)
+            inset = out["inset"]
+            out["sizes"][room["key"]] = (main["w"] * m - 2 * inset, main["h"] * m - 2 * inset)
             out["measured"][room["key"]] = True
             # The room's outline in metres, from its own top-left: its bounding
             # box, and its parts largest first for the layout to fill in turn.
             parts = _app.split_into_rects(_app.room_parts(g), wide=3.0 / m)
             doors = []
-            for door in g.get("doors") or []:
-                src = _app.room_parts(g)
+            # Every door in this room's walls — its own, and a neighbour's that
+            # swings out into it. With none on the plan (or a room marked out
+            # by hand), the likeliest way in is kept clear anyway.
+            seen = _app.room_door_swings(geo, room["label"])
+            if not seen:
+                guess = _app.infer_door(geo, room["label"])
+                seen = [{**guess, "swings_in": True}] if guess else []
+            src = _app.room_parts(g)
+            for door in seen:
                 px, py = _app.door_point(src[door["part"]] if door["part"] < len(src) else src[0], door)
-                doors.append({"point": ((px - g["x"]) * m, (py - g["y"]) * m),
-                              "wall": door["wall"], "width": _app.door_width_m(room["label"])})
+                # Measured from the floor's corner, inside the wall's face.
+                doors.append({"point": (clamp_m((px - g["x"]) * m - inset, g["w"] * m - 2 * inset),
+                                        clamp_m((py - g["y"]) * m - inset, g["h"] * m - 2 * inset)),
+                              "wall": door["wall"], "width": _app.door_width_m(room["label"]),
+                              "approach": door_approach(room["label"]),
+                              # A door swinging away still needs its doorway
+                              # clear: a step's depth, less in a wet room.
+                              "doorway": 0.3 + door_approach(room["label"]),
+                              "swings_in": door.get("swings_in", True)})
+            W_, D_ = g["w"] * m - 2 * inset, g["h"] * m - 2 * inset
             out["outline"][room["key"]] = {
-                "W": g["w"] * m, "D": g["h"] * m,
-                "parts": [((p["x"] - g["x"]) * m, (p["y"] - g["y"]) * m, p["w"] * m, p["h"] * m)
+                "W": W_, "D": D_,
+                "parts": [shrink_part(((p["x"] - g["x"]) * m - inset, (p["y"] - g["y"]) * m - inset,
+                                       p["w"] * m, p["h"] * m), W_, D_)
                           for p in parts[:3]],
                 "doors": doors,
+                "inset": inset,
             }
         else:
             w, d = furniture_layout.typical_room_size(room["label"], step1.get("housing_type"))
@@ -146,7 +210,8 @@ def _prepare_space(_app, rooms, step1, requirements,
             out["outline"][room["key"]] = {
                 "W": w, "D": d, "parts": [(0.0, 0.0, w, d)],
                 "doors": [{"point": (drawn["at"] * w, d), "wall": drawn["wall"],
-                           "width": _app.door_width_m(room["label"])}],
+                           "width": _app.door_width_m(room["label"]),
+                           "approach": door_approach(room["label"])}],
                 "doors_drawn": [drawn],
             }
 
@@ -559,7 +624,8 @@ def run_agent(
         all_pieces += pieces
         layout = furniture_layout.place_parts(outline["parts"], pieces, outline.get("doors", []))
         layout.update(W=outline["W"], D=outline["D"], measured=space["measured"][key],
-                      doors_drawn=outline.get("doors_drawn", []))
+                      doors_drawn=outline.get("doors_drawn", []),
+                      inset=outline.get("inset", 0.0))
         layouts[key] = layout
 
     # Pieces the size list did not know are added to it, so the next project

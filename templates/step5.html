@@ -7,32 +7,12 @@
 <div class="step-wrap step-wrap--wide">
   <div class="step-header">
     <h2 class="step-header__title">Your Design Vision</h2>
-    <p class="step-header__desc">AI-generated suggestions based on your inputs. Share this brief with your interior designer.</p>
-  </div>
-
-  <!-- Project Summary Card -->
-  <div class="summary-bar">
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Housing</span>
-      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Style</span>
-      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Palette</span>
-      <span class="summary-bar__val">
-        {% if project.colour_hex %}
-        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
-        {% endif %}
-        {{ project.colour_name }}
-      </span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Rooms</span>
-      <span class="summary-bar__val">{{ project.rooms | length }}</span>
-    </div>
+    <p class="step-header__desc">A brief to share with your interior designer.</p>
+    <p class="vision-meta">
+      {{ project.housing_type_label }} · {{ project.design_style | style_label }} ·
+      {% if project.colour_hex %}<span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>{% endif %}{{ project.colour_name }}
+      · {{ project.rooms | length }} rooms
+    </p>
   </div>
 
   {# A long page: a bar to move around it, marking the section in view. #}
@@ -43,8 +23,8 @@
       <a class="page-nav__link" href="#brief">Brief</a>
       <a class="page-nav__link" href="#rooms">Rooms</a>
       {% if floor_plan_svg %}<a class="page-nav__link" href="#plan">Floor plan</a>{% endif %}
-      <a class="page-nav__link" href="#share">Share</a>
       <a class="page-nav__link" href="#refine-section">Refine</a>
+      <a class="page-nav__link" href="#share">Share</a>
     </div>
   </nav>
 
@@ -54,22 +34,13 @@
     <h3 class="result-section__title">{{ icon("eye") }} What FORMA Noticed</h3>
     <div class="inspo-analysis-card">
 
-      <div class="inspo-analysis__summary">
-        <div class="inspo-analysis__summary-icon">{{ icon("brief") }}</div>
-        <p class="inspo-analysis__summary-text">{{ inspo_analysis.summary }}</p>
-        <div class="inspo-analysis__meta">
-          {% if inspo_analysis.image_count > 0 %}
-            Analysed {{ inspo_analysis.image_count }} inspiration image{{ 's' if inspo_analysis.image_count != 1 else '' }}
-          {% else %}
-            Based on style &amp; palette selections (no images uploaded)
-          {% endif %}
-          · Confidence:
-          <span class="confidence-badge confidence-badge--{{ inspo_analysis.confidence }}">
-            {{ inspo_analysis.confidence }}
-          </span>
-        </div>
-      </div>
+      <p class="inspo-analysis__summary-text">{{ inspo_analysis.summary }}</p>
+      <p class="inspo-analysis__meta">
+        {% if inspo_analysis.image_count > 0 %}From {{ inspo_analysis.image_count }} inspiration photo{{ 's' if inspo_analysis.image_count != 1 else '' }}{% else %}From your chosen style and palette — no photos uploaded{% endif %}{% if inspo_analysis.confidence and inspo_analysis.confidence != 'high' %} · {{ inspo_analysis.confidence }} confidence{% endif %}
+      </p>
 
+      <details class="more">
+        <summary class="more__toggle">What FORMA read from your references</summary>
       <div class="inspo-analysis__grid">
         {% if inspo_analysis.dominant_styles %}
         <div class="inspo-tag-group">
@@ -134,6 +105,7 @@
         </ul>
       </div>
       {% endif %}
+      </details>
 
       {% if inspo_analysis.room_list_mismatches %}
       <div class="inspo-analysis__outliers">
@@ -230,13 +202,15 @@
   <div class="result-section" id="rooms">
     <h3 class="result-section__title">{{ icon("rooms") }} Room-by-Room Suggestions</h3>
 
+    {# A priority tag only means something when rooms differ. #}
+    {% set priorities = room_results | map(attribute='priority') | select | unique | list %}
     <div class="room-results">
       {% for room in room_results %}
       <div class="room-result-card" id="room-{{ room.key }}" data-room="{{ room.label }}">
         <div class="room-result-card__header">
           <div class="room-result-card__name">{{ room.label }}</div>
           <div class="room-result-card__meta">
-            {% if room.priority %}<span class="priority-tag priority-tag--{{ room.priority }}">{{ room.priority | capitalize }} priority</span>{% endif %}
+            {% if room.priority == 'high' and priorities | length > 1 %}<span class="priority-tag priority-tag--high">High priority</span>{% endif %}
             {% if floor_plan_svg %}<a class="room-result-card__plan-link" href="#plan" data-show-room="{{ room.label }}">See on plan</a>{% endif %}
           </div>
         </div>
@@ -257,7 +231,6 @@
         </div>
 
         <div class="room-result-card__desc">
-          <div class="room-result-card__prompt-label">AI Concept</div>
           <p class="room-result-card__concept">{{ room.concept }}</p>
 
           {% set refs = room_picks.get(room.key) %}
@@ -287,32 +260,20 @@
 
           {% if room.direction %}
           <div class="room-direction">
-            <div class="room-result-card__prompt-label">Design Direction</div>
             {% if room.direction.style_interpretation %}
             <p class="room-direction__text">{{ room.direction.style_interpretation }}</p>
             {% endif %}
-            {% for label, key in [('Colours', 'colours'), ('Materials', 'materials'), ('Lighting', 'lighting'), ('Forms', 'forms')] %}
-              {% if room.direction[key] %}
-              <div class="inspo-tag-group">
-                <div class="inspo-tag-group__label">{{ label }}</div>
-                <div class="inspo-tag-group__tags">
-                  {% for item in room.direction[key] %}<span class="inspo-tag">{{ item }}</span>{% endfor %}
-                </div>
-              </div>
-              {% endif %}
-            {% endfor %}
+            {# The direction as a short spec, in plain text — not a wall of pills. #}
+            <dl class="room-spec">
+              {% for label, key in [('Colours', 'colours'), ('Materials', 'materials'), ('Lighting', 'lighting'), ('Forms', 'forms')] %}
+                {% if room.direction[key] %}
+                <dt>{{ label }}</dt><dd>{{ room.direction[key] | join(', ') }}</dd>
+                {% endif %}
+              {% endfor %}
+            </dl>
             {% if room.direction.note %}
             <p class="room-direction__note">{{ room.direction.note }}</p>
             {% endif %}
-          </div>
-          {% endif %}
-
-          {% if room["items"] %}
-          <div class="room-result-card__items">
-            <span class="room-result-card__items-label">Key items:</span>
-            {% for item in room["items"] %}
-            <span class="tag">{{ item }}</span>
-            {% endfor %}
           </div>
           {% endif %}
         </div>
@@ -339,25 +300,11 @@
     </div>
   </div>
 
-  <!-- Designer Brief Export -->
-  <div class="result-section" id="share">
-    <h3 class="result-section__title">{{ icon("clipboard") }} Designer Brief</h3>
-    <div class="brief-export">
-      <p class="brief-export__desc">A complete brief ready to share with your interior designer, including all preferences, requirements, and AI suggestions.</p>
-      <div class="brief-export__actions">
-        <button class="btn btn--outline" onclick="window.print()">Print / Save PDF</button>
-        <a href="{{ url_for('export_brief') }}" class="btn btn--outline">Download Brief (.txt)</a>
-        <a href="{{ url_for('export_inputs') }}" class="btn btn--outline">Download your inputs (.json)</a>
-      </div>
-    </div>
-  </div>
-
   <!-- ── Refine with FORMA ────────────────────────────────────────────────── -->
   <div class="result-section" id="refine-section">
     <h3 class="result-section__title">{{ icon("spark") }} Refine with FORMA</h3>
     <p class="result-section__desc">
-      Tell FORMA what you'd like to change — in plain language.
-      FORMA will propose a targeted update and ask you to approve before applying it.
+      Tell FORMA what to change. It proposes an update for you to approve first.
     </p>
 
     {% if refinements %}
@@ -406,18 +353,33 @@
     </div>
   </div>
 
-  <!-- ── Agent Activity ───────────────────────────────────────────────────── -->
-  {% if agent_trace %}
-  <div class="result-section">
-    <h3 class="result-section__title">
-      {{ icon("activity") }} Agent Activity
-      <button type="button" class="trace-toggle-btn" id="trace-toggle" aria-expanded="false">
-        Show
-      </button>
-    </h3>
-    <p class="result-section__desc">Every action FORMA took to produce this brief.</p>
+  <!-- ── Share: the one thing to do next ─────────────────────────────────── -->
+  <div class="result-section share-section" id="share">
+    <h3 class="result-section__title">{{ icon("clipboard") }} Share with your designer</h3>
+    <p class="result-section__desc">Everything above in one file — your preferences, requirements and FORMA's direction.</p>
+    <div class="share-section__actions">
+      <a href="{{ url_for('export_brief') }}" class="btn btn--primary btn--morph" id="download-brief" download>
+        <span class="btn__label">Download brief</span>
+        <span class="btn__label btn__label--done" aria-hidden="true">Downloaded ✓</span>
+      </a>
+      <button type="button" class="btn btn--outline" onclick="window.print()">Print or save as PDF</button>
+    </div>
+    <p class="share-section__more">
+      <a href="{{ url_for('export_inputs') }}">Download your inputs (.json)</a>
+      <span aria-hidden="true">·</span>
+      <a href="{{ url_for('step2') }}">Edit requirements</a>
+      <span aria-hidden="true">·</span>
+      <button type="submit" form="regenerate-form" class="linklike">Regenerate</button>
+      <span aria-hidden="true">·</span>
+      <a href="{{ url_for('step1') }}">Start over</a>
+    </p>
+    <form method="POST" action="{{ url_for('regenerate') }}" id="regenerate-form" hidden></form>
+  </div>
 
-    <div class="agent-trace" id="agent-trace" style="display:none;">
+  {% if agent_trace %}
+  <details class="more trace-details">
+    <summary class="more__toggle">How FORMA made this</summary>
+    <div class="agent-trace">
       {% for entry in agent_trace %}
       <div class="trace-entry trace-entry--{{ entry.status }}">
         <div class="trace-entry__icon">
@@ -433,29 +395,12 @@
           {% if entry.summary %}
           <div class="trace-entry__summary">{{ entry.summary }}</div>
           {% endif %}
-          {% if entry.confidence %}
-          <span class="confidence-badge confidence-badge--{{ entry.confidence }}">{{ entry.confidence }}</span>
-          {% endif %}
         </div>
       </div>
       {% endfor %}
     </div>
-  </div>
+  </details>
   {% endif %}
-
-  <!-- Iterate bar -->
-  <div class="iterate-bar">
-    <div class="iterate-bar__text">
-      <strong>Happy with the direction?</strong> Download your brief and share it with your designer.
-    </div>
-    <div class="iterate-bar__actions">
-      <a href="{{ url_for('step1') }}" class="btn btn--ghost btn--sm">Start Over</a>
-      <a href="{{ url_for('step2') }}" class="btn btn--ghost btn--sm">← Edit Requirements</a>
-      <form method="POST" action="{{ url_for('regenerate') }}" style="display:inline;">
-        <button type="submit" class="btn btn--primary btn--sm">Regenerate Vision ↺</button>
-      </form>
-    </div>
-  </div>
 
 </div>
 
@@ -569,17 +514,41 @@
     });
   })();
 
-  // ── Agent trace toggle ────────────────────────────────────────────────────
-  const traceToggle = document.getElementById('trace-toggle');
-  const tracePanel  = document.getElementById('agent-trace');
-  if (traceToggle && tracePanel) {
-    traceToggle.addEventListener('click', () => {
-      const open = tracePanel.style.display !== 'none';
-      tracePanel.style.display = open ? 'none' : 'block';
-      traceToggle.textContent  = open ? 'Show' : 'Hide';
-      traceToggle.setAttribute('aria-expanded', String(!open));
+  // ── The plan draws itself, once ──────────────────────────────────────────
+  // The first time the floor plan comes into view its walls are drawn in, as
+  // with a pen, and the rooms fill in behind them. Once per visit; a still
+  // plan for anyone who asks for less motion.
+  (function () {
+    const plan = document.getElementById('floorplan-svg');
+    if (!plan || !('IntersectionObserver' in window)
+        || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const walls = Array.from(plan.querySelectorAll('.room-wall'));
+    if (!walls.length) return;
+    walls.forEach((w, i) => {
+      const len = Math.ceil(w.getTotalLength ? w.getTotalLength() : 0);
+      w.style.setProperty('--len', len);
+      w.style.setProperty('--i', i);
     });
-  }
+    plan.classList.add('is-waiting');
+    const seen = new IntersectionObserver(entries => {
+      if (!entries.some(e => e.isIntersecting)) return;
+      seen.disconnect();
+      plan.classList.remove('is-waiting');
+      plan.classList.add('is-drawing');
+    }, { threshold: 0.25 });
+    seen.observe(plan);
+  })();
+
+  // ── The download says it worked ──────────────────────────────────────────
+  (function () {
+    const btn = document.getElementById('download-brief');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      btn.classList.add('is-done');
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => btn.classList.remove('is-done'), 2200);
+    });
+  })();
 
   // ── Conflict resolution ───────────────────────────────────────────────────
   document.querySelectorAll('.conflict-option-btn').forEach(btn => {

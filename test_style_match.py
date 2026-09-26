@@ -292,6 +292,20 @@ class Routes(unittest.TestCase):
         self.assertEqual(text.count("Picked      :"), 2)
         self.assertNotIn("Sonnet", text)
 
+    def test_wait_shows_a_gallery_of_the_references(self):
+        ids = [r["id"] for r in S.rank_for_room("Living Room", {"style": ["Scandinavian"]})][:2]
+        st = self.state()
+        st.pop("agent_result")
+        st["style_picks"] = {"living_room": ids}
+        clients.save_brief("a_test", st)
+        html = self.c.get("/step5").get_data(as_text=True)
+        self.assertIn('class="gallery"', html)
+        lib = S.images_by_id()
+        for i in ids:                                   # the picks come first, twice for the loop
+            self.assertEqual(html.count(lib[i]["image"]["thumb_url"].replace("&", "&amp;")), 2)
+        # Topped up from the library to at least four photos.
+        self.assertGreaterEqual(html.count('class="gallery__item"'), 8)
+
     def test_results_moved_to_step5(self):
         st = self.state()
         st.pop("agent_result")

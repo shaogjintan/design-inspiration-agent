@@ -46,12 +46,16 @@
       </div>
       <div class="pe-tools" hidden>
         <span class="pe-tools__name"></span>
-        <button type="button" class="pe-link" data-tool="redraw">Mark out again</button>
-        <button type="button" class="pe-link" data-tool="extend">Add an L-shaped part</button>
-        <button type="button" class="pe-link" data-tool="remove">Take off the plan</button>
+        <button type="button" class="pe-link" data-tool="corners">Trace its corners</button>
+        <button type="button" class="pe-link" data-tool="door">Add a door</button>
+      </div>
+      <div class="pe-door-tools pe-tools" hidden>
+        <span class="pe-tools__name">Door</span>
+        <button type="button" class="pe-link" data-door-tool="turn">Turn</button>
+        <button type="button" class="pe-link" data-door-tool="remove">Remove door</button>
       </div>
       <div class="pe-tray" hidden>
-        <span class="pe-tray__label">Not on the plan yet — choose one, then mark it out:</span>
+        <span class="pe-tray__label">Not on the plan yet — choose one, then trace its corners:</span>
         <span class="pe-tray__list"></span>
       </div>
       <input type="hidden" name="plan_edit" value="">
@@ -174,7 +178,7 @@
     <div class="form-actions">
       <span class="autosave-status" id="autosave-status" aria-live="polite"></span>
       <a href="{{ url_for('step1') }}" class="btn btn--ghost">← Back</a>
-      <button type="submit" class="btn btn--primary" id="next-btn" data-busy-label="Saving…">Next: Inspiration →</button>
+      <button type="submit" class="btn btn--primary" id="next-btn" data-busy-label="Saving…">Continue to Inspiration <span class="btn__arrow" aria-hidden="true">→</span></button>
     </div>
 
   </form>
@@ -446,7 +450,10 @@
     });
     card.querySelectorAll('.prompt-field').forEach(ta => {
       const counter = ta.parentElement.querySelector('.prompt-counter__num');
-      if (counter) ta.addEventListener('input', () => counter.textContent = ta.value.length);
+      if (counter) {
+        counter.textContent = ta.value.length;
+        ta.addEventListener('input', () => counter.textContent = ta.value.length);
+      }
       wireItemReader(card, ta);
     });
     card.querySelectorAll('.check-tile input').forEach(cb => {

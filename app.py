@@ -2181,8 +2181,8 @@ def generate_room_concept_visual(room_label: str, style: str,
 
     if shape and layout:
         # The layout is measured from the room's top-left, across all its parts.
-        parts = _draw_layout(layout, shape["x"], shape["y"], shape["w"] / layout["W"],
-                             accent, font=9)
+        ox, oy, k = layout_frame(layout, shape)
+        parts = _draw_layout(layout, ox, oy, k, accent, font=9)
         if layout.get("skipped"):
             parts.append(f'<text x="{pad}" y="{pad - 3}" font-size="9" fill="#8A4B1F">'
                          f'Did not fit: {html_escape(", ".join(layout["skipped"]))}</text>')
@@ -2440,7 +2440,7 @@ def image_size(path: str) -> tuple[int, int] | None:
 
 # Bump when the trace or furniture pipeline changes what it produces, so
 # results saved by older code are redone rather than reused.
-PLAN_TRACE_VERSION = 10         # doors only as drawn on the plan; none imposed
+PLAN_TRACE_VERSION = 11         # door hinge and swing; printed dimensions; dimension lines are not walls
 FURNITURE_VERSION = 2           # project notes and refinements included
 
 
@@ -2606,8 +2606,12 @@ def _clean_doors(raw, n_parts: int) -> list[dict]:
         except (TypeError, ValueError):
             continue
         if wall in PLAN_WALLS:
+            hinge = str(o.get("hinge", "")).lower().strip()
+            opens = str(o.get("opens", "")).lower().strip()
             out.append({"wall": wall, "at": min(max(at, 0.0), 1000.0) / 1000,
-                        "part": part if 0 <= part < n_parts else 0})
+                        "part": part if 0 <= part < n_parts else 0,
+                        "hinge": hinge if hinge in ("start", "end") else "start",
+                        "opens": opens if opens in ("in", "out") else "in"})
     return out
 
 
@@ -2616,6 +2620,138 @@ def door_point(part: dict, door: dict) -> tuple[float, float]:
     x, y, w, h = part["x"], part["y"], part["w"], part["h"]
     return {"top": (x + door["at"] * w, y), "bottom": (x + door["at"] * w, y + h),
             "left": (x, y + door["at"] * h), "right": (x + w, y + door["at"] * h)}[door["wall"]]
+
+
+# Which way into a room each wall faces: a door swinging along this normal
+# swings into the room whose wall it is.
+_INWARD = {"top": (0, 1), "bottom": (0, -1), "left": (1, 0), "right": (-1, 0)}
+
+
+def plan_doors(geometry: dict) -> list[dict]:
+    """Every door of a trace in plan pixels, as the editor handles them:
+    {"x", "y", "axis": "h" (in a wall running across) | "v", "dir": +1 | -1
+    (the side its leaf swings to, down/right being +1), "hinge": "low" |
+    "high" (the end of the gap nearer the top-left or the other), "room"}."""
+    out = []
+    for label, room in (geometry.get("rooms") or {}).items():
+        parts = room_parts(room)
+        for d in room.get("doors") or []:
+            p = parts[d["part"]] if d.get("part", 0) < len(parts) else parts[0]
+            x, y = door_point(p, d)
+            nx, ny = _INWARD[d["wall"]]
+            sign = (nx + ny) * (-1 if d.get("opens") == "out" else 1)
+            out.append({"x": float(round(x, 1)), "y": float(round(y, 1)),
+                        "axis": "h" if d["wall"] in ("top", "bottom") else "v",
+                        "dir": sign, "hinge": "high" if d.get("hinge") == "end" else "low",
+                        "room": label})
+    return _one_listing_per_door(out, geometry)
+
+
+# Rooms a door usually swings away from: HDB doors open into the bedroom,
+# bathroom or store they close, not into the living room or a corridor.
+_SHARED_SPACE = ("living", "dining", "hall", "corridor", "foyer", "entrance", "balcony")
+
+
+def _one_listing_per_door(doors: list[dict], geometry: dict) -> list[dict]:
+    """A door the trace listed from both rooms is one door. When the two
+    listings disagree about its swing, it swings into the private room."""
+    side = max(geometry.get("image_w") or 0, geometry.get("image_h") or 0, 100)
+    across, along = door_tolerance(geometry), 0.04 * side
+    kept: list[dict] = []
+    for d in doors:
+        twin = next((k for k in kept if k["axis"] == d["axis"] and (
+            abs(k["y"] - d["y"]) <= across and abs(k["x"] - d["x"]) <= along if d["axis"] == "h"
+            else abs(k["x"] - d["x"]) <= across and abs(k["y"] - d["y"]) <= along)), None)
+        if twin is None:
+            kept.append(d)
+            continue
+        shared = lambda door: any(w in door["room"].lower() for w in _SHARED_SPACE)
+        if shared(twin) and not shared(d):
+            kept[kept.index(twin)] = d
+    return kept
+
+
+def walls_at(geometry: dict, x: float, y: float, axis: str, tol: float) -> list[tuple]:
+    """(label, part index, wall side) of every room wall a door at (x, y), in
+    a wall running `axis`, sits in — two rooms when it is a wall between them."""
+    out = []
+    # Across the wall a door may be off by a wall's thickness; along it, it
+    # must be within the wall's length — a door past the end of this wall is
+    # in the next room's.
+    ends = tol * 0.25
+    for label, room in (geometry.get("rooms") or {}).items():
+        for i, p in enumerate(room_parts(room)):
+            if axis == "h" and p["x"] - ends <= x <= p["x"] + p["w"] + ends:
+                if abs(y - p["y"]) <= tol:
+                    out.append((label, i, "top"))
+                elif abs(y - (p["y"] + p["h"])) <= tol:
+                    out.append((label, i, "bottom"))
+            if axis == "v" and p["y"] - ends <= y <= p["y"] + p["h"] + ends:
+                if abs(x - p["x"]) <= tol:
+                    out.append((label, i, "left"))
+                elif abs(x - (p["x"] + p["w"])) <= tol:
+                    out.append((label, i, "right"))
+    return out
+
+
+def door_tolerance(geometry: dict) -> float:
+    """How far off a wall line a door may sit and still be in it: a wall's
+    thickness, or a sliver of the plan when that is unknown."""
+    side = max(geometry.get("image_w") or 0, geometry.get("image_h") or 0, 100)
+    return max(geometry.get("wall_px") or 0, 0.015 * side)
+
+
+def attach_doors(geometry: dict, doors: list[dict]) -> None:
+    """Put doors given in plan pixels onto the rooms whose walls they are in,
+    replacing the rooms' doors. Each is kept once, on the room it swings into
+    (or, when it swings into a corridor, on the room it leads to, opening out).
+    A door in no room's wall is dropped."""
+    for room in (geometry.get("rooms") or {}).values():
+        room["doors"] = []
+    tol = door_tolerance(geometry)
+    for d in doors:
+        try:
+            x, y, direction = float(d["x"]), float(d["y"]), 1 if float(d["dir"]) > 0 else -1
+        except (KeyError, TypeError, ValueError):
+            continue
+        axis = "h" if d.get("axis") == "h" else "v"
+        hits = walls_at(geometry, x, y, axis, tol)
+        if not hits:
+            continue
+
+        def swings_in(hit):
+            nx, ny = _INWARD[hit[2]]
+            return (nx + ny) == direction
+
+        label, i, wall = next((h for h in hits if swings_in(h)), hits[0])
+        room = geometry["rooms"][label]
+        p = room_parts(room)[i]
+        at = (x - p["x"]) / p["w"] if axis == "h" else (y - p["y"]) / p["h"]
+        room["doors"].append({"part": i, "wall": wall, "at": round(min(max(at, 0.0), 1.0), 4),
+                              "hinge": "end" if d.get("hinge") == "high" else "start",
+                              "opens": "in" if swings_in((label, i, wall)) else "out"})
+
+
+def room_door_swings(geometry: dict, label: str) -> list[dict]:
+    """Every door in this room's walls — its own and its neighbours' — with
+    whether its leaf swings into this room. A bathroom door opening out into
+    a bedroom is the bedroom's to keep clear too."""
+    room = (geometry.get("rooms") or {}).get(label)
+    if not room:
+        return []
+    tol = door_tolerance(geometry)
+    out = []
+    for d in plan_doors(geometry):
+        for lab, i, wall in walls_at(geometry, d["x"], d["y"], d["axis"], tol):
+            if lab != label:
+                continue
+            nx, ny = _INWARD[wall]
+            p = room_parts(room)[i]
+            at = (d["x"] - p["x"]) / p["w"] if d["axis"] == "h" else (d["y"] - p["y"]) / p["h"]
+            out.append({"part": i, "wall": wall, "at": min(max(at, 0.0), 1.0),
+                        "swings_in": (nx + ny) == d["dir"], "hinge": d["hinge"]})
+            break
+    return out
 
 
 def _reattach_doors(doors: list[dict], old: list[dict], new: list[dict]) -> list[dict]:
@@ -2650,6 +2786,53 @@ def _rect_minus(r: dict, cut: dict) -> list[dict]:
         {"x": cx1, "y": top, "w": rx1 - cx1, "h": bottom - top},
     ]
     return [p for p in pieces if p["w"] > 0 and p["h"] > 0]
+
+
+def tidy_walkways(geometry: dict) -> list[dict]:
+    """The walkways worth drawing: the corridors between rooms, and nothing
+    else. A trace's walkways go stale when the rooms are moved on page 2, and
+    the gap-filling can leave pieces outside the flat — a notch in its
+    outline, an access balcony. So, every time: rooms win over walkways;
+    pieces too narrow to walk down go; and a piece stays only when it is a
+    passage — rooms on two opposite sides of it, or on three sides."""
+    rooms = [p for r in (geometry.get("rooms") or {}).values() for p in room_parts(r)]
+    if not rooms:
+        return []
+    m = geometry.get("m_per_px") or geometry.get("m_per_px_dims") or geometry.get("m_per_px_ref")
+    span = max(max(p["x"] + p["w"] for p in rooms) - min(p["x"] for p in rooms),
+               max(p["y"] + p["h"] for p in rooms) - min(p["y"] for p in rooms))
+    narrowest = 0.5 / m if m else 0.03 * span              # half a metre
+    near = max(geometry.get("wall_px") or 0, 0.015 * span)  # "touching": within a wall
+
+    pieces = []
+    for w in geometry.get("walkways") or []:
+        bits = [dict(w)]
+        for r in rooms:
+            bits = [q for b in bits for q in _rect_minus(b, r)]
+        pieces += [b for b in bits if min(b["w"], b["h"]) >= narrowest]
+
+    def sides(p):
+        """Which of its sides have a room against them."""
+        out = set()
+        for r in rooms:
+            over_x = min(p["x"] + p["w"], r["x"] + r["w"]) - max(p["x"], r["x"]) > near
+            over_y = min(p["y"] + p["h"], r["y"] + r["h"]) - max(p["y"], r["y"]) > near
+            if over_x and abs(r["y"] + r["h"] - p["y"]) <= near:
+                out.add("top")
+            if over_x and abs(r["y"] - (p["y"] + p["h"])) <= near:
+                out.add("bottom")
+            if over_y and abs(r["x"] + r["w"] - p["x"]) <= near:
+                out.add("left")
+            if over_y and abs(r["x"] - (p["x"] + p["w"])) <= near:
+                out.add("right")
+        return out
+
+    kept = []
+    for p in pieces:
+        s_ = sides(p)
+        if {"top", "bottom"} <= s_ or {"left", "right"} <= s_ or len(s_) >= 3:
+            kept.append(p)
+    return kept
 
 
 def _connected_to_largest(parts: list[dict]) -> list[dict]:
@@ -3222,15 +3405,23 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
              no room: they go in "walkways".
            - "doors": every door into the room, as {{"box": index of the box
              whose wall it is in, "wall": "top" | "right" | "bottom" | "left",
-             "at": 0-1000}} — "at" is the centre of the door's gap along that
-             box's wall, from its left end (top and bottom walls) or its top
-             end (left and right walls).
+             "at": 0-1000, "hinge": "start" | "end", "opens": "in" | "out"}} —
+             "at" is the centre of the door's gap along that box's wall, from
+             its left end (top and bottom walls) or its top end (left and right
+             walls).
            Finding doors: a door is a GAP in the wall with a thin straight
-           line (the leaf) and a quarter-circle arc, often dotted or dashed,
-           swinging into the room it opens into — "at" is the gap's centre, not
-           the arc's. List only doors you can see drawn on the plan, never ones
-           you expect to be there, and list each door ONCE: in the room its arc
-           swings into.
+           line (the leaf) and a quarter-circle arc, often dotted or dashed.
+           The leaf is fixed to the wall at one end of the gap — the hinge —
+           and the arc runs from the leaf's free end back to the other end of
+           the gap. "hinge" is "start" when the hinge is at the gap's left end
+           (top and bottom walls) or top end (left and right walls), "end"
+           when it is at the other end. "opens" is "in" when the arc lies
+           inside this room, "out" when it swings out of it. "at" is the gap's
+           centre, not the arc's. List only doors you can see drawn on the
+           plan, never ones you expect to be there, and list each door ONCE:
+           in the room its arc swings into; a door whose arc swings into a
+           corridor or outside goes in the room it leads to, with "opens":
+           "out".
            The bathroom joined to the master bedroom is ALWAYS the Master
            Bathroom; the other is the Common Bathroom, even though both may be
            printed "BATH / WC".
@@ -3240,6 +3431,12 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
            size — every bed, sofa and WC — each as {{"type": "double bed" |
            "single bed" | "sofa" | "wc", "box": [x0, y0, x1, y1]}} tight around
            the drawn piece. These set the plan's scale, so trace them closely.
+        6. "dimensions": every dimension line printed with its length — the
+           thin lines with tick marks or arrows at both ends and a number such
+           as 3048 or 3048.0 (millimetres) beside them — as {{"mm": the number,
+           "from": [x, y], "to": [x, y]}}, the two ends of the line itself (its
+           ticks), not of the number. Leave it empty if the plan prints none.
+           These give the plan's exact scale.
 
         Rules:
         - Use the room names exactly as listed — every one of them, including
@@ -3255,13 +3452,14 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
           "rooms": [
           {{"name": "{{example_a}}", "printed": "KITCHEN", "label_at": [325, 290],
             "boxes": [[280, 224, 371, 355]],
-            "doors": [{{"box": 0, "wall": "left", "at": 300}}]}},
+            "doors": [{{"box": 0, "wall": "left", "at": 300, "hinge": "start", "opens": "in"}}]}},
           {{"name": "{{example_b}}", "printed": "LIVING / DINING", "label_at": [170, 160],
             "boxes": [[70, 93, 280, 233], [70, 233, 175, 327]],
             "doors": [{{"box": 1, "wall": "bottom", "at": 500}}]}}
         ],
           "walkways": [[175, 233, 280, 327]],
           "furniture_drawn": [{{"type": "double bed", "box": [300, 110, 352, 178]}}],
+          "dimensions": [{{"mm": 3048, "from": [70, 80], "to": [175, 80]}}],
           "missing": []}}
     """).strip().replace("{names}", names).replace(
         "{size_hints}", _size_hints(room_labels, housing_label) if PLAN_TRACE_SIZE_HINTS else ""
@@ -3280,16 +3478,21 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
                        fallback_to_mock=False,
                        images_sent=1,
                        think=PLAN_TRACE_THINK)
-        data = _normalise_trace(_loads_salvaging_truncation(strip_code_fence(raw)))
+        reply = _loads_salvaging_truncation(strip_code_fence(raw))
+        data = _normalise_trace(reply)
         if not (data and data["rooms"]):
             return None
+        dims = _clean_dimensions(reply.get("dimensions") if isinstance(reply, dict) else None)
         # Outline and rooms located; now fix where they sit: onto the walls
         # found in the image, each room around its own printed name, every
         # room inside the flat's outline, neighbours edge to edge.
         data = _pixels_to_permille(_snap_to_walls(data, size), size)
         if walls:
             data = align_to_walls(data, walls, size)
-        return _close_gaps(_clip_to_outline(_fix_to_labels(data)))
+        out = _close_gaps(_clip_to_outline(_fix_to_labels(data)))
+        if out is not None:
+            out["dims"] = dims
+        return out
 
     # Single traces vary a lot run to run. Several in parallel, combined room
     # by room, cost no extra wait and are far steadier (see _trace_consensus).
@@ -3341,7 +3544,115 @@ def read_plan_geometry(floor_plan_path: str, room_labels: list[str],
         raise last
     housing_type = next((k for k, v in HOUSING_LABELS.items() if v == housing_label), None)
     best["proportioned"] = keep_in_proportion(best, housing_type, walls)
+    # The plan's exact scale, where it prints its dimensions: every sample's
+    # reading pooled, each end snapped onto the wall it measures to.
+    best["m_per_px_dims"] = (
+        scale_from_dimension_lines([s_.get("dims") or [] for s_ in samples], walls, size)
+        or scale_from_dimensions([d for s_ in samples for d in s_.get("dims") or []], walls, size))
+    if walls and walls.get("thickness"):
+        best["wall_px"] = walls["thickness"]
     return best
+
+
+def _clean_dimensions(raw) -> list[dict]:
+    """The dimension lines the model read: millimetres and two end points."""
+    out = []
+    for d in (raw or [])[:24]:
+        if not isinstance(d, dict):
+            continue
+        try:
+            mm = float(str(d.get("mm", "")).replace(",", ""))
+            (x0, y0), (x1, y1) = ([float(v) for v in d.get(k)][:2] for k in ("from", "to"))
+        except (TypeError, ValueError):
+            continue
+        if 300 <= mm <= 30000:
+            out.append({"mm": mm, "from": (x0, y0), "to": (x1, y1)})
+    return out
+
+
+def scale_from_dimension_lines(samples: list[list[dict]], walls: dict | None,
+                               size: tuple[int, int]) -> float | None:
+    """Metres per pixel from the plan's dimension lines, measured in the image.
+
+    The model reads the numbers printed along a line and says roughly where
+    each sits; the image gives the line itself, end to end. The numbers along
+    one line add up to its whole length, so their sum over the line's span in
+    pixels is the scale — exact to a pixel or two, however loosely the model
+    placed each number. Each sample is summed on its own (so no number is
+    counted twice), and the readings must agree."""
+    lines = (walls or {}).get("dim_lines") or []
+    near = 0.04 * max(size)
+    readings = []
+    for dims in samples:
+        for line in lines:
+            span = line["to"] - line["from"]
+            if span < 0.2 * max(size):
+                continue
+            total, covered = 0.0, 0.0
+            for d in dims:
+                (x0, y0), (x1, y1) = d["from"], d["to"]
+                across = abs(x1 - x0) >= abs(y1 - y0)
+                if (line["axis"] == "h") != across:
+                    continue
+                mid_c = (y0 + y1) / 2 if across else (x0 + x1) / 2
+                lo, hi = sorted((x0, x1) if across else (y0, y1))
+                inside = min(hi, line["to"]) - max(lo, line["from"])
+                if abs(mid_c - line["at"]) <= near and inside > 0.5 * (hi - lo):
+                    total += d["mm"]
+                    covered += inside
+            # Only when the numbers read cover the whole line: one of two
+            # numbers along it is half its length, not all of it.
+            if total and covered >= 0.75 * span:
+                readings.append(total / 1000 / span)
+    if not readings:
+        return None
+    mid = statistics.median(readings)
+    agree = [r for r in readings if abs(r - mid) <= 0.08 * mid]
+    return statistics.median(agree) if len(agree) >= max(1, (len(readings) + 1) // 2) else None
+
+
+def scale_from_dimensions(dims: list[dict], walls: dict | None,
+                          size: tuple[int, int]) -> float | None:
+    """Metres per pixel from the plan's printed dimension lines, or None.
+
+    A dimension line runs between two walls, so each end is snapped onto the
+    nearest wall line the image shows before it is measured — the model is
+    close about where a line ends, the pixels are exact. Lines that are not
+    straight across or down, or too short to measure well, are skipped; the
+    rest must agree, and the median of those that do is the scale."""
+    # The model reads the number well and the line's ends loosely, often
+    # 20-30 px out on a small plan. The ends are on walls, which the image
+    # shows exactly: each goes to the nearest wall line within a wide reach.
+    reach = 0.08 * max(size)
+    readings = []
+    for d in dims:
+        (x0, y0), (x1, y1) = d["from"], d["to"]
+        across = abs(x1 - x0) >= abs(y1 - y0)
+        a, b = (x0, x1) if across else (y0, y1)
+        slant = abs(y1 - y0) if across else abs(x1 - x0)
+        if abs(b - a) < 0.08 * max(size) or slant > 0.15 * abs(b - a):
+            continue
+        lines = (walls or {}).get("x" if across else "y") or []
+
+        def onto_wall(v):
+            """The wall line an end belongs on, or None if none is in reach."""
+            near = min(lines, key=lambda w: abs(w - v)) if lines else None
+            return near if near is not None and abs(near - v) <= reach else None
+
+        if lines:
+            a2, b2 = onto_wall(a), onto_wall(b)
+            if a2 is None or b2 is None or a2 == b2:
+                continue        # an end found no wall, or both found the same one
+        else:
+            a2, b2 = a, b
+        length = abs(b2 - a2)
+        if length > 0:
+            readings.append(d["mm"] / 1000 / length)
+    if not readings:
+        return None
+    mid = statistics.median(readings)
+    agree = [r for r in readings if abs(r - mid) <= 0.12 * mid]
+    return statistics.median(agree) if len(agree) >= max(1, len(readings) // 2) else None
 
 
 def _size_hints(room_labels: list[str], housing_label: str) -> str:
@@ -3536,7 +3847,7 @@ def detect_plan_walls(floor_plan_path: str) -> dict | None:
     col_hits = [x for x in range(w) if longest(data[x::w]) >= min_run]
     row_hits = [y for y in range(h) if longest(data[y * w:(y + 1) * w]) >= min_run]
 
-    def centres(hits):
+    def groups_of(hits):
         groups, run = [], []
         for v in hits:
             if run and v - run[-1] > 2:
@@ -3545,12 +3856,110 @@ def detect_plan_walls(floor_plan_path: str) -> dict | None:
             run.append(v)
         if run:
             groups.append(run)
-        return [(g[0] + g[-1]) / 2 / k for g in groups]
+        return groups
 
-    xs, ys = centres(col_hits), centres(row_hits)
+    # Walls are the thickest lines on a plan; dimension lines, text and
+    # hatching are thin. Without this the long dimension lines round a plan
+    # pass for its outer walls and pull every room out to them. On a plan
+    # drawn all in thin lines the bar is a pixel or two and everything stays.
+    def thick(groups):
+        if not groups:
+            return []
+        bar = 0.5 * max(g[-1] - g[0] + 1 for g in groups)
+        return [g for g in groups if g[-1] - g[0] + 1 >= bar]
+
+    def dark(x, y):
+        return 0 <= x < w and 0 <= y < h and data[y * w + x]
+
+    def walls_only(groups, across, vertical):
+        """Thick lines, and thin ones that are walls: between the thick ones,
+        or meeting a thick wall that runs the other way. A dimension line
+        floats outside the building, touching none."""
+        big = thick(groups)
+        if not big:
+            return groups
+        lo, hi = big[0][0], big[-1][-1]
+        keep = []
+        dropped[vertical] = []
+        for g in groups:
+            c = (g[0] + g[-1]) // 2
+            # Just beside the line, on either side: a wall running the other
+            # way continues right up to a real wall, never to a dimension line.
+            # Solidly, across the wall's whole thickness: the hairline extension
+            # lines that join a dimension line to the walls do not count.
+            beside = list(range(g[0] - 3, g[0])) + list(range(g[-1] + 1, g[-1] + 4))
+            meets = any(sum(dark(u, v) if vertical else dark(v, u)
+                            for v in range(t[0], t[-1] + 1)) >= 0.7 * (t[-1] - t[0] + 1)
+                        for t in across for u in beside)
+            if g in big or lo <= c <= hi or meets:
+                keep.append(g)
+            else:
+                dropped[vertical].append(g)
+        return keep
+
+    dropped = {True: [], False: []}
+
+    raw_x, raw_y = groups_of(col_hits), groups_of(row_hits)
+    gx = walls_only(raw_x, thick(raw_y), vertical=True)
+    gy = walls_only(raw_y, thick(raw_x), vertical=False)
+    xs = [(g[0] + g[-1]) / 2 / k for g in gx]
+    ys = [(g[0] + g[-1]) / 2 / k for g in gy]
     if len(xs) < 2 or len(ys) < 2:
         return None
-    return {"x": xs, "y": ys, "extent": (xs[0], ys[0], xs[-1], ys[-1])}
+    # How thick a wall is drawn: rooms are measured to a wall's face, not its
+    # centre line, so each room loses half of it on every side. The median
+    # is an internal wall — the outer ones are thicker and fewer.
+    thickness = statistics.median([(g[-1] - g[0] + 1) / k for g in gx + gy])
+
+    return {"x": xs, "y": ys, "extent": (xs[0], ys[0], xs[-1], ys[-1]),
+            "thickness": thickness,
+            "dim_lines": _dimension_lines(img, k, (gx[0][0], gx[-1][-1]), (gy[0][0], gy[-1][-1]))}
+
+
+def _dimension_lines(img, k: float, wall_x: tuple, wall_y: tuple) -> list[dict]:
+    """The dimension lines drawn round a plan, found in the image: long thin
+    lines outside its walls, each with where it starts and ends. They are
+    often grey, and broken where their ticks and numbers cross them, so the
+    threshold is lighter and short breaks are bridged. In the image's own
+    pixels (k is the scan's scale)."""
+    w, h = img.size
+    mask = img.point(lambda v: 1 if v < 160 else 0).tobytes()
+    reach = 0.25 * min(w, h)
+
+    def longest(values):
+        """The longest stretch of dark, bridging breaks of a few pixels."""
+        best, start, last = (0, 0, 0), None, None
+        for i, v in enumerate(values):
+            if not v:
+                continue
+            if start is None or i - last > 6:
+                start = i
+            last = i
+            if last - start > best[0]:
+                best = (last - start, start, last)
+        return best
+
+    out = []
+    for vertical, (lo, hi), size in ((True, wall_x, w), (False, wall_y, h)):
+        found = []
+        for c in range(size):
+            if lo - 3 <= c <= hi + 3:
+                continue                                  # inside the walls
+            vals = mask[c::w] if vertical else mask[c * w:(c + 1) * w]
+            length, a, b = longest(vals)
+            if length >= reach:
+                found.append((c, a, b, length))
+        # One line per run of neighbouring rows: the longest of them.
+        groups = []
+        for f in found:
+            if groups and f[0] - groups[-1][-1][0] <= 2:
+                groups[-1].append(f)
+            else:
+                groups.append([f])
+        for g in groups:
+            c, a, b, _ = max(g, key=lambda f: f[3])
+            out.append({"axis": "v" if vertical else "h", "at": c / k, "from": a / k, "to": b / k})
+    return out
 
 
 def align_to_walls(data: dict, walls: dict, size: tuple[int, int]) -> dict:
@@ -3722,29 +4131,65 @@ def plan_metres_per_px(geometry: dict, floor_sqm) -> float | None:
         return None
     area_px = sum(union_area(room_parts(r)) for r in (geometry.get("rooms") or {}).values())
     walk_px = sum(w["w"] * w["h"] for w in geometry.get("walkways") or [])
-    outline_px = union_area(geometry["outline"]) if geometry.get("outline") else 0
     if sqm <= 0 or area_px <= 0:
         return None
-    if outline_px:
-        # The outline is the whole flat, walls and all; walls take ~7%.
-        return (sqm * 0.93 / outline_px) ** 0.5
-    # With the walkways traced, the spaces cover nearly all of the floor area;
-    # without them, only the rooms' share of it.
+    # The floor area is shared out between the spaces in proportion to their
+    # traced areas — each room gets its share of the total, never a size
+    # scaled off the outer walls, which a trace can place too wide or too
+    # narrow. With the walkways traced, the spaces cover nearly all of the
+    # floor area; without them, only the rooms' share of it.
     coverage = 0.95 if walk_px else _ROOM_COVERAGE
     return (sqm * coverage / (area_px + walk_px)) ** 0.5
 
 
 # Door widths by room kind, in metres: bathrooms and stores take narrower doors.
 def door_width_m(label: str) -> float:
+    """A door's leaf, as HDB flats are fitted: 900 mm at the main entrance,
+    800 mm to the bedrooms, kitchen, shelter and store, 700 mm to a bathroom
+    or WC."""
     n = label.lower()
-    if any(k in n for k in ("bath", "wc", "toilet", "shelter", "store", "yard")):
-        return 0.75
-    return 0.85
+    if any(k in n for k in ("bath", "wc", "toilet", "powder")):
+        return 0.7
+    if any(k in n for k in ("entrance", "foyer", "entry")):
+        return 0.9
+    return 0.8
+
+
+def infer_door(geometry: dict, label: str) -> dict | None:
+    """Where a traced room most likely has its door, when the plan showed none:
+    on the wall of its main part that meets a corridor or the living room,
+    the room it is most likely reached from. Used only to keep furniture clear
+    of the way in — it is never drawn, since the plan did not show it."""
+    room = (geometry.get("rooms") or {}).get(label)
+    if not room:
+        return None
+    parts = room_parts(room)
+    main = max(range(len(parts)), key=lambda i: parts[i]["w"] * parts[i]["h"])
+    p = parts[main]
+    near = 0.02 * max(geometry.get("image_w") or 0, geometry.get("image_h") or 0, 100)
+    reach = list(geometry.get("walkways") or [])
+    for other, g in (geometry.get("rooms") or {}).items():
+        if other != label and any(k in other.lower() for k in ("living", "dining", "hall", "corridor")):
+            reach += room_parts(g)
+    best = None
+    for q in reach:
+        for wall, touching, lo, hi in (
+            ("top",    abs(q["y"] + q["h"] - p["y"]) <= near, max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])),
+            ("bottom", abs(q["y"] - (p["y"] + p["h"])) <= near, max(p["x"], q["x"]), min(p["x"] + p["w"], q["x"] + q["w"])),
+            ("left",   abs(q["x"] + q["w"] - p["x"]) <= near, max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])),
+            ("right",  abs(q["x"] - (p["x"] + p["w"])) <= near, max(p["y"], q["y"]), min(p["y"] + p["h"], q["y"] + q["h"])),
+        ):
+            if touching and hi - lo > 0 and (not best or hi - lo > best[0]):
+                start, length = (p["x"], p["w"]) if wall in ("top", "bottom") else (p["y"], p["h"])
+                best = (hi - lo, {"part": main, "wall": wall,
+                                  "at": round(((lo + hi) / 2 - start) / length, 3)})
+    return best[1] if best else None
 
 
 def _door_svg(room: dict, bg: str, width: float, stroke: str = "#1C1B19") -> list[str]:
-    """Each door as a gap in the wall with its leaf and swing arc, opening
-    into the room. `room` is in drawing coordinates; width in the same units."""
+    """Each door as a gap in the wall with its leaf and swing arc, hinged at
+    the end of the gap and swinging the way the plan shows. `room` is in
+    drawing coordinates; width in the same units."""
     parts_ = room_parts(room)
     out = []
     for door in room.get("doors") or []:
@@ -3758,10 +4203,16 @@ def _door_svg(room: dict, bg: str, width: float, stroke: str = "#1C1B19") -> lis
         }[door["wall"]]
         d = max(6.0, min(width, L * 0.6))
         a = min(max(door["at"] * L - d / 2, 0), L - d)
-        hx, hy = sx + ux * a, sy + uy * a              # hinge
-        ex, ey = hx + ux * d, hy + uy * d              # latch side
+        # The leaf hangs from the end of the gap the plan shows it hinged at,
+        # and swings into this room or out of it.
+        if door.get("opens") == "out":
+            nx, ny = -nx, -ny
+        start = (sx + ux * a, sy + uy * a)
+        end = (sx + ux * (a + d), sy + uy * (a + d))
+        (hx, hy), (ex, ey) = (end, start) if door.get("hinge") == "end" else (start, end)
         lx, ly = hx + nx * d, hy + ny * d              # leaf, swung open
-        sweep = 1 if ux * ny - uy * nx > 0 else 0
+        v1x, v1y, v2x, v2y = ex - hx, ey - hy, lx - hx, ly - hy
+        sweep = 1 if v1x * v2y - v1y * v2x > 0 else 0
         out.append(f'<line x1="{hx:.1f}" y1="{hy:.1f}" x2="{ex:.1f}" y2="{ey:.1f}" '
                    f'stroke="{bg}" stroke-width="4"/>')
         out.append(f'<line x1="{hx:.1f}" y1="{hy:.1f}" x2="{lx:.1f}" y2="{ly:.1f}" '
@@ -3830,7 +4281,7 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
     Furniture is drawn to scale but unlabelled, and sizes are left to the room
     cards, which carry every label."""
     placed = geometry["rooms"]
-    walkways = geometry.get("walkways") or []
+    walkways = tidy_walkways(geometry)
     spaces = [r for r in placed.values()] + walkways
 
     min_x = min(r["x"] for r in spaces)
@@ -3848,12 +4299,12 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
         f'style="width:100%;height:auto;font-family:Inter,sans-serif;">',
         f'<rect width="{w}" height="{h}" fill="{bg}"/>',
     ]
-    # Walkways first, as plain floor under a light line: they join the rooms
-    # without competing with them.
+    # Walkways first, as plain floor with no outline of their own: they join
+    # the rooms without competing with them, and the rooms' walls edge them.
     if walkways:
         walk = _scale_room({"x": 0, "y": 0, "w": 1, "h": 1, "parts": walkways},
                            min_x, min_y, s, pad, pad)
-        svg += _room_shape_svg(walk, "#E6E0D5", 0.7, "#B5AFA5", 1.2)
+        svg.append(f'<path d="{union_outline_filled(room_parts(walk))}" fill="#EDE8DF"/>')
 
     walls, labels, drawn_doors, hits = [], [], [], []
     for room in rooms:
@@ -3900,8 +4351,8 @@ def _floor_plan_svg_from_geometry(rooms: list[dict], geometry: dict) -> str:
         main = _main_part(shape)
         x, y, cw, ch = main["x"], main["y"], main["w"], main["h"]
         if room.get("layout"):
-            svg += _draw_layout(room["layout"], shape["x"], shape["y"],
-                                shape["w"] / room["layout"]["W"], "#F2EEE6", labels=False)
+            ox, oy, k = layout_frame(room["layout"], shape)
+            svg += _draw_layout(room["layout"], ox, oy, k, "#F2EEE6", labels=False)
         elif cw >= 70 and ch >= 84:
             svg += _furniture_markers(room["label"], room.get("items", []),
                                       int(x), int(y), int(cw), int(ch), "#6E6A63",
@@ -4054,6 +4505,15 @@ def _piece_icon(label: str) -> str | None:
         if any(k in s for k in keywords):
             return icon
     return None
+
+
+def layout_frame(layout: dict, shape: dict) -> tuple[float, float, float]:
+    """Where a room's furniture layout sits in a drawing of the room: its
+    origin and drawing units per metre. The layout is measured from the inside
+    face of the walls, so it starts half a wall in from the traced outline."""
+    inset = layout.get("inset", 0.0) or 0.0
+    k = shape["w"] / (layout["W"] + 2 * inset) if layout.get("W") else 1.0
+    return shape["x"] + inset * k, shape["y"] + inset * k, k
 
 
 def _draw_layout(layout: dict, ox: float, oy: float, scale: float, fill: str,
@@ -5599,8 +6059,20 @@ def plan_editor_state(s1: dict, labels: list[str]) -> dict | None:
         "outline": [[o["x"], o["y"], o["w"], o["h"]] for o in (geo or {}).get("outline") or []],
         # The walls found in the image itself, for room edges to snap to.
         "walls":   {k: v for k, v in (detect_plan_walls(plan) or {}).items() if k in ("x", "y")},
+        "doors":   [{k: v for k, v in d.items() if k != "room"} for d in plan_doors(geo)] if geo else [],
+        "door_px": editor_door_px(geo, s1, size),
         "colours": ROOM_COLOURS,
     }
+
+
+def editor_door_px(geo: dict | None, s1: dict, size: tuple[int, int]) -> float:
+    """An 800 mm door in plan pixels, for the editor to draw doors at."""
+    m = None
+    if geo:
+        m = (geo.get("m_per_px_dims") or plan_metres_per_px(geo, s1.get("floor_size"))
+             or geo.get("m_per_px_ref")
+             or plan_metres_per_px(geo, TYPICAL_FLOOR_SQM.get(s1.get("housing_type"))))
+    return round(0.8 / m, 1) if m else round(0.04 * max(size), 1)
 
 
 def trace_for_project(cid: str, s1: dict, labels: list[str]) -> dict:
@@ -5671,13 +6143,16 @@ def apply_plan_edit(geo: dict, raw: str, labels: list[str], plan_path: str) -> d
     rooms = {}
     for label in labels:
         parts = []
-        for box in (edit["rooms"].get(label) or [])[:3]:
+        # An L is two rectangles, a T or U three; four is the most kept.
+        for box in (edit["rooms"].get(label) or [])[:4]:
             try:
                 x, y, w, h = (float(v) for v in box)
             except (TypeError, ValueError):
                 continue
+            if w < min_side or h < min_side:
+                continue                # a sliver, not a room: drop it, never widen it
             x, y = min(max(x, 0.0), img_w - min_side), min(max(y, 0.0), img_h - min_side)
-            w, h = min(max(w, min_side), img_w - x), min(max(h, min_side), img_h - y)
+            w, h = min(w, img_w - x), min(h, img_h - y)
             parts.append({"x": round(x, 1), "y": round(y, 1), "w": round(w, 1), "h": round(h, 1)})
         if not parts:
             continue
@@ -5693,9 +6168,16 @@ def apply_plan_edit(geo: dict, raw: str, labels: list[str], plan_path: str) -> d
 
     if not rooms and not geo["rooms"]:
         return None                     # nothing traced and nothing placed
+    if isinstance(edit.get("doors"), list):
+        # The editor sends every door, where it is and how it swings.
+        attach_doors({**geo, "rooms": rooms}, edit["doors"][:40])
     new_key = plan_geometry_key(plan_path, labels)
+    def door_set(g):
+        return sorted(json.dumps(d, sort_keys=True) for d in plan_doors(g))
+
     if new_key == geo.get("key") and set(rooms) == set(geo["rooms"]) and all(
-            _parts_list(rooms[l]) == _parts_list(geo["rooms"][l]) for l in rooms):
+            _parts_list(rooms[l]) == _parts_list(geo["rooms"][l]) for l in rooms) \
+            and door_set({**geo, "rooms": rooms}) == door_set(geo):
         return None
     new = {**geo, "rooms": rooms, "missing": [l for l in labels if l not in rooms],
            "edited": True}
@@ -5720,7 +6202,9 @@ def step2_trace():
     return jsonify({"ok": True,
                     "rooms": {l: _parts_list(r) for l, r in geo["rooms"].items()},
                     "outline": [[o["x"], o["y"], o["w"], o["h"]]
-                                for o in geo.get("outline") or []]})
+                                for o in geo.get("outline") or []],
+                    "doors": [{k: v for k, v in d.items() if k != "room"} for d in plan_doors(geo)],
+                    "door_px": editor_door_px(geo, s1, image_size(plan) or (1000, 1000))})
 
 
 @app.route("/step2/reviewing")
@@ -5928,6 +6412,7 @@ def step5():
     if not result:
         return render_template("step5_loading.html", current_step=5,
                                project=project,
+                               gallery=wait_gallery(s2, rooms_base, s1.get("housing_type", "")),
                                room_count=len(rooms_base),
                                has_floor_plan=bool(s1.get("floor_plan_path")))
 
@@ -5954,6 +6439,35 @@ def step5():
                            needs_input=result["needs_input"],
                            refinements=project_get("refinements", []),
                            room_picks=picked_references(project_get("style_picks") or {}))
+
+
+def wait_gallery(inspiration: dict, rooms: list[dict], housing_type: str,
+                 most: int = 10) -> list[dict]:
+    """Photos to pass the wait with: the references the homeowner picked on
+    page 4, their own inspiration photos, and — when that is only a few — the
+    library's closest matches to their style. Each {"src", "alt", "bg"}."""
+    out, seen = [], set()
+
+    def add(src, alt, bg="#EDE9E2"):
+        if src and src not in seen and len(out) < most:
+            seen.add(src)
+            out.append({"src": src, "alt": alt, "bg": bg})
+
+    for refs in picked_references(project_get("style_picks") or {}).values():
+        for ref in refs:
+            add(ref["image"]["thumb_url"], f"{ref['style']} {ref['room']}, one of your picks",
+                ref["image"].get("dominant_colour") or "#EDE9E2")
+    for paths in (inspiration.get("inspo_paths") or {}).values():
+        for path in paths or []:
+            if path and Path(path).exists():
+                add(upload_url(path), "One of your inspiration photos")
+    if len(out) < 4:
+        profile = project_get("style_profile") or default_style_profile(inspiration, rooms)
+        for room in style_rooms(rooms, profile, project_get("requirements") or {}, housing_type):
+            for ref in room["refs"][:2]:
+                add(ref["image"]["thumb_url"], f"{ref['style']} {ref['room']}",
+                    ref["image"].get("dominant_colour") or "#EDE9E2")
+    return out
 
 
 def picked_references(picks: dict) -> dict[str, list[dict]]:

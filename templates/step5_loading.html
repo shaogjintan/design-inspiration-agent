@@ -8,30 +8,11 @@
   <div class="step-header">
     <h2 class="step-header__title">Your Design Vision</h2>
     <p class="step-header__desc">FORMA is reading everything you gave it. This takes about a minute.</p>
-  </div>
-
-  <div class="summary-bar">
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Housing</span>
-      <span class="summary-bar__val">{{ project.housing_type_label }}</span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Style</span>
-      <span class="summary-bar__val">{{ project.design_style | style_label }}</span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Palette</span>
-      <span class="summary-bar__val">
-        {% if project.colour_hex %}
-        <span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>
-        {% endif %}
-        {{ project.colour_name }}
-      </span>
-    </div>
-    <div class="summary-bar__item">
-      <span class="summary-bar__label">Rooms</span>
-      <span class="summary-bar__val">{{ room_count }}</span>
-    </div>
+    <p class="vision-meta">
+      {{ project.housing_type_label }} · {{ project.design_style | style_label }} ·
+      {% if project.colour_hex %}<span class="inline-swatch" style="background:{{ project.colour_hex }};"></span>{% endif %}{{ project.colour_name }}
+      · {{ room_count }} rooms
+    </p>
   </div>
 
   <div class="working" id="working" role="status" aria-live="polite">
@@ -96,6 +77,21 @@
 
     {# Same mover as pages 2 and 3, but here it carries real progress: its
        position along the track is which stage the agent is on. #}
+    {% if gallery %}
+    {# The references being read, drifting past while the brief is written.
+       The strip is drawn twice so the loop has no seam. #}
+    <div class="gallery" aria-hidden="true" style="--gallery-dur: {{ gallery | length * 5 }}s">
+      <div class="gallery__track">
+        {% for pass in range(2) %}{% for photo in gallery %}
+        <span class="gallery__item" style="background-color: {{ photo.bg }}">
+          <img src="{{ photo.src }}" alt="" loading="eager" decoding="async"
+               onload="this.classList.add('is-loaded')">
+        </span>
+        {% endfor %}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     {{ mover(determinate=true) }}
 
     <p class="working__foot" id="working-foot">Leave this page open — it updates on its own.</p>

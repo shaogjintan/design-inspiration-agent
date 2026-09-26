@@ -711,7 +711,7 @@ em { font-style: italic; color: var(--gold); }
   gap: 1rem;
   margin-bottom: .75rem;
 }
-.rooms-hint { font-size: .85rem; color: var(--stone, #8a8175); margin: 0; }
+.rooms-hint { font-size: .85rem; color: var(--ink-muted); margin: 0; }
 .rooms-hint--warn { color: #b4550e; }
 .btn--sm { padding: .4rem .8rem; font-size: .85rem; }
 
@@ -949,44 +949,6 @@ em { font-style: italic; color: var(--gold); }
    STEP 4 — Results
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* Summary bar */
-.summary-bar {
-  display: flex;
-  gap: .5rem;
-  flex-wrap: wrap;
-  margin-bottom: 2.5rem;
-  background: var(--white);
-  border: 1px solid var(--cream-dark);
-  border-radius: var(--radius-md);
-  padding: 1rem 1.5rem;
-  box-shadow: var(--shadow-sm);
-}
-
-.summary-bar__item {
-  display: flex;
-  flex-direction: column;
-  gap: .1rem;
-  padding: 0 1.25rem;
-  border-right: 1px solid var(--cream-dark);
-}
-
-.summary-bar__item:last-child { border-right: none; }
-
-.summary-bar__label {
-  font-size: .62rem;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
-.summary-bar__val {
-  font-size: .9rem;
-  font-weight: 500;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-}
 
 .inline-swatch {
   width: 14px;
@@ -1327,9 +1289,6 @@ em { font-style: italic; color: var(--gold); }
     grid-template-columns: 1fr;
   }
 
-  .summary-bar { flex-direction: column; gap: .75rem; }
-  .summary-bar__item { border-right: none; border-bottom: 1px solid var(--cream-dark); padding: 0 0 .75rem; }
-  .summary-bar__item:last-child { border-bottom: none; padding-bottom: 0; }
 
   .brief-export { flex-direction: column; }
 
@@ -2052,7 +2011,6 @@ em { font-style: italic; color: var(--gold); }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
 
 /* Figures read as a column, not ransom-note widths. */
-.summary-bar__val,
 .trace-entry__time,
 .priority-tag { font-variant-numeric: tabular-nums; }
 
@@ -3407,6 +3365,58 @@ html[data-vt] .hero > * { animation: none; }
 .pe-grip--x { cursor: col-resize; }
 .pe-grip--y { cursor: row-resize; }
 
+/* Doors: the gap, the leaf and the arc it sweeps. */
+.pe-door { outline: none; cursor: grab; }
+.pe-door__gap { stroke: var(--white); }
+.pe-door__leaf { stroke: var(--ink); stroke-linecap: round; }
+.pe-door__arc { fill: none; stroke: var(--ink); }
+.pe-door__hit { fill: transparent; }
+.pe-door__swing { fill: var(--ink); fill-opacity: .1; transition: fill-opacity .15s ease; }
+.pe-door.is-selected .pe-door__arc,
+.pe-door:focus-visible .pe-door__arc { stroke: var(--ink); }
+/* The door being worked on stands out from the plan's own drawing: a solid
+   gold swing with a dark outline, whatever colour the room is. */
+.pe-door.is-selected .pe-door__swing,
+.pe-door:focus-visible .pe-door__swing {
+  fill: var(--gold);
+  fill-opacity: .7;
+  stroke: var(--ink);
+  stroke-width: .6px;
+  vector-effect: non-scaling-stroke;
+}
+.pe-door.is-selected .pe-door__leaf,
+.pe-door:focus-visible .pe-door__leaf { stroke: var(--ink); }
+
+/* A door just added: a ring spreads from it once, so the eye finds it. */
+.pe-door__halo {
+  fill: none;
+  stroke: var(--gold);
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: pe-door-halo 1s var(--ease-out);
+}
+
+@keyframes pe-door-halo {
+  from { opacity: 1; transform: scale(.3); }
+  to   { opacity: 0; transform: scale(2.2); }
+}
+
+.pe-door.is-fresh .pe-door__swing { animation: pe-door-fill .8s var(--ease-out); }
+
+@keyframes pe-door-fill { from { fill-opacity: .6; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pe-door__halo { display: none; }
+  .pe-door.is-fresh .pe-door__swing { animation: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pe-door:hover .pe-door__leaf,
+  .pe-door:hover .pe-door__arc { stroke: var(--gold); }
+}
+
 .pe-name {
   font-family: var(--font-sans);
   font-weight: 500;
@@ -3432,6 +3442,11 @@ html[data-vt] .hero > * { animation: none; }
   stroke: var(--gold);
   pointer-events: none;
 }
+
+.pe-marking--line { fill: none; }
+
+.pe-corner { fill: var(--gold); fill-opacity: 1; stroke: var(--white); }
+.pe-corner.is-first { fill: var(--white); stroke: var(--gold); }
 
 .plan-editor.is-marking .pe-svg,
 .plan-editor.is-marking .pe-grip { cursor: crosshair; }
@@ -3509,4 +3524,254 @@ html[data-vt] .hero > * { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .plan-editor[data-status="pending"] .pe-scan { animation: none; opacity: .5; transform: none; }
   .pe-room.is-arriving { animation: none; }
+}
+
+/* ── Page 5, decluttered ──────────────────────────────────────────────────────
+   One line of project facts under the title; detail behind quiet disclosures;
+   each room's direction as a short plain-text spec; one closing share action. */
+.vision-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  margin-top: .5rem;
+  font-size: .85rem;
+  color: var(--ink-muted);
+}
+
+.vision-meta .inline-swatch { width: 11px; height: 11px; }
+
+/* A disclosure that stays out of the way until wanted. */
+.more { margin-top: 1rem; }
+
+.more__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: .82rem;
+  color: var(--ink-muted);
+  padding: .3rem 0;
+  transition: color .15s ease;
+}
+
+.more__toggle::-webkit-details-marker { display: none; }
+
+.more__toggle::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform .2s var(--ease-out);
+}
+
+.more[open] > .more__toggle::before { transform: rotate(45deg); }
+
+@media (hover: hover) and (pointer: fine) {
+  .more__toggle:hover { color: var(--ink); }
+}
+
+.more[open] > :not(summary) { animation: more-open .25s var(--ease-out); }
+
+@keyframes more-open { from { opacity: 0; transform: translateY(-4px); } }
+
+.more > .inspo-analysis__grid { margin-top: 1rem; }
+
+.inspo-analysis-card .inspo-analysis__meta { display: block; margin-top: .4rem; }
+
+/* A room's direction as a short spec: label, then values, in plain text. */
+.room-spec {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: .3rem .9rem;
+  margin: .2rem 0 .6rem;
+  font-size: .8rem;
+}
+
+.room-spec dt { color: var(--ink-muted); }
+.room-spec dd { color: var(--ink-light); text-transform: none; }
+.room-spec dd::first-letter { text-transform: uppercase; }
+
+/* The one thing to do next. */
+.share-section {
+  padding: 2rem;
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.share-section__actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
+
+.share-section__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .6rem;
+  margin-top: 1.25rem;
+  font-size: .82rem;
+  color: var(--ink-muted);
+}
+
+.share-section__more a,
+.linklike {
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--stone);
+  text-underline-offset: 3px;
+  font: inherit;
+  padding: .2rem 0;
+  transition: color .15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .share-section__more a:hover,
+  .linklike:hover { color: var(--ink); }
+}
+
+.trace-details { margin: 1.5rem 0 3rem; }
+.trace-details .agent-trace { margin-top: 1rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .more[open] > :not(summary) { animation: none; }
+  .more__toggle::before { transition: none; }
+}
+
+@media print {
+  .more:not([open]) { display: none; }
+  .share-section__actions, .share-section__more, .trace-details { display: none; }
+}
+
+.inspo-analysis-card { gap: .6rem; }
+.inspo-analysis-card > .more { margin-top: .4rem; }
+
+/* A tall plan fits the screen instead of running on for a page and a half. */
+.floorplan-render svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(760px, 80vh);
+}
+
+/* ── Page 5 wait: a gallery of the references being read ──────────────────────
+   A strip of photos drifting past at a steady pace above the mover. Constant
+   motion, so linear; the edges fade so photos arrive and leave softly. It is
+   decoration for the wait and never blocks anything. */
+.gallery {
+  margin-top: 2rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.gallery__track {
+  display: flex;
+  width: max-content;
+  animation: gallery-drift var(--gallery-dur, 40s) linear infinite;
+}
+
+/* Spacing on each photo, not a gap on the track, so half the track is
+   exactly one pass and the loop joins without a jump. */
+.gallery__item {
+  flex: none;
+  width: 148px;
+  aspect-ratio: 4 / 3;
+  margin-right: 12px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.gallery__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .6s ease;
+}
+
+.gallery__item img.is-loaded { opacity: 1; }
+
+@keyframes gallery-drift { to { transform: translateX(-50%); } }
+
+@media (max-width: 640px) {
+  .gallery__item { width: 112px; margin-right: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery__track { animation: none; }
+}
+
+/* ── Finishing touches ────────────────────────────────────────────────────────
+   Small moments tied to something happening, each once: never decoration on
+   a loop, never in the way, and still for anyone who asks for less motion. */
+
+/* The arrow on a continue button leans the way you are going. */
+.btn__arrow {
+  display: inline-block;
+  transition: transform .2s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover .btn__arrow { transform: translateX(3px); }
+}
+
+/* Page 5: the floor plan draws itself the first time it is seen — walls
+   traced as with a pen, one after another, then the rooms fill in. */
+.floorplan-render.is-waiting svg > :not(rect:first-child):not(.room-wall) { opacity: 0; }
+.floorplan-render.is-waiting .room-wall { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); }
+
+.floorplan-render.is-drawing .room-wall {
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  animation: wall-draw .9s var(--ease-in-out) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.floorplan-render.is-drawing svg > :not(rect:first-child):not(.room-wall) {
+  animation: plan-fill .6s var(--ease-out) both;
+  animation-delay: .55s;
+}
+
+@keyframes wall-draw { to { stroke-dashoffset: 0; } }
+@keyframes plan-fill { from { opacity: 0; } }
+
+/* Page 2: the rooms settle onto the plan as FORMA finds them. */
+.pe-svg.is-settling .pe-room {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pe-settle .45s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+@keyframes pe-settle { from { opacity: 0; transform: scale(.94); } }
+
+/* Page 5: "Download brief" turns into "Downloaded ✓" for a moment — the two
+   labels cross with a touch of blur so they read as one changing word. */
+.btn--morph { position: relative; display: inline-grid; }
+.btn--morph .btn__label {
+  grid-area: 1 / 1;
+  transition: opacity .2s ease, filter .2s ease, transform .2s var(--ease-out);
+}
+.btn--morph .btn__label--done { opacity: 0; filter: blur(4px); transform: translateY(4px); }
+.btn--morph.is-done .btn__label:not(.btn__label--done) { opacity: 0; filter: blur(4px); transform: translateY(-4px); }
+.btn--morph.is-done .btn__label--done { opacity: 1; filter: none; transform: none; }
+
+/* A bar of links wider than the screen fades where there is more. */
+.page-nav__inner[data-more="end"]   { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+.page-nav__inner[data-more="start"] { -webkit-mask-image: linear-gradient(270deg, #000 82%, transparent); mask-image: linear-gradient(270deg, #000 82%, transparent); }
+.page-nav__inner[data-more="both"]  { -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn__arrow, .btn--morph .btn__label { transition: opacity .2s ease; transform: none !important; filter: none !important; }
+  .pe-svg.is-settling .pe-room { animation: none; }
+}
+
+/* Printed before it was scrolled to, the plan is still all there. */
+@media print {
+  .floorplan-render.is-waiting svg > *,
+  .floorplan-render .room-wall { opacity: 1 !important; stroke-dashoffset: 0 !important; animation: none !important; }
 }

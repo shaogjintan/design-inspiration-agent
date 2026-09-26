@@ -116,7 +116,7 @@
     <div class="form-actions">
       <a href="{{ url_for('step3') }}" class="btn btn--ghost">← Back</a>
       <button type="submit" class="btn btn--primary" id="style-continue"
-              data-busy-label="Saving your picks…">Continue to Vision →</button>
+              data-busy-label="Saving your picks…">Continue to Vision <span class="btn__arrow" aria-hidden="true">→</span></button>
     </div>
   </form>
 </div>
@@ -154,7 +154,8 @@
   const button = document.getElementById('style-continue');
   function updateButton() {
     const any = document.querySelector('.style-form input[type=checkbox]:checked');
-    button.textContent = any ? 'Continue to Vision →' : 'Skip and continue →';
+    button.innerHTML = (any ? 'Continue to Vision ' : 'Skip and continue ')
+      + '<span class="btn__arrow" aria-hidden="true">→</span>';
   }
 
   // At most N picks a room: once full, the rest step back until one is unticked.

@@ -109,3 +109,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   form.addEventListener('submit', () => { dirty = false; clearTimeout(timer); });
 });
+
+
+// A bar of links wider than the screen fades at the edge that has more
+// behind it, so a cut-off last link reads as "scroll for more".
+(function () {
+  document.querySelectorAll('.page-nav__inner').forEach(bar => {
+    const mark = () => {
+      const start = bar.scrollLeft > 2;
+      const end = bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 2;
+      bar.dataset.more = start && end ? 'both' : start ? 'start' : end ? 'end' : '';
+    };
+    bar.addEventListener('scroll', mark, { passive: true });
+    addEventListener('resize', mark);
+    mark();
+  });
+})();
