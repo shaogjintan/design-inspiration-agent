@@ -1,7 +1,13 @@
 # FORMA — Design Inspiration Agent
 
 > An AI agent that translates a homeowner's messy ideas, inspiration images, and renovation requirements into a coherent, designer-ready brief.
-> Built for the **NUS-ISS "Show Me Your Agents" Hackathon** · Powered by AWS Bedrock / Claude Sonnet 4.5
+> Built for the **NUS-ISS "Show Me Your Agents" Hackathon**
+
+**Live demo:** http://13.250.211.152/ (AWS Lightsail, Singapore region)
+
+FORMA works with either LLM backend, chosen at runtime by which keys are set:
+a NUS **SOCLAAS / Qwen3.8 27B** endpoint (what the live demo runs) or an
+**AWS Bedrock / Claude Sonnet 4.5** gateway. See [Configure environment](#2-configure-environment).
 
 ---
 
@@ -78,12 +84,23 @@ Copy and edit the environment file:
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local with your LLM gateway credentials
+# Edit .env.local with your LLM credentials
 ```
 
-(`_env.local` and `.env` are read too, in that order — all three are gitignored.)
+(`_env.local` and `.env` are read too, in that order — all are gitignored.)
 
-Required variables:
+Pick **one** of the two backends. If the SOCLAAS values are all set, the app uses
+SOCLAAS and ignores the gateway block.
+
+**Option A — SOCLAAS / Qwen (what the live demo runs):**
+```
+SOCLAAS_BASE_URL=https://soclaas-api.comp.nus.edu.sg/v1
+SOCLAAS_API_KEY=clsk_...
+SOCLAAS_MODEL=qwen3.8:27b
+FLASK_SECRET_KEY=a-long-random-string
+```
+
+**Option B — AWS Bedrock / Claude Sonnet 4.5 gateway:**
 ```
 LLM_GATEWAY_URL=https://...
 LLM_GATEWAY_API_KEY=...
@@ -92,6 +109,13 @@ FLASK_SECRET_KEY=a-long-random-string
 ```
 
 **Without credentials** the app runs on mock/stub responses — fully usable for demo and development.
+
+### Deploying to AWS Lightsail
+
+The full walkthrough (create the instance, install, add keys, update, back up) is in
+[`deploy/LIGHTSAIL.md`](deploy/LIGHTSAIL.md). The server installs itself from
+[`deploy/lightsail.sh`](deploy/lightsail.sh); the current live instance details are
+recorded at the top of that guide.
 
 ### 3. Run
 
@@ -163,8 +187,9 @@ uploads/                # User uploads (gitignored)
 | Layer | Choice |
 |-------|--------|
 | Backend | Python / Flask |
-| AI | AWS Bedrock — Claude Sonnet 4.5 via LLM gateway |
-| Multimodal | Base64 image encoding → Claude vision |
+| AI | SOCLAAS / Qwen3.8 27B (live) or AWS Bedrock / Claude Sonnet 4.5 — selected by env |
+| Multimodal | Base64 image encoding → vision model |
+| Deployment | AWS Lightsail (Ubuntu + gunicorn + nginx), self-installing script |
 | Frontend | Vanilla HTML/CSS/JS — no framework |
 | Fonts | Cormorant Garamond + Inter |
 | Persistence | Local JSON (designed to migrate to DynamoDB) |

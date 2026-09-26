@@ -7,15 +7,29 @@ paste a few commands.
 **Before you start:** the server downloads the code from GitHub. Anything not
 committed and pushed will not be on the site.
 
+> ## Current deployment (live)
+>
+> | | |
+> | --- | --- |
+> | **URL** | http://13.250.211.152/ |
+> | **Region** | Singapore (ap-southeast-1) |
+> | **Instance** | `forma` — Ubuntu 24.04 LTS, $7/mo (1 GB RAM) |
+> | **Static IP** | 13.250.211.152 (`staticip_forma`) |
+> | **Live branch/tag** | `live` → `Develop/GL-api` |
+> | **Model in use** | SOCLAAS / Qwen3.8 27B (footer reads "Powered by Qwen3.8 27B") |
+>
+> Verified end to end (floor-plan read → requirements → inspiration → brief).
+> To confirm it's healthy at any time: `sudo bash lightsail.sh status`.
+
 ---
 
 ## 0. On your laptop: push the code and mark the live version
 
 ```bash
-cd "~/Desktop/Y3S1/NUS-ISS Hackathon/design-inspiration-agent"
+cd path/to/design-inspiration-agent      # wherever you cloned it
 git add -A
 git commit -m "Describe what changed"
-git push origin Develop/GL-api
+git push origin Develop/GL-api            # the live branch
 
 git tag -f live            # the version to put online: here, what you just committed
 git push -f origin live
@@ -65,13 +79,28 @@ sudo nano /opt/forma/.env
 ```
 
 1. Fill in `SOCLAAS_BASE_URL=`, `SOCLAAS_API_KEY=` and `SOCLAAS_MODEL=` with the same
-   values as your local `.env`. (`FLASK_SECRET_KEY` is already filled in for you.)
+   values as your local `.env.local`. Type them plain, **no quotes**, no spaces around
+   the `=`:
+
+   ```
+   SOCLAAS_BASE_URL=https://soclaas-api.comp.nus.edu.sg/v1
+   SOCLAAS_API_KEY=clsk_...your key...
+   SOCLAAS_MODEL=qwen3.8:27b
+   ```
+
+   Leave `FLASK_SECRET_KEY` as the one already generated for you (don't paste your
+   local one). Leave the `LLM_GATEWAY_*` block blank — when all three SOCLAAS values
+   are set, the app uses SOCLAAS and ignores that block.
 2. Save and exit: **Ctrl+O**, **Enter**, **Ctrl+X**.
 3. Restart the app:
 
    ```bash
    sudo systemctl restart forma
    ```
+
+> **Switching to AWS Bedrock instead of SOCLAAS:** leave the three `SOCLAAS_*`
+> lines blank and fill `LLM_GATEWAY_URL`, `LLM_GATEWAY_API_KEY`, `LLM_MODEL`, then
+> restart. No redeploy needed — the same `.env` drives both.
 
 ## 6. Check it works
 
