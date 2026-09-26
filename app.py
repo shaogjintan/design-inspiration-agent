@@ -6438,7 +6438,7 @@ def step5():
                            agent_trace=result["agent_trace"],
                            needs_input=result["needs_input"],
                            refinements=project_get("refinements", []),
-                           room_picks=picked_references(project_get("style_picks") or {}))
+                           reference_groups=reference_groups(s2, rooms_base))
 
 
 def wait_gallery(inspiration: dict, rooms: list[dict], housing_type: str,
@@ -6468,6 +6468,40 @@ def wait_gallery(inspiration: dict, rooms: list[dict], housing_type: str,
                 add(ref["image"]["thumb_url"], f"{ref['style']} {ref['room']}",
                     ref["image"].get("dominant_colour") or "#EDE9E2")
     return out
+
+
+def reference_groups(inspiration: dict, rooms: list[dict]) -> list[dict]:
+    """The pictures behind the brief, room by room: the homeowner's own
+    inspiration photos first, then the library photos they picked on page 4.
+    Whole-home photos come first as their own group; rooms with no pictures
+    are left out. Each photo: {"src", "full", "kind": "yours" | "library",
+    "caption", "credit", "link"}."""
+    uploads = inspiration.get("inspo_paths") or {}
+    picks = picked_references(project_get("style_picks") or {})
+
+    def own(key):
+        return [{"src": upload_url(p), "full": upload_url(p), "kind": "yours",
+                 "caption": "Your photo", "credit": "", "link": ""}
+                for p in uploads.get(key) or [] if p and Path(p).exists() and upload_url(p)]
+
+    def library(key):
+        return [{"src": r["image"]["thumb_url"], "full": r["image"].get("url") or r["image"]["thumb_url"],
+                 "kind": "library", "caption": r["style"],
+                 "credit": r["source"].get("photographer", ""),
+                 "link": r["source"].get("page_url", ""),
+                 "bg": r["image"].get("dominant_colour") or "#EDE9E2"}
+                for r in picks.get(key, [])]
+
+    groups = []
+    whole = own("overall")
+    if whole:
+        groups.append({"key": "overall", "label": "Whole home", "photos": whole, "change": "step3"})
+    for room in rooms:
+        photos = own(room["key"]) + library(room["key"])
+        if photos:
+            groups.append({"key": room["key"], "label": room["label"], "photos": photos,
+                           "change": "step4" if picks.get(room["key"]) else "step3"})
+    return groups
 
 
 def picked_references(picks: dict) -> dict[str, list[dict]]:

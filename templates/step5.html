@@ -22,6 +22,7 @@
       {% if open_conflicts %}<a class="page-nav__link page-nav__link--attention" href="#conflicts-section">Your input <span class="page-nav__count">{{ open_conflicts | length }}</span></a>{% endif %}
       <a class="page-nav__link" href="#brief">Brief</a>
       <a class="page-nav__link" href="#rooms">Rooms</a>
+      {% if reference_groups %}<a class="page-nav__link" href="#references">References</a>{% endif %}
       {% if floor_plan_svg %}<a class="page-nav__link" href="#plan">Floor plan</a>{% endif %}
       <a class="page-nav__link" href="#refine-section">Refine</a>
       <a class="page-nav__link" href="#share">Share</a>
@@ -233,30 +234,6 @@
         <div class="room-result-card__desc">
           <p class="room-result-card__concept">{{ room.concept }}</p>
 
-          {% set refs = room_picks.get(room.key) %}
-          {% if refs %}
-          <div class="room-picks">
-            <div class="room-picks__head">
-              <div class="room-result-card__prompt-label">Your Picks</div>
-              <a class="room-picks__change" href="{{ url_for('step4') }}#style-{{ room.key }}">Change</a>
-            </div>
-            <ul class="room-picks__grid">
-              {% for ref in refs %}
-              <li class="room-pick">
-                <a class="room-pick__frame" href="{{ ref.source.page_url }}?utm_source=forma&amp;utm_medium=referral"
-                   target="_blank" rel="noopener"
-                   style="background-color: {{ ref.image.dominant_colour or '#EDE9E2' }}"
-                   title="Photo: {{ ref.source.photographer }} / Unsplash">
-                  <img src="{{ ref.image.thumb_url }}" alt="{{ ref.style }} {{ ref.room }} with a {{ ref.palette.family }} palette, picked as a reference"
-                       loading="lazy" decoding="async" width="400" height="300">
-                </a>
-                <span class="room-pick__style">{{ ref.style }}</span>
-              </li>
-              {% endfor %}
-            </ul>
-            <p class="room-picks__credit">Reference photos from Unsplash, not your home.</p>
-          </div>
-          {% endif %}
 
           {% if room.direction %}
           <div class="room-direction">
@@ -281,6 +258,46 @@
       {% endfor %}
     </div>
   </div>
+
+  <!-- The pictures behind the brief, room by room -->
+  {% if reference_groups %}
+  <div class="result-section" id="references">
+    <h3 class="result-section__title">{{ icon("image") }} Your references</h3>
+    <p class="result-section__desc">The photos FORMA worked from — yours first, then the library photos you picked.</p>
+    <div class="ref-groups">
+      {% for group in reference_groups %}
+      <section class="ref-group" aria-labelledby="refs-{{ group.key }}">
+        <div class="ref-group__head">
+          <h4 class="ref-group__name" id="refs-{{ group.key }}">{{ group.label }}</h4>
+          <a class="ref-group__change" href="{{ url_for(group.change) }}{% if group.change == 'step4' %}#style-{{ group.key }}{% endif %}">Change</a>
+        </div>
+        <ul class="ref-group__photos">
+          {% for photo in group.photos %}
+          <li class="ref-photo ref-photo--{{ photo.kind }}">
+            <button type="button" class="ref-photo__frame" style="background-color: {{ photo.bg or '#EDE9E2' }}"
+                    data-full="{{ photo.full }}" data-caption="{{ photo.caption }}"
+                    data-credit="{{ photo.credit }}" data-link="{{ photo.link }}"
+                    aria-label="View {{ photo.caption | lower }}{% if photo.kind == 'library' %} reference{% endif %} for {{ group.label }} larger">
+              <img src="{{ photo.src }}" alt="" loading="lazy" decoding="async">
+            </button>
+            <span class="ref-photo__caption">{{ photo.caption }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+    <p class="ref-groups__note">Library photos are from Unsplash, to show a style — they are not your home.</p>
+  </div>
+
+  <dialog class="photo-view" id="photo-view" aria-label="Photo">
+    <figure class="photo-view__figure">
+      <img class="photo-view__img" alt="">
+      <figcaption class="photo-view__caption"></figcaption>
+    </figure>
+    <button type="button" class="photo-view__close" aria-label="Close">×</button>
+  </dialog>
+  {% endif %}
 
   <!-- 2D Floor Plan -->
   <div class="result-section" id="plan">
@@ -537,6 +554,37 @@
       plan.classList.add('is-drawing');
     }, { threshold: 0.25 });
     seen.observe(plan);
+  })();
+
+  // ── A reference, larger ──────────────────────────────────────────────────
+  (function () {
+    const view = document.getElementById('photo-view');
+    if (!view || typeof view.showModal !== 'function') return;
+    const img = view.querySelector('.photo-view__img');
+    const cap = view.querySelector('.photo-view__caption');
+    let opener = null;
+    document.querySelectorAll('.ref-photo__frame').forEach(btn => {
+      btn.addEventListener('click', () => {
+        opener = btn;
+        img.src = btn.dataset.full;
+        img.alt = btn.getAttribute('aria-label').replace(/^View /, '').replace(/ larger$/, '');
+        cap.textContent = '';
+        cap.append(btn.dataset.caption);
+        if (btn.dataset.credit) {
+          const a = document.createElement('a');
+          a.href = btn.dataset.link + '?utm_source=forma&utm_medium=referral';
+          a.target = '_blank'; a.rel = 'noopener';
+          a.textContent = 'Photo: ' + btn.dataset.credit + ' / Unsplash';
+          cap.append(' · ', a);
+        }
+        view.showModal();
+      });
+    });
+    const close = () => view.close();
+    view.querySelector('.photo-view__close').addEventListener('click', close);
+    // A click on the dimmed backdrop — outside the figure — closes it.
+    view.addEventListener('click', e => { if (e.target === view) close(); });
+    view.addEventListener('close', () => { if (opener) opener.focus(); });
   })();
 
   // ── The download says it worked ──────────────────────────────────────────

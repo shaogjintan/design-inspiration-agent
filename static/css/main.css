@@ -3187,84 +3187,6 @@ html[data-vt] .hero > * { animation: none; }
   .ref-card__credit { margin: .3rem .75rem .7rem; }
 }
 
-/* ── Page 5: the references picked on page 4, inside each room card ─────────
-   Same block rhythm as the concept and the direction around it: a gold label,
-   then content, divided by the stone rule the direction uses. */
-.room-picks {
-  border-top: 1px solid var(--stone);
-  padding-top: .85rem;
-  margin: .9rem 0 .85rem;
-}
-
-.room-picks__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: .75rem;
-}
-
-.room-picks__change {
-  font-size: .72rem;
-  color: var(--ink-muted);
-  text-decoration: underline;
-  text-decoration-color: var(--stone);
-  text-underline-offset: 3px;
-  padding: .2rem 0;
-  transition: color .15s ease;
-}
-
-.room-picks__grid {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .5rem;
-  margin-top: .2rem;
-}
-
-.room-pick { min-width: 0; }
-
-.room-pick__frame {
-  display: block;
-  aspect-ratio: 4 / 3;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  border: 1px solid var(--cream-dark);
-  transition: transform .16s var(--ease-out), box-shadow .2s ease;
-}
-
-.room-pick__frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.room-pick__frame:active { transform: scale(.97); }
-
-.room-pick__style {
-  display: block;
-  margin-top: .3rem;
-  font-size: .7rem;
-  color: var(--ink-light);
-  text-transform: capitalize;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.room-picks__credit {
-  margin-top: .5rem;
-  font-size: .68rem;
-  color: var(--ink-muted);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .room-picks__change:hover { color: var(--ink); }
-  .room-pick__frame:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .room-pick__frame, .room-pick__frame:hover, .room-pick__frame:active { transform: none; }
-}
 
 /* ── Page 2: rooms on the plan ────────────────────────────────────────────────
    The plan with each room laid over it, confirmed by its walls. Rooms take the
@@ -3774,4 +3696,181 @@ html[data-vt] .hero > * { animation: none; }
 @media print {
   .floorplan-render.is-waiting svg > *,
   .floorplan-render .room-wall { opacity: 1 !important; stroke-dashoffset: 0 !important; animation: none !important; }
+}
+
+/* ── Page 5: the references, room by room ─────────────────────────────────────
+   The photos the brief was built from, apart from the brief itself: one row
+   per room, the homeowner's own photos first. Tap one to see it larger. */
+/* Rooms side by side: most have one to three photos, and a full-width card
+   each left the section mostly empty space. */
+.ref-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.ref-group {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.ref-group__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .8rem;
+}
+
+.ref-group__name {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 400;
+}
+
+.ref-group__change {
+  font-size: .78rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--stone);
+  text-underline-offset: 3px;
+  padding: .2rem 0;
+  transition: color .15s ease;
+}
+
+.ref-group__photos {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.ref-photo { min-width: 0; }
+
+.ref-photo__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--cream-dark);
+  cursor: zoom-in;
+  transition: transform .16s var(--ease-out), box-shadow .2s ease;
+}
+
+.ref-photo__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ref-photo__frame:active { transform: scale(.97); }
+
+.ref-photo__caption {
+  display: block;
+  margin-top: .35rem;
+  font-size: .72rem;
+  color: var(--ink-light);
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The homeowner's own photos carry a quiet gold mark: theirs, not the library's. */
+.ref-photo--yours .ref-photo__frame { border-color: var(--gold-light); box-shadow: inset 0 0 0 1px var(--gold-light); }
+.ref-photo--yours .ref-photo__caption { color: var(--ink); text-transform: none; }
+
+.ref-groups__note {
+  margin-top: .9rem;
+  font-size: .75rem;
+  color: var(--ink-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ref-group__change:hover { color: var(--ink); }
+  .ref-photo__frame:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+}
+
+@media (max-width: 560px) {
+  .ref-group__photos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A photo, larger: centred (it is a modal, not anchored to the thumbnail),
+   in quickly with a slight scale, out at once. */
+.photo-view {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: min(92vw, 1100px);
+  max-height: 92vh;
+  overflow: visible;
+}
+
+.photo-view::backdrop { background: rgba(28, 27, 25, .72); }
+
+.photo-view[open] {
+  opacity: 1;
+  transform: none;
+  transition: opacity .2s ease, transform .22s var(--ease-out);
+}
+
+@starting-style {
+  .photo-view[open] { opacity: 0; transform: scale(.96); }
+}
+
+.photo-view__figure { margin: 0; }
+
+.photo-view__img {
+  display: block;
+  max-width: min(92vw, 1100px);
+  max-height: 82vh;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  background: var(--cream-dark);
+}
+
+.photo-view__caption {
+  margin-top: .7rem;
+  font-size: .85rem;
+  color: var(--cream);
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.photo-view__caption a { color: var(--cream); text-decoration: underline; text-underline-offset: 3px; text-transform: none; }
+
+.photo-view__close {
+  position: absolute;
+  top: -.4rem;
+  right: -.4rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 1.3rem;
+  line-height: 1;
+  box-shadow: var(--shadow-md);
+  transition: transform .16s var(--ease-out);
+}
+
+.photo-view__close:active { transform: scale(.94); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ref-photo__frame, .ref-photo__frame:hover, .ref-photo__frame:active { transform: none; }
+  .photo-view[open] { transition: opacity .2s ease; }
+  @starting-style { .photo-view[open] { transform: none; } }
+}
+
+@media print {
+  .photo-view { display: none; }
+  .ref-group { break-inside: avoid; box-shadow: none; }
 }

@@ -285,8 +285,13 @@ class Routes(unittest.TestCase):
                               "floor_plan_svg": "", "agent_trace": [], "needs_input": False}
         clients.save_brief("a_test", st)
         html = self.c.get("/step5").get_data(as_text=True)
-        self.assertEqual(html.count('class="room-pick"'), 2)
-        self.assertIn("/step4#style-living_room", html)
+        # In their own section, grouped by room — not inside the room cards.
+        refs = html[html.index('id="references"'):html.index('<!-- 2D Floor Plan -->')]
+        self.assertEqual(refs.count('ref-photo--library'), 2)
+        self.assertIn("Living Room", refs)
+        self.assertIn("/step4#style-living_room", refs)
+        cards = html[html.index('id="rooms"'):html.index('id="references"')]
+        self.assertNotIn('ref-photo', cards)
         self.assertIn("not your home", html)
         text = self.c.get("/export-brief").get_data(as_text=True)
         self.assertEqual(text.count("Picked      :"), 2)
