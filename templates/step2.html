@@ -28,6 +28,38 @@
 
   <form method="POST" action="{{ url_for('step2') }}" data-autosave="step2" class="form-card">
 
+    {% if plan_editor %}
+    {# The rooms placed on the plan, to check before anything is drawn from them. #}
+    <section class="plan-editor" id="plan-editor" data-status="{{ plan_editor.status }}"
+             aria-labelledby="plan-editor-title">
+      <div class="plan-editor__head">
+        <h3 class="plan-editor__title" id="plan-editor-title">Your rooms on the plan</h3>
+        <button type="button" class="pe-link pe-reset" hidden>Reset</button>
+      </div>
+      <p class="pe-status" aria-live="polite"></p>
+      <div class="pe-stage">
+        <svg class="pe-svg" role="group" aria-label="Rooms on your floor plan">
+          <image class="pe-plan" href="{{ plan_editor.image }}" x="0" y="0"
+                 width="{{ plan_editor.w }}" height="{{ plan_editor.h }}"/>
+        </svg>
+        <div class="pe-scan" aria-hidden="true"></div>
+      </div>
+      <div class="pe-tools" hidden>
+        <span class="pe-tools__name"></span>
+        <button type="button" class="pe-link" data-tool="redraw">Mark out again</button>
+        <button type="button" class="pe-link" data-tool="extend">Add an L-shaped part</button>
+        <button type="button" class="pe-link" data-tool="remove">Take off the plan</button>
+      </div>
+      <div class="pe-tray" hidden>
+        <span class="pe-tray__label">Not on the plan yet — choose one, then mark it out:</span>
+        <span class="pe-tray__list"></span>
+      </div>
+      <input type="hidden" name="plan_edit" value="">
+      <p class="pe-live visually-hidden" aria-live="polite"></p>
+      <script type="application/json" id="plan-editor-data">{{ dict(plan_editor, trace_url=url_for('step2_trace')) | tojson }}</script>
+    </section>
+    {% endif %}
+
     <div class="rooms-bar">
       <p class="rooms-hint" id="rooms-hint"></p>
       <button type="button" class="btn btn--ghost btn--sm" id="add-room-btn">+ Add room</button>
@@ -36,7 +68,7 @@
     <!-- Room accordion -->
     <div class="accordion" id="room-accordion">
       {% for room in rooms %}
-      <div class="accordion-item {% if loop.first %}accordion-item--open{% endif %}" data-room="{{ room.key }}">
+      <div class="accordion-item {% if loop.first %}accordion-item--open{% endif %}" data-room="{{ room.key }}" data-uid="{{ room.label }}">
         <input type="hidden" name="kept_rooms" value="{{ room.label }}">
         <div class="accordion-head-row">
           <button type="button" class="accordion-header">
@@ -218,6 +250,7 @@
 
 {% endblock %}
 {% block extra_scripts %}
+{% if plan_editor %}<script src="{{ url_for('static', filename='js/plan-editor.js') }}" defer></script>{% endif %}
 <script>
 (function () {
   const acc  = document.getElementById('room-accordion');
@@ -242,6 +275,14 @@
     cards().forEach(c => c.classList.remove('accordion-item--open'));
     card.classList.add('accordion-item--open');
   }
+
+  // The plan editor above keeps each room's place on the plan by its card.
+  const announce = (type, card) =>
+    acc.dispatchEvent(new CustomEvent('rooms:change', { detail: { type, card } }));
+  acc.addEventListener('plan:select', e => {
+    const card = cards().find(c => c.dataset.uid === e.detail.uid);
+    if (card) openOnly(card);
+  });
 
   // Rewrite every name/id/for on a card from oldKey_* to newKey_*
   function rekey(card, oldKey, newKey) {
@@ -273,6 +314,7 @@
     card.querySelector('.room-rename').setAttribute('aria-label', 'Rename ' + name);
     card.querySelector('.room-remove').setAttribute('aria-label', 'Remove ' + name);
     refresh();
+    if (name !== oldLabel) announce('rename', card);
     return true;
   }
 
@@ -380,7 +422,10 @@
     card.querySelector('.accordion-header').addEventListener('click', () => {
       const isOpen = card.classList.contains('accordion-item--open');
       cards().forEach(c => c.classList.remove('accordion-item--open'));
-      if (!isOpen) card.classList.add('accordion-item--open');
+      if (!isOpen) {
+        card.classList.add('accordion-item--open');
+        announce('open', card);
+      }
     });
     card.querySelector('.room-rename').addEventListener('click', e => {
       e.stopPropagation();
@@ -392,6 +437,7 @@
       if (cards().length <= 1) { say('You need at least one room.', true); return; }
       card.remove();
       refresh();
+      announce('remove', card);
     });
     // A required field inside a collapsed accordion is display:none and so
     // unfocusable — the browser then blocks submit with nothing on screen.
@@ -419,8 +465,10 @@
     const wrap = document.createElement('div');
     wrap.innerHTML = html.trim();
     const card = wrap.firstElementChild;
+    card.dataset.uid = 'new:' + Date.now();
     acc.appendChild(card);
     wire(card);
+    announce('add', card);
     openOnly(card);
     refresh();
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });

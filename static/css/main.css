@@ -3307,3 +3307,206 @@ html[data-vt] .hero > * { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .room-pick__frame, .room-pick__frame:hover, .room-pick__frame:active { transform: none; }
 }
+
+/* ── Page 2: rooms on the plan ────────────────────────────────────────────────
+   The plan with each room laid over it, confirmed by its walls. Rooms take the
+   floor-plan tints page 5 draws them in; edges are the handles. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.plan-editor {
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--cream-dark);
+}
+
+.plan-editor__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.plan-editor__title { font-size: 1.35rem; margin-bottom: .3rem; }
+
+.pe-status {
+  font-size: .85rem;
+  color: var(--ink-light);
+  max-width: 60ch;
+  margin-bottom: 1rem;
+  min-height: 1.4em;
+}
+
+.pe-link {
+  font-size: .8rem;
+  color: var(--ink-muted);
+  text-decoration: underline;
+  text-decoration-color: var(--stone);
+  text-underline-offset: 3px;
+  padding: .25rem 0;
+  transition: color .15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pe-link:hover { color: var(--ink); }
+}
+
+.pe-stage {
+  position: relative;
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--white);
+  /* Dragging a wall must not scroll the page on touch screens. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pe-svg {
+  display: block;
+  width: 100%;
+  max-height: min(520px, 64vh);
+  overflow: hidden;
+}
+
+.pe-room { outline: none; }
+
+.pe-part {
+  fill: var(--room);
+  fill-opacity: .42;
+  transition: fill-opacity .15s ease;
+}
+
+.pe-room.is-selected .pe-part { fill-opacity: .6; }
+.pe-room:focus-visible .pe-part { fill-opacity: .6; }
+
+.pe-edge {
+  stroke: color-mix(in srgb, var(--room) 45%, var(--ink));
+  pointer-events: none;
+  stroke-linecap: square;
+  transition: stroke .15s ease;
+}
+
+.pe-room.is-selected .pe-edge,
+.pe-room:focus-visible .pe-edge { stroke: var(--ink); }
+
+.pe-edge.is-active,
+.pe-edge:has(+ .pe-grip:hover) { stroke: var(--gold); }
+
+.pe-grip {
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+.pe-grip--x { cursor: col-resize; }
+.pe-grip--y { cursor: row-resize; }
+
+.pe-name {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, .85);
+  stroke-width: .3em;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.pe-guide {
+  stroke: var(--gold);
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.pe-marking {
+  fill: var(--gold);
+  fill-opacity: .18;
+  stroke: var(--gold);
+  pointer-events: none;
+}
+
+.plan-editor.is-marking .pe-svg,
+.plan-editor.is-marking .pe-grip { cursor: crosshair; }
+
+/* A room just marked out settles into place. */
+.pe-room.is-arriving {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pe-arrive .22s var(--ease-out);
+}
+
+@keyframes pe-arrive { from { opacity: 0; transform: scale(.96); } }
+
+/* Finding the rooms: a band of light passes over the plan. */
+.pe-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(201, 169, 110, .22) 50%, transparent 65%);
+  transform: translateX(-100%);
+}
+
+.plan-editor[data-status="pending"] .pe-scan {
+  opacity: 1;
+  animation: pe-scan 1.8s linear infinite;
+}
+
+.plan-editor[data-status="pending"] .pe-plan { opacity: .75; }
+
+.pe-tools[hidden],
+.pe-tray[hidden] { display: none; }
+
+@keyframes pe-scan { to { transform: translateX(100%); } }
+
+.pe-tools,
+.pe-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .4rem 1rem;
+  margin-top: .85rem;
+  font-size: .8rem;
+  color: var(--ink-muted);
+}
+
+.pe-tools__name { color: var(--ink); font-weight: 500; }
+
+.pe-tray__list { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+.pe-chip {
+  padding: .35rem .8rem;
+  border-radius: 99px;
+  border: 1.5px dashed var(--stone-dark);
+  background: var(--cream);
+  font-size: .8rem;
+  color: var(--ink-light);
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease,
+              transform .16s var(--ease-out);
+}
+
+.pe-chip:active { transform: scale(.97); }
+
+.pe-chip.is-on {
+  border-style: solid;
+  border-color: var(--gold);
+  background: var(--white);
+  color: var(--ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pe-chip:hover { border-color: var(--ink-muted); color: var(--ink); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-editor[data-status="pending"] .pe-scan { animation: none; opacity: .5; transform: none; }
+  .pe-room.is-arriving { animation: none; }
+}

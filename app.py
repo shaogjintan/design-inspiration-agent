@@ -11,6 +11,7 @@ import base64
 import hashlib
 import math
 import statistics
+import threading
 from concurrent.futures import ThreadPoolExecutor
 import textwrap
 from html import escape as html_escape
@@ -117,6 +118,41 @@ ROOM_CATALOGUE = {
     "studio":    ["Open Living / Sleeping Area", "Kitchen", "Bathroom"],
     "shophouse": ["Living Room", "Kitchen", "Master Bedroom", "Bedroom 2",
                    "Bathroom", "Ground-Floor Space"],
+}
+
+# The standard layouts HDB builds each flat type to. Flats of one type differ
+# mainly by era, so each type lists its common variants; the floor-plan read
+# picks the closest and ticks each room off against a label it actually read.
+# A template room is never added on the template's word alone.
+HDB_LAYOUTS = {
+    "hdb_2room": {
+        "newer (2-room Flexi, 2000s on)": ["Living/Dining", "Bedroom", "Kitchen", "Bathroom",
+                                           "Household Shelter", "Service Yard"],
+        "older (1970s-80s)":              ["Living Room", "Bedroom", "Kitchen", "Bath", "WC"],
+    },
+    "hdb_3room": {
+        "newer (1990s on, BTO)":          ["Living/Dining", "Master Bedroom", "Bedroom 2", "Kitchen",
+                                           "Master Bathroom", "Common Bathroom",
+                                           "Household Shelter", "Service Yard"],
+        "older (1970s-80s)":              ["Living Room", "Bedroom 1", "Bedroom 2", "Kitchen",
+                                           "Bath", "WC", "Balcony"],
+    },
+    "hdb_4room": {
+        "newer (1990s on, BTO)":          ["Living/Dining", "Master Bedroom", "Bedroom 2", "Bedroom 3",
+                                           "Kitchen", "Master Bathroom", "Common Bathroom",
+                                           "Household Shelter", "Service Yard"],
+        "older (1970s-80s)":              ["Living Room", "Dining", "Master Bedroom", "Bedroom 2",
+                                           "Bedroom 3", "Kitchen", "Master Bathroom",
+                                           "Common Bathroom", "Store", "Service Yard"],
+    },
+    "hdb_5room": {
+        "newer (1990s on, BTO)":          ["Living Room", "Dining", "Master Bedroom", "Bedroom 2",
+                                           "Bedroom 3", "Kitchen", "Master Bathroom",
+                                           "Common Bathroom", "Household Shelter", "Service Yard"],
+        "older (1980s)":                  ["Living Room", "Dining", "Study", "Master Bedroom",
+                                           "Bedroom 2", "Bedroom 3", "Kitchen", "Master Bathroom",
+                                           "Common Bathroom", "Store", "Service Yard", "Balcony"],
+    },
 }
 
 # Items per room for checklist
@@ -1022,10 +1058,10 @@ def stub_read_floorplan(housing_type, floor_size="", num_floors="1",
     }
 
 
-# Wall-clock ceiling for the step-1 read. The gateway generates around 40
-# tokens/sec, and this prompt asks for roughly 100, so a healthy call lands
-# near 3s. Past this we stop waiting and use the catalogue instead.
-FLOORPLAN_READ_TIMEOUT = 7
+# Wall-clock ceiling for the step-1 read. With the HDB layout checklist a
+# healthy call measured 3.7-4.6s on SOCLAAS; past this we stop waiting and use
+# the catalogue instead.
+FLOORPLAN_READ_TIMEOUT = 12
 
 
 def canonicalise_plan_rooms(rooms: list[str]) -> list[str]:
@@ -1046,8 +1082,16 @@ def canonicalise_plan_rooms(rooms: list[str]) -> list[str]:
 
     out = [tidy(r) for r in rooms]
     beds  = [i for i, r in enumerate(out) if "bed" in r.lower()]
+    # A WC on its own (older flats print BATH and WC as two rooms) is a
+    # toilet, not a second bathroom: it keeps its name.
+    def is_wc_only(name):
+        low = name.lower().replace(".", "")
+        return "bath" not in low and ("wc" in low.split() or "toilet" in low)
+    for i, r in enumerate(out):
+        if is_wc_only(r):
+            out[i] = "WC"
     baths = [i for i, r in enumerate(out)
-             if any(w in r.lower() for w in ("bath", "wc", "toilet"))]
+             if out[i] != "WC" and any(w in r.lower() for w in ("bath", "wc", "toilet"))]
 
     master_bed = next((i for i in beds if is_master(out[i])), None)
     others = [i for i in beds if i != master_bed]
@@ -1221,6 +1265,7 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
     """
     expected = ROOM_CATALOGUE.get(housing_type, ROOM_CATALOGUE["hdb_4room"])
     label = HOUSING_LABELS.get(housing_type, housing_type)
+    layouts = HDB_LAYOUTS.get(housing_type)
 
     prompt = textwrap.dedent(f"""
         The attached image is the floor plan of a {label}
@@ -1228,20 +1273,18 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
         {f'over {num_floors} floors' if num_floors not in ('1', '') else ''}.
         {f'The homeowner notes: {notes}' if notes else ''}
 
-        Work in two steps, and put both in your reply.
+        Work in {{step_count}} steps, and put each in your reply.
 
         STEP 1 — "labels_read": transcribe every text label printed on the plan,
         verbatim and in the plan's own spelling ("MAIN BEDROOM", "BATH / WC",
         "HOUSEHOLD SHELTER"). Transcribe only what is actually printed there.
         If a label appears twice, list it twice.
 
-        STEP 2 — "rooms": turn that transcription into the room list, in a
+        {{layout_step}}
+        STEP {{rooms_step}} — "rooms": turn that transcription into the room list, in a
         sensible order. Every entry must come from a label you transcribed —
         adding a room you did not read is the one thing you must not do. A plan
         with two bedroom labels has two bedrooms, whatever is typical.
-
-        For reference, this housing type usually has: {', '.join(expected)}.
-        That is background only. Never add a room to reach those counts.
 
         Rules:
         - Keep storage and service spaces the homeowner fits out: household
@@ -1262,8 +1305,38 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
 
         Reply with ONLY this JSON and nothing else. The summary is ONE sentence,
         maximum 25 words:
-        {{"readable": true, "labels_read": ["..."], "rooms": ["Living Room", "Kitchen"], "summary": "..."}}
+        {{reply_shape}}
     """).strip()
+
+    if layouts:
+        # HDB flats are built to a few standard layouts: checking the plan
+        # against them room by room catches the small rooms a free reading
+        # skips (shelter, yard, a second WC), without letting the template
+        # add a room the plan does not print.
+        variants = "\n".join(f"{chr(65 + i)} — {era}: {', '.join(rooms)}"
+                              for i, (era, rooms) in enumerate(layouts.items()))
+        layout_step = textwrap.dedent(f"""
+            STEP 2 — "layout" and "checklist". {label} flats are built to a few
+            standard layouts:
+            {{variants}}
+            Pick the closest as "layout" ("A", "B", or "none" if neither fits).
+            Then "checklist": for EVERY room of that layout, the label from
+            labels_read that is that room, or null if no label is. A null is a
+            fine answer — it means this flat differs from the standard one.
+            """).strip().replace("{variants}", variants.strip())
+        reply_shape = ('{"readable": true, "labels_read": ["..."], "layout": "A", '
+                       '"checklist": {"Kitchen": "KITCHEN", "Household Shelter": null}, '
+                       '"rooms": ["Living Room", "Kitchen"], "summary": "..."}')
+        prompt = (prompt.replace("{layout_step}", layout_step).replace("{rooms_step}", "3").replace("{step_count}", "three")
+                  .replace("{reply_shape}", reply_shape))
+    else:
+        reply_shape = ('{"readable": true, "labels_read": ["..."], '
+                       '"rooms": ["Living Room", "Kitchen"], "summary": "..."}')
+        prompt = (prompt.replace("{layout_step}", f"For reference, this housing type usually "
+                                 f"has: {', '.join(expected)}.\n        That is background "
+                                 f"only. Never add a room to reach those counts.\n")
+                  .replace("{rooms_step}", "2").replace("{step_count}", "two")
+                  .replace("{reply_shape}", reply_shape))
 
     message = {"role": "user", "content": prompt}
     img_data, _media = image_to_base64(floor_plan_path)
@@ -1272,7 +1345,7 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
     raw = call_llm([message],
                    system="You read residential floor plans. You reply with JSON only, "
                           "never prose. You are honest when a plan is illegible.",
-                   max_tokens=600,   # room for the label transcription
+                   max_tokens=900 if layouts else 600,   # transcription (+ checklist)
                    timeout=FLOORPLAN_READ_TIMEOUT,
                    fallback_to_mock=False,
                    images_sent=1)
@@ -1285,13 +1358,40 @@ def read_floorplan_rooms(housing_type, floor_plan_path, floor_size="",
     if not data.get("readable", True) or not rooms:
         raise ValueError("floor plan was not readable")
 
+    summary = str(data.get("summary", "")).strip()
+    missing = template_rooms_missing(layouts, data)
+    if missing:
+        summary = (summary + " " if summary else "") + (
+            f"A standard {label} also has {_join_names(missing)}, which we could not "
+            "find on your plan — add them below if your flat has them.")
+
     return {
         "rooms":        canonicalise_plan_rooms(rooms[:16]),
-        "summary":      str(data.get("summary", "")).strip(),
+        "summary":      summary,
         "observations": [],
         "source":       "floorplan",
         "confidence":   "high",
     }
+
+
+def _join_names(names: list[str]) -> str:
+    names = [n.lower() if n not in ("WC",) else n for n in names]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def template_rooms_missing(layouts: dict | None, data: dict) -> list[str]:
+    """The rooms of the chosen standard layout that the plan did not show.
+    Only when the model placed the plan in a layout — "none" means the flat
+    is not standard, and there is nothing to compare against."""
+    if not layouts or not isinstance(data.get("checklist"), dict):
+        return []
+    choice = str(data.get("layout", "")).strip().upper()[:1]
+    variants = list(layouts.values())
+    if not choice or not ("A" <= choice < chr(65 + len(variants))):
+        return []
+    ticked = {str(k).strip().lower(): v for k, v in data["checklist"].items()}
+    return [room for room in variants[ord(choice) - 65]
+            if not ticked.get(room.lower())]
 
 
 def generate_room_summary(housing_type, floor_size, notes,
@@ -5146,6 +5246,8 @@ def step1():
             floor_plan_path,
         )
 
+        if plan_changed:
+            project_clear("plan_geometry", "plan_trace_failed")
         project_set(
             step1 = new_step1,
             ai_rooms           = room_data.get("rooms", ROOM_CATALOGUE.get(housing_type, [])),
@@ -5259,7 +5361,26 @@ def save_step2_form(housing_type: str) -> None:
         req_data[f"{key}_constraints"] = request.form.get(f"{key}_constraints", "")
 
     req_data["project_notes"] = request.form.get("project_notes", "")
-    if req_data == project_get("requirements") and rooms_before == project_get("ai_rooms"):
+
+    # The rooms as placed on the plan in the editor, if the homeowner moved any.
+    plan_moved = False
+    plan = (project_get("step1") or {}).get("floor_plan_path")
+    labels = [r["label"] for r in rooms]
+    geo = usable_plan_geometry(project_get("plan_geometry"), plan, labels)
+    if not geo and plan and Path(plan).exists():
+        # No trace to start from — it failed, or is still running — so rooms
+        # the homeowner placed by hand start one of their own.
+        size = image_size(plan)
+        geo = size and {"image_w": size[0], "image_h": size[1], "rooms": {},
+                        "outline": [], "walkways": [], "missing": list(labels)}
+    if geo and request.form.get("plan_edit"):
+        edited = apply_plan_edit(geo, request.form["plan_edit"], labels, plan)
+        if edited:
+            project_set(plan_geometry=edited)
+            plan_moved = True
+
+    if (not plan_moved and req_data == project_get("requirements")
+            and rooms_before == project_get("ai_rooms")):
         return                          # nothing changed: keep the result
     project_set(requirements=req_data)
     # Rooms or requirements just changed — the brief and the step-1 room
@@ -5401,10 +5522,205 @@ def step2():
         room["extra_items"] = extra
 
     return render_template("step2.html", current_step=2, rooms=rooms,
+                           plan_editor=plan_editor_state(project_get("step1"),
+                                                         [r["label"] for r in rooms]),
                            ai_room_summary=project_get("ai_room_summary", ""),
                            plan_mismatch=plan_mismatch,
                            housing_label=HOUSING_LABELS.get(housing_type, housing_type),
                            saved=saved_reqs)
+
+
+# ── Step 2: the rooms on the plan ─────────────────────────────────────────────
+# The plan trace used to run only behind the final page, so nobody saw where
+# the rooms had been placed until the brief was done. Page 2 now starts it as
+# soon as it opens, shows the rooms over the plan, and lets the homeowner move
+# and resize them. What they confirm is the trace page 5 then uses.
+
+# One trace per client and plan at a time: a reload of page 2, or page 5
+# arriving early, waits for the trace already running instead of paying for
+# another.
+_TRACE_INFLIGHT: dict[str, threading.Event] = {}
+_trace_lock = threading.Lock()
+
+
+def project_set_fresh(**values):
+    """project_set after a long wait: re-read the project first, so answers
+    the homeowner saved in the meantime are not overwritten by the stale copy
+    this request loaded when it started."""
+    g.pop("project_state", None)
+    project_set(**values)
+
+
+def usable_plan_geometry(geo: dict | None, plan_path: str | None,
+                         labels: list[str]) -> dict | None:
+    """The saved trace, if it is of this plan by this version of the tracing.
+    Traced for these exact rooms, or for the same plan file since renamed."""
+    if not geo or not plan_path or not geo.get("rooms"):
+        return None
+    if geo.get("key") == plan_geometry_key(plan_path, labels):
+        return geo
+    if (geo.get("trace_version") == PLAN_TRACE_VERSION and geo.get("plan_digest")
+            and geo["plan_digest"] == file_digest(plan_path)):
+        return geo
+    return None
+
+
+def stamp_plan_geometry(geo: dict, plan_path: str, labels: list[str]) -> dict:
+    """Mark a trace with the plan and room list it now belongs to."""
+    geo["key"] = plan_geometry_key(plan_path, labels)
+    geo["plan_digest"] = file_digest(plan_path)
+    geo["trace_version"] = PLAN_TRACE_VERSION
+    return geo
+
+
+def _parts_list(geo_room: dict) -> list[list[float]]:
+    return [[round(p["x"], 1), round(p["y"], 1), round(p["w"], 1), round(p["h"], 1)]
+            for p in room_parts(geo_room)]
+
+
+def plan_editor_state(s1: dict, labels: list[str]) -> dict | None:
+    """What page 2's plan editor starts from, or None without a usable plan."""
+    plan = s1.get("floor_plan_path")
+    if not plan or not Path(plan).exists():
+        return None
+    size = image_size(plan)
+    url = upload_url(plan)
+    if not size or not url:
+        return None
+    geo = usable_plan_geometry(project_get("plan_geometry"), plan, labels)
+    failed = (project_get("plan_trace_failed") or {}).get("digest") == file_digest(plan)
+    return {
+        "image":   url,
+        "w":       size[0],
+        "h":       size[1],
+        "status":  "ready" if geo else ("failed" if failed else "pending"),
+        "rooms":   {l: _parts_list(geo["rooms"][l]) for l in labels
+                    if geo and l in geo["rooms"]},
+        "outline": [[o["x"], o["y"], o["w"], o["h"]] for o in (geo or {}).get("outline") or []],
+        # The walls found in the image itself, for room edges to snap to.
+        "walls":   {k: v for k, v in (detect_plan_walls(plan) or {}).items() if k in ("x", "y")},
+        "colours": ROOM_COLOURS,
+    }
+
+
+def trace_for_project(cid: str, s1: dict, labels: list[str]) -> dict:
+    """Trace the plan for these rooms, or wait for the trace already running.
+    Saves the result and returns it; raises if the trace fails."""
+    plan = s1["floor_plan_path"]
+    flight = f"{cid}:{file_digest(plan)}"
+    with _trace_lock:
+        running = _TRACE_INFLIGHT.get(flight)
+        if not running:
+            _TRACE_INFLIGHT[flight] = threading.Event()
+    if running:
+        running.wait(timeout=PLAN_GEOMETRY_TIMEOUT * 4)
+        g.pop("project_state", None)
+        geo = usable_plan_geometry(project_get("plan_geometry"), plan, labels)
+        if not geo:
+            raise ValueError("the trace already running did not finish")
+        return geo
+    try:
+        geo = read_plan_geometry(plan, labels,
+                                 housing_label=s1.get("housing_type_label", ""))
+        stamp_plan_geometry(geo, plan, labels)
+        project_set_fresh(plan_geometry=geo)
+        project_clear("plan_trace_failed")
+        return geo
+    except Exception:
+        project_set_fresh(plan_trace_failed={"digest": file_digest(plan)})
+        raise
+    finally:
+        with _trace_lock:
+            _TRACE_INFLIGHT.pop(flight).set()
+
+
+def wait_for_trace(cid: str, plan_path: str | None) -> None:
+    """Let a trace page 2 started finish before page 5 reads the plan."""
+    if not plan_path:
+        return
+    with _trace_lock:
+        running = _TRACE_INFLIGHT.get(f"{cid}:{file_digest(plan_path)}")
+    if running:
+        running.wait(timeout=PLAN_GEOMETRY_TIMEOUT * 4)
+        g.pop("project_state", None)
+
+
+def apply_plan_edit(geo: dict, raw: str, labels: list[str], plan_path: str) -> dict | None:
+    """The trace with the homeowner's moves applied, or None if nothing moved.
+
+    raw is the editor's JSON: {"rooms": {label: [[x, y, w, h], ...]},
+    "from": {label: the label it had in the trace}}. Coordinates are plan
+    pixels. A room keeps the doors it was traced with; a room the homeowner
+    did not place is left out, as the trace leaves out one it cannot find.
+    """
+    try:
+        edit = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(edit, dict) or not isinstance(edit.get("rooms"), dict):
+        return None
+    origin = edit.get("from") if isinstance(edit.get("from"), dict) else {}
+    img_w, img_h = geo.get("image_w") or 0, geo.get("image_h") or 0
+    if not (img_w and img_h):
+        size = image_size(plan_path) or (0, 0)
+        img_w, img_h = size
+    if not (img_w and img_h):
+        return None
+    min_side = max(img_w, img_h) * 0.01
+
+    rooms = {}
+    for label in labels:
+        parts = []
+        for box in (edit["rooms"].get(label) or [])[:3]:
+            try:
+                x, y, w, h = (float(v) for v in box)
+            except (TypeError, ValueError):
+                continue
+            x, y = min(max(x, 0.0), img_w - min_side), min(max(y, 0.0), img_h - min_side)
+            w, h = min(max(w, min_side), img_w - x), min(max(h, min_side), img_h - y)
+            parts.append({"x": round(x, 1), "y": round(y, 1), "w": round(w, 1), "h": round(h, 1)})
+        if not parts:
+            continue
+        source = geo["rooms"].get(str(origin.get(label) or label)) or {}
+        x0, y0 = min(p["x"] for p in parts), min(p["y"] for p in parts)
+        rooms[label] = {
+            "x": x0, "y": y0,
+            "w": max(p["x"] + p["w"] for p in parts) - x0,
+            "h": max(p["y"] + p["h"] for p in parts) - y0,
+            "parts": parts,
+            "doors": [d for d in source.get("doors") or [] if d.get("part", 0) < len(parts)],
+        }
+
+    if not rooms and not geo["rooms"]:
+        return None                     # nothing traced and nothing placed
+    new_key = plan_geometry_key(plan_path, labels)
+    if new_key == geo.get("key") and set(rooms) == set(geo["rooms"]) and all(
+            _parts_list(rooms[l]) == _parts_list(geo["rooms"][l]) for l in rooms):
+        return None
+    new = {**geo, "rooms": rooms, "missing": [l for l in labels if l not in rooms],
+           "edited": True}
+    return stamp_plan_geometry(new, plan_path, labels)
+
+
+@app.route("/step2/trace", methods=["POST"])
+def step2_trace():
+    """Place the rooms on the plan for page 2's editor."""
+    s1 = project_get("step1") or {}
+    plan = s1.get("floor_plan_path")
+    if not plan or not Path(plan).exists():
+        return jsonify({"ok": False, "error": "No floor plan"}), 400
+    labels = [r["label"] for r in get_rooms_for_type(s1["housing_type"])]
+    geo = usable_plan_geometry(project_get("plan_geometry"), plan, labels)
+    if not geo:
+        try:
+            geo = trace_for_project(current_client_id(), s1, labels)
+        except Exception as e:
+            app.logger.warning(f"Plan trace for page 2 failed: {e}")
+            return jsonify({"ok": False})
+    return jsonify({"ok": True,
+                    "rooms": {l: _parts_list(r) for l, r in geo["rooms"].items()},
+                    "outline": [[o["x"], o["y"], o["w"], o["h"]]
+                                for o in geo.get("outline") or []]})
 
 
 @app.route("/step2/reviewing")
@@ -5652,7 +5968,7 @@ def picked_references(picks: dict) -> dict[str, list[dict]]:
 # waiting page can show real progress rather than a guess. In memory: it
 # only matters while a run is going, in this process.
 _PROGRESS: dict[str, dict] = {}
-_progress_lock = __import__("threading").Lock()
+_progress_lock = threading.Lock()
 
 
 def _progress_event(cid: str, event: str, **data) -> None:
@@ -5685,8 +6001,10 @@ def step5_prepare():
         return jsonify({"ok": True, "cached": True})
 
     s1 = project_get("step1")
-    rooms_base = get_rooms_for_type(s1["housing_type"])
     cid = current_client_id()
+    wait_for_trace(cid, s1.get("floor_plan_path"))     # page 2's, if still running
+    s1 = project_get("step1")
+    rooms_base = get_rooms_for_type(s1["housing_type"])
     with _progress_lock:
         _PROGRESS[cid] = {"events": [], "rooms": []}      # a fresh run
 
@@ -5710,6 +6028,9 @@ def step5_prepare():
         app.logger.exception("Agent run failed")
         return jsonify({"ok": False, "error": str(e)[:200]}), 500
 
+    if result.get("plan_geometry") and s1.get("floor_plan_path"):
+        result["plan_geometry"].setdefault("plan_digest", file_digest(s1["floor_plan_path"]))
+        result["plan_geometry"].setdefault("trace_version", PLAN_TRACE_VERSION)
     project_set(
         agent_result         = result,
         inspiration_analysis = result["inspiration_analysis"],
