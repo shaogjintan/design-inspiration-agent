@@ -245,9 +245,14 @@
 
   // Lines a wall or corner snaps to: the plan's own walls first, then other
   // rooms' walls and the flat's outline.
+  // The room whose corners are being traced: hidden, and its old walls no
+  // longer pull — you are drawing it afresh.
+  const tracing = uid => !!marking && marking.mode === 'corners' && marking.uid === uid;
+
   function snapLines(vertical, except = []) {
     const lines = (vertical ? walls.x : walls.y).map(v => ({ at: v, wall: true }));
     allEdges().forEach(e => {
+      if (tracing(e.uid)) return;
       if (e.vertical === vertical && !except.some(x => x.uid === e.uid && x.pi === e.pi && x.k === e.k)) {
         lines.push({ at: e.pos });
       }
@@ -295,7 +300,7 @@
 
     rooms.forEach((room, uid) => {
       const name = nameOf(uid);
-      if (!name) return;
+      if (!name || tracing(uid)) return;           // out of the way of its own corners
       const on = uid === selected;
       const g = el('g', {
         class: 'pe-room' + (on ? ' is-selected' : ''),
@@ -474,13 +479,14 @@
   function startMarking(uid, mode) {
     marking = { uid, mode, pts: [] };
     root.classList.add('is-marking');
+    root.classList.toggle('is-tracing', mode === 'corners');
     say(PROMPTS[mode](nameOf(uid)) + ' Esc to cancel.');
     render();
   }
 
   function stopMarking(message) {
     marking = null;
-    root.classList.remove('is-marking');
+    root.classList.remove('is-marking', 'is-tracing');
     say(message || hint);
     render();
   }

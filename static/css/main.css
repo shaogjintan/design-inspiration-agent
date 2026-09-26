@@ -3874,3 +3874,9 @@ html[data-vt] .hero > * { animation: none; }
   .photo-view { display: none; }
   .ref-group { break-inside: avoid; box-shadow: none; }
 }
+
+/* Tracing a room's corners: that room is hidden and the others step back, so
+   the plan's own lines — the ones to click on — show through. */
+.pe-room { transition: opacity .2s ease; }
+.plan-editor.is-tracing .pe-room { opacity: .3; }
+.plan-editor.is-tracing .pe-name { opacity: 0; }
